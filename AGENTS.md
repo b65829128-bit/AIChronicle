@@ -458,6 +458,9 @@ Usage:
 | NPC 开始移动 | `{领主名} 决定前往{目的地}` | Cyan |
 | NPC 移动失败 | `{领主名} 移动失败：{原因}` | Red |
 | NPC 等待结束 | `{领主名} 结束了在{定居点}的停留` | Cyan |
+| NPC 修改好感 | `{领主名} 对玩家的好感变化了{+n/-n}点` | Cyan |
+| NPC 赠送金币 | `{领主名} 赠予了你 {n} 金币` | Cyan |
+| NPC 索要金币 | （弹出确认对话框，无自动提示） | — |
 
 实现位置：`AIChatScreenVM.ExecuteSend` 中解析 `ChatResponse.ToolCalls`（未来会扩展为复数工具调用）的循环中。
 
@@ -497,8 +500,8 @@ Usage:
 
 基于同一套 `tools` 机制可以扩展：
 - ~~领主决定去某个领地 → `travel_to(settlement)`~~ （已实现为 `move_to_settlement` + `wait_at_settlement`）
-- 给玩家物品/金钱 → `give_item(item, amount)`
-- 改变对玩家的态度 → `change_relation(delta)`
+- ~~给玩家物品/金钱 → `give_item(item, amount)`~~ （已实现为 `give_gold_to_player` + `request_gold_from_player`）
+- ~~改变对玩家的态度 → `change_relation(delta)`~~ （已实现为 `change_relation`）
 - 发起战斗/外交提议 → `propose_action(action_type)`
 
 扩展时只需：
