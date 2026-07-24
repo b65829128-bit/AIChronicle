@@ -323,17 +323,18 @@ namespace MyFirstMod
                 return $"[错误] 玩家只有 {Hero.MainHero.Gold} 金币，不足以支付 {amount} 金币";
 
             using var mre = new ManualResetEventSlim(false);
-            _pendingInquiry = new PendingInquiry
+            var inquiry = new PendingInquiry
             {
                 Hero = _currentHero,
                 Amount = amount,
                 Event = mre,
                 Result = false
             };
+            _pendingInquiry = inquiry;
 
             mre.Wait();
 
-            if (_pendingInquiry.Result)
+            if (inquiry.Result)
             {
                 GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, _currentHero, amount);
                 return $"玩家同意支付 {amount} 金币。";
