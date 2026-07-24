@@ -120,6 +120,75 @@ namespace MyFirstMod
             }
         }
 
+        private int _messageSpacing = 16;
+        private int _contentIndent = 12;
+        private int _senderTopGap = 2;
+        private int _contentTopGap = 4;
+
+        [SettingPropertyInteger("消息间距", 4, 40, Order = 3, RequireRestart = false,
+            HintText = "两条消息之间的垂直间距。")]
+        [SettingPropertyGroup("聊天界面")]
+        public int MessageSpacing
+        {
+            get => _messageSpacing;
+            set
+            {
+                if (_messageSpacing != value)
+                {
+                    _messageSpacing = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyInteger("对话缩进", 0, 30, Order = 4, RequireRestart = false,
+            HintText = "对话内容相对于角色名的左侧缩进。")]
+        [SettingPropertyGroup("聊天界面")]
+        public int ContentIndent
+        {
+            get => _contentIndent;
+            set
+            {
+                if (_contentIndent != value)
+                {
+                    _contentIndent = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyInteger("角色名上间距", 0, 12, Order = 5, RequireRestart = false,
+            HintText = "角色名与时间戳之间的间距。")]
+        [SettingPropertyGroup("聊天界面")]
+        public int SenderTopGap
+        {
+            get => _senderTopGap;
+            set
+            {
+                if (_senderTopGap != value)
+                {
+                    _senderTopGap = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyInteger("对话上间距", 0, 12, Order = 6, RequireRestart = false,
+            HintText = "对话内容与角色名之间的间距。")]
+        [SettingPropertyGroup("聊天界面")]
+        public int ContentTopGap
+        {
+            get => _contentTopGap;
+            set
+            {
+                if (_contentTopGap != value)
+                {
+                    _contentTopGap = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private int _maxRelationChange = 5;
 
         [SettingPropertyInteger("最大好感变化", 1, 30, Order = 0, RequireRestart = false,

@@ -15,6 +15,10 @@ namespace MyFirstMod
         private int _fontSize = 18;
         private int _senderFontSize = 14;
         private int _timeFontSize = 10;
+        private int _messageSpacing = 16;
+        private int _contentIndent = 12;
+        private int _senderTopGap = 2;
+        private int _contentTopGap = 4;
 
         [DataSourceProperty]
         public string SenderText
@@ -65,10 +69,39 @@ namespace MyFirstMod
             set => SetField(ref _timeFontSize, value, "TimeFontSize");
         }
 
+        [DataSourceProperty]
+        public int MessageSpacing
+        {
+            get => _messageSpacing;
+            set => SetField(ref _messageSpacing, value, "MessageSpacing");
+        }
+
+        [DataSourceProperty]
+        public int ContentIndent
+        {
+            get => _contentIndent;
+            set => SetField(ref _contentIndent, value, "ContentIndent");
+        }
+
+        [DataSourceProperty]
+        public int SenderTopGap
+        {
+            get => _senderTopGap;
+            set => SetField(ref _senderTopGap, value, "SenderTopGap");
+        }
+
+        [DataSourceProperty]
+        public int ContentTopGap
+        {
+            get => _contentTopGap;
+            set => SetField(ref _contentTopGap, value, "ContentTopGap");
+        }
+
         public string Role { get; }
 
         public ChatMessageVM(string sender, string content, string role, string color,
-            string timeText, int fontSize, int senderFontSize, int timeFontSize)
+            string timeText, int fontSize, int senderFontSize, int timeFontSize,
+            int messageSpacing, int contentIndent, int senderTopGap, int contentTopGap)
         {
             _senderText = sender;
             _contentText = content;
@@ -77,6 +110,10 @@ namespace MyFirstMod
             _fontSize = fontSize;
             _senderFontSize = senderFontSize;
             _timeFontSize = timeFontSize;
+            _messageSpacing = messageSpacing;
+            _contentIndent = contentIndent;
+            _senderTopGap = senderTopGap;
+            _contentTopGap = contentTopGap;
             Role = role;
         }
     }
@@ -93,6 +130,10 @@ namespace MyFirstMod
         private int _chatFontSize = 18;
         private int _chatSenderFontSize = 14;
         private int _chatTimeFontSize = 10;
+        private int _messageSpacing = 16;
+        private int _contentIndent = 12;
+        private int _senderTopGap = 2;
+        private int _contentTopGap = 4;
 
         public Action? OnClose { get; set; }
 
@@ -142,6 +183,10 @@ namespace MyFirstMod
             _chatFontSize = MySettings.Instance?.ChatFontSize ?? 18;
             _chatSenderFontSize = MySettings.Instance?.ChatSenderFontSize ?? 14;
             _chatTimeFontSize = MySettings.Instance?.ChatTimeFontSize ?? 10;
+            _messageSpacing = MySettings.Instance?.MessageSpacing ?? 16;
+            _contentIndent = MySettings.Instance?.ContentIndent ?? 12;
+            _senderTopGap = MySettings.Instance?.SenderTopGap ?? 2;
+            _contentTopGap = MySettings.Instance?.ContentTopGap ?? 4;
 
             try
             {
@@ -159,7 +204,8 @@ namespace MyFirstMod
                 var sender = entry.Role == "user" ? "你" : _charPrompt.HeroName;
                 var color = entry.Role == "user" ? "#5DADE2FF" : "#F4D03FFF";
                 Messages.Add(new ChatMessageVM(sender, entry.Content, entry.Role, color, loadTime,
-                    _chatFontSize, _chatSenderFontSize, _chatTimeFontSize));
+                    _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
+                    _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
             }
         }
 
@@ -182,8 +228,13 @@ namespace MyFirstMod
             _chatFontSize = MySettings.Instance?.ChatFontSize ?? 18;
             _chatSenderFontSize = MySettings.Instance?.ChatSenderFontSize ?? 14;
             _chatTimeFontSize = MySettings.Instance?.ChatTimeFontSize ?? 10;
+            _messageSpacing = MySettings.Instance?.MessageSpacing ?? 16;
+            _contentIndent = MySettings.Instance?.ContentIndent ?? 12;
+            _senderTopGap = MySettings.Instance?.SenderTopGap ?? 2;
+            _contentTopGap = MySettings.Instance?.ContentTopGap ?? 4;
             Messages.Add(new ChatMessageVM("你", userMsg, "user", "#5DADE2FF", now,
-                _chatFontSize, _chatSenderFontSize, _chatTimeFontSize));
+                _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
+                _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
             _sessionMessages.Add(new ChatHistoryEntry { Role = "user", Content = userMsg });
             PromptManager.AppendChatLog(_hero, "user", userMsg);
 
@@ -273,13 +324,17 @@ namespace MyFirstMod
                         "assistant", "#F4D03FFF", now,
                         MySettings.Instance?.ChatFontSize ?? 18,
                         MySettings.Instance?.ChatSenderFontSize ?? 14,
-                        MySettings.Instance?.ChatTimeFontSize ?? 10));
+                        MySettings.Instance?.ChatTimeFontSize ?? 10,
+                        MySettings.Instance?.MessageSpacing ?? 16,
+                        MySettings.Instance?.ContentIndent ?? 12,
+                        MySettings.Instance?.SenderTopGap ?? 2,
+                        MySettings.Instance?.ContentTopGap ?? 4));
                 }
                 catch (Exception ex)
                 {
                     Messages.Add(new ChatMessageVM("系统", $"错误：{ex.Message}",
                         "system", "#E74C3CFF", PromptManager.GetCurrentTimeString(),
-                        18, 14, 10));
+                        18, 14, 10, 16, 12, 2, 4));
                 }
                 finally
                 {
