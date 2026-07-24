@@ -2,6 +2,9 @@
 bin/
 obj/
 
+# Runtime-generated campaign data
+_Module/Prompts/Campaigns/
+
 # Decompiled game source (5000+ files, read-only)
 BLSource/
 

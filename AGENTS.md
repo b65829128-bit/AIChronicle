@@ -216,6 +216,31 @@ Start-Process "D:\steam\steamapps\common\Mount & Blade II Bannerlord\bin\Win64_S
 # 3. 在启动器中勾选 MyFirstMod → Play
 ```
 
+### 版本管理（Git）
+
+项目使用 Git 进行版本管理。仓库已初始化在 `C:\Users\yangui\BLMods\MyFirstMod\`。
+
+**提交前检查：**
+```powershell
+$env:Path = "C:\Program Files\Git\bin;" + [Environment]::GetEnvironmentVariable("Path","Machine")
+git status
+git diff
+```
+
+**提交：**
+```powershell
+git add -A
+git commit -m "描述你的改动"
+```
+
+**`.gitignore` 排除项：**
+| 目录/文件 | 原因 |
+|-----------|------|
+| `bin/` `obj/` | 编译产物 |
+| `BLSource/` | 反编译的游戏源码（5332 文件，只读参考） |
+| `_Module/Prompts/Campaigns/` | 运行时生成的战役存档数据 |
+| `.idea/` `.vscode/` `Thumbs.db` | IDE 和系统文件 |
+
 ### 常见操作：新建 Harmony 补丁
 
 在项目目录下创建新 `.cs` 文件（如 `Patches\MyNewPatch.cs`），格式如下：
