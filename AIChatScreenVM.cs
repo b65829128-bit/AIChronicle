@@ -49,12 +49,22 @@ namespace MyFirstMod
             set
             {
                 if (SetField(ref _fontSize, value, "FontSize"))
+                {
                     OnPropertyChanged("FormattedContent");
+                    OnPropertyChanged("FormattedSender");
+                    OnPropertyChanged("FormattedTime");
+                }
             }
         }
 
         [DataSourceProperty]
         public string FormattedContent => $"<span style=\"FontSize:{_fontSize}\">{_contentText}</span>";
+
+        [DataSourceProperty]
+        public string FormattedSender => $"<span style=\"FontSize:{_fontSize - 2};FontColor:{_color}\">{_senderText}</span>";
+
+        [DataSourceProperty]
+        public string FormattedTime => $"<span style=\"FontSize:{_fontSize - 6}\">[{_timeText}]</span>";
 
         public string Role { get; }
 

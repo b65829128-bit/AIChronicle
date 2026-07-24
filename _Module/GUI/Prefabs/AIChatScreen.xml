@@ -50,23 +50,19 @@
                                     HeightSizePolicy="CoverChildren"
                                     MarginBottom="10">
                               <Children>
-                                <TextWidget WidthSizePolicy="CoverChildren"
+                                <RichTextWidget WidthSizePolicy="CoverChildren"
                                             HeightSizePolicy="CoverChildren"
-                                            Text="@SenderText"
-                                            Brush="GameTip.Title.Text"
-                                            Brush.FontColor="@Color"
+                                            Text="@FormattedSender"
                                             ClipContents="false" />
-                                <TextWidget WidthSizePolicy="CoverChildren"
+                                <RichTextWidget WidthSizePolicy="CoverChildren"
                                             HeightSizePolicy="CoverChildren"
-                                            Text="@TimeText"
-                                            MarginLeft="10"
-                                            Brush="ChatLog.Time.Text"
+                                            Text="@FormattedTime"
+                                            MarginLeft="8"
                                             ClipContents="false" />
                                 <RichTextWidget WidthSizePolicy="StretchToParent"
                                                 HeightSizePolicy="CoverChildren"
                                                 Text="@FormattedContent"
-                                                MarginLeft="12" MarginTop="20"
-                                                Brush="ChatLog.Text"
+                                                MarginTop="4"
                                                 ClipContents="false" />
                               </Children>
                             </Widget>
