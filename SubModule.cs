@@ -47,6 +47,7 @@ namespace MyFirstMod
             base.OnApplicationTick(dt);
 
             AIChatClient.Tick();
+            AIChatClient.CheckPendingInquiry();
 
             if (_pendingChatHero != null)
             {

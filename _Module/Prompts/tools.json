@@ -41,11 +41,45 @@
     "name": "wait_at_settlement",
     "description": "Wait at your current settlement for a specified duration before you can move again.\n\nUsage:\n- Call this after moving to or being at a settlement to declare how long you will stay.\n- The hours parameter is the number of in-game hours to stay. 24 hours = 1 day.\n- Common durations: 12 (half day), 24 (one day), 72 (three days), 168 (one week).\n- Maximum: 720 hours (30 days).\n- Do NOT call this if you are not currently at a settlement.\n- Do NOT call this with absurdly high values (e.g., 10000 hours) — use a reasonable stay duration.",
     "parameters": [
+    {
+      "name": "hours",
+      "type": "integer",
+      "description": "Number of in-game hours to stay at the settlement (1-720)."
+    }
+  },
+  {
+    "name": "change_relation",
+    "description": "Change your relationship points toward the player. Positive means more friendly, negative means more hostile.\n\nUsage:\n- Call this when your attitude toward the player has meaningfully changed — for example, the player insulted you, helped you, threatened you, or showed great respect.\n- The delta parameter should reflect the magnitude and direction of the change. Small things = 1-2 points. Significant events = 3-5 points.\n- Positive delta = your opinion of the player improves. Negative delta = it worsens.\n- The absolute value of delta is capped by the game setting (default 5).\n- Do NOT call this for trivial things or for every conversation turn.\n- This function has no visible output to the player.",
+    "parameters": [
       {
-        "name": "hours",
+        "name": "delta",
         "type": "integer",
-        "description": "Number of in-game hours to stay at the settlement (1-720)."
+        "description": "Amount to change relation. Positive = friendlier, negative = more hostile. Clamped to [-max, max] where max is set in game settings (default 5)."
       }
     ]
+  },
+  {
+    "name": "give_gold_to_player",
+    "description": "Give gold to the player from your personal wealth.\n\nUsage:\n- Call this when you decide to give the player gold (as a reward, gift, payment, bribe, etc.).\n- The amount must not exceed your current gold.\n- This is a direct transfer — the gold is immediately deducted from you and given to the player.\n- Do NOT call this with zero or negative amounts.\n- Do NOT call this if you are just talking about giving gold without actually deciding to do it.",
+    "parameters": [
+      {
+        "name": "amount",
+        "type": "integer",
+        "description": "Amount of gold to give to the player. Must be > 0 and cannot exceed your current gold."
+      }
+    ]
+  },
+  {
+    "name": "request_gold_from_player",
+    "description": "Request gold from the player. This will show a confirmation dialog to the player — you will be told whether they accepted or refused.\n\nUsage:\n- Call this when you decide to ask the player for gold (as payment, tribute, bribe, demand, etc.).\n- The amount should not exceed what the player can reasonably afford.\n- The result will tell you whether the player ACCEPTED or REFUSED. You should respond accordingly in your next message.\n- The player CANNOT lie or make empty promises — the gold is transferred immediately if they accept.\n- Do NOT call this with zero or negative amounts.",
+    "parameters": [
+      {
+        "name": "amount",
+        "type": "integer",
+        "description": "Amount of gold to request from the player. Must be > 0."
+      }
+    ]
+  }
+]
   }
 ]

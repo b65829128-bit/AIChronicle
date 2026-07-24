@@ -68,6 +68,24 @@ namespace MyFirstMod
             }
         }
 
+        private int _maxRelationChange = 5;
+
+        [SettingPropertyInteger("最大好感变化", 1, 30, Order = 0, RequireRestart = false,
+            HintText = "Agent 调用 change_relation 时，单次好感变化的上限。绝对值不会被超出。")]
+        [SettingPropertyGroup("游戏设置")]
+        public int MaxRelationChange
+        {
+            get => _maxRelationChange;
+            set
+            {
+                if (_maxRelationChange != value)
+                {
+                    _maxRelationChange = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private bool _doubleRenownEnabled = false;
 
         [SettingPropertyBool("双倍声望", Order = 1, RequireRestart = false,

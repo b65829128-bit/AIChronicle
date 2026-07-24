@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Library;
@@ -38,6 +39,16 @@ namespace MyFirstMod
         }
 
         private static readonly Dictionary<string, PendingAction> _pendingActions = new();
+
+        private sealed class PendingInquiry
+        {
+            public Hero Hero = null!;
+            public int Amount;
+            public ManualResetEventSlim Event = new(false);
+            public bool Result;
+        }
+
+        private static PendingInquiry? _pendingInquiry;
 
         private static object BuildTools()
         {
@@ -100,6 +111,15 @@ namespace MyFirstMod
 
                     case "wait_at_settlement":
                         return ExecuteWaitAtSettlement(args["hours"]?.ToObject<int>() ?? 0);
+
+                    case "change_relation":
+                        return ExecuteChangeRelation(args["delta"]?.ToObject<int>() ?? 0);
+
+                    case "give_gold_to_player":
+                        return ExecuteGiveGoldToPlayer(args["amount"]?.ToObject<int>() ?? 0);
+
+                    case "request_gold_from_player":
+                        return ExecuteRequestGoldFromPlayer(args["amount"]?.ToObject<int>() ?? 0);
 
                     default:
                         return $"未知工具：{name}";
@@ -255,6 +275,88 @@ namespace MyFirstMod
                 _pendingActions[key] = action;
             }
             return action;
+        }
+
+        private static string ExecuteChangeRelation(int delta)
+        {
+            if (_currentHero == null)
+                return "[错误] 无当前领主";
+
+            var maxChange = MySettings.Instance?.MaxRelationChange ?? 5;
+            if (Math.Abs(delta) > maxChange)
+                delta = Math.Sign(delta) * maxChange;
+
+            if (delta == 0)
+                return "[信息] 好感变化为 0，无需操作";
+
+            ChangeRelationAction.ApplyRelationChangeBetweenHeroes(_currentHero, Hero.MainHero, delta, true);
+            var currentRelation = _currentHero.GetRelation(Hero.MainHero);
+
+            return $"对玩家的好感变化了{delta:+0;-0}点，当前好感度为{currentRelation}点。";
+        }
+
+        private static string ExecuteGiveGoldToPlayer(int amount)
+        {
+            if (_currentHero == null)
+                return "[错误] 无当前领主";
+
+            if (amount <= 0)
+                return "[错误] 金币数额必须大于 0";
+
+            if (_currentHero.Gold < amount)
+                return $"[错误] {_currentHero.Name} 只有 {_currentHero.Gold} 金币，不足以赠送 {amount} 金币";
+
+            GiveGoldAction.ApplyBetweenCharacters(_currentHero, Hero.MainHero, amount);
+
+            return $"已赠予玩家 {amount} 金币。{_currentHero.Name} 剩余 {_currentHero.Gold} 金币。";
+        }
+
+        private static string ExecuteRequestGoldFromPlayer(int amount)
+        {
+            if (_currentHero == null)
+                return "[错误] 无当前领主";
+
+            if (amount <= 0)
+                return "[错误] 金币数额必须大于 0";
+
+            if (Hero.MainHero.Gold < amount)
+                return $"[错误] 玩家只有 {Hero.MainHero.Gold} 金币，不足以支付 {amount} 金币";
+
+            using var mre = new ManualResetEventSlim(false);
+            _pendingInquiry = new PendingInquiry
+            {
+                Hero = _currentHero,
+                Amount = amount,
+                Event = mre,
+                Result = false
+            };
+
+            mre.Wait();
+
+            if (_pendingInquiry.Result)
+            {
+                GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, _currentHero, amount);
+                return $"玩家同意支付 {amount} 金币。";
+            }
+            return $"玩家拒绝了支付 {amount} 金币的请求。";
+        }
+
+        public static void CheckPendingInquiry()
+        {
+            var inquiry = _pendingInquiry;
+            if (inquiry == null) return;
+
+            _pendingInquiry = null;
+
+            var hero = inquiry.Hero;
+            var amount = inquiry.Amount;
+
+            InformationManager.ShowInquiry(new InquiryData(
+                $"{hero.Name} 向你索要金币",
+                $"{hero.Name} 向你要 {amount} 金币。\n你当前拥有 {Hero.MainHero.Gold} 金币。",
+                true, true, "同意", "拒绝",
+                () => { inquiry.Result = true; inquiry.Event.Set(); },
+                () => { inquiry.Result = false; inquiry.Event.Set(); }));
         }
 
         public static void Tick()
