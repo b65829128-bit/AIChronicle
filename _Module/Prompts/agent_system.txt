@@ -15,3 +15,7 @@
 - 如果了解到了关于玩家的新信息，使用 append_file 追加到 knowledge/{玩家名}.txt
 - 如果需要了解当前目标，读取 goals/current.txt
 - 如果需要了解某个关系的态度，读取 relationships/{角色名}.txt
+
+===== 当前时间 =====
+{current_time}
+===== 时间结束 =====

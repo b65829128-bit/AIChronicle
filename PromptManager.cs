@@ -132,7 +132,8 @@ namespace MyFirstMod
                 .Replace("{lord_name}", lordName)
                 .Replace("{basic_info}", charPrompt.HeroName)
                 .Replace("{world_info}", worldInfo)
-                .Replace("{player_knowledge}", "");
+                .Replace("{player_knowledge}", "")
+                .Replace("{current_time}", GetCurrentTimeString());
         }
 
         public static string BuildAgentSystemPrompt(Hero hero, CharacterPrompt charPrompt)
@@ -144,7 +145,36 @@ namespace MyFirstMod
             return template
                 .Replace("{persona}", persona)
                 .Replace("{world_info}", worldInfo)
-                .Replace("{player_knowledge}", "");
+                .Replace("{player_knowledge}", "")
+                .Replace("{current_time}", GetCurrentTimeString());
+        }
+
+        public static string GetCurrentTimeString()
+        {
+            if (Campaign.Current == null)
+                return "（未知时间）";
+
+            var now = CampaignTime.Now;
+            var year = now.GetYear;
+            var season = now.GetSeasonOfYear switch
+            {
+                CampaignTime.Seasons.Spring => "春季",
+                CampaignTime.Seasons.Summer => "夏季",
+                CampaignTime.Seasons.Autumn => "秋季",
+                CampaignTime.Seasons.Winter => "冬季",
+                _ => "?"
+            };
+            var day = now.GetDayOfSeason + 1;
+            var hour = now.ToHours % 24;
+            var timeOfDay = hour switch
+            {
+                < 6 => "凌晨",
+                < 12 => "上午",
+                < 18 => "下午",
+                _ => "晚上"
+            };
+
+            return $"第{year}年，{season}第{day}日，{timeOfDay}";
         }
 
         private static string LoadSystemPromptTemplate()
@@ -292,10 +322,30 @@ namespace MyFirstMod
             var lines = File.ReadAllLines(path, Encoding.UTF8);
             foreach (var line in lines)
             {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                string role;
+                string content;
                 var colonIdx = line.IndexOf(": ");
-                if (colonIdx < 0) continue;
-                var role = line.Substring(0, colonIdx);
-                var content = line.Substring(colonIdx + 2).Replace("\\n", "\n");
+
+                if (line.StartsWith("[") && colonIdx > 0)
+                {
+                    var bracketEnd = line.IndexOf("] ");
+                    if (bracketEnd > 0 && bracketEnd < colonIdx)
+                        role = line.Substring(bracketEnd + 2, colonIdx - bracketEnd - 2);
+                    else
+                        role = line.Substring(0, colonIdx);
+                }
+                else if (colonIdx > 0)
+                {
+                    role = line.Substring(0, colonIdx);
+                }
+                else
+                {
+                    continue;
+                }
+
+                content = line.Substring(colonIdx + 2).Replace("\\n", "\n");
                 entries.Add(new ChatHistoryEntry { Role = role, Content = content });
             }
             return entries;
@@ -306,7 +356,8 @@ namespace MyFirstMod
             var path = AgentManager.GetChatLogPath();
             if (path == null) return;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.AppendAllText(path, role + ": " + content.Replace("\n", "\\n") + Environment.NewLine, Encoding.UTF8);
+            var timestamp = GetCurrentTimeString();
+            File.AppendAllText(path, $"[{timestamp}] {role}: " + content.Replace("\n", "\\n") + Environment.NewLine, Encoding.UTF8);
         }
 
         public static string? ExtractLearnedTag(string response, out string cleanedResponse)
