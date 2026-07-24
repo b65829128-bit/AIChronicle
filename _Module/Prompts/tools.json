@@ -1,0 +1,51 @@
+[
+  {
+    "name": "update_knowledge",
+    "description": "Record new information learned about the PLAYER (the person you are speaking to) in this conversation turn.\n\nUsage:\n- Call this function whenever the PLAYER reveals or claims information about themselves: their identity, background, intentions, position, experiences, or opinions.\n- The knowledge must be about the PLAYER — do NOT record information about yourself or your own background.\n- Record what the player claimed even if you are uncertain or skeptical.\n- The knowledge parameter must be a single concise sentence summarizing the new information.\n- Do NOT call this function if the PLAYER did not reveal any new information in this turn.\n- This function is for system use only; the player does not see its output.",
+    "parameters": [
+      {
+        "name": "knowledge",
+        "type": "string",
+        "description": "A single sentence describing ONLY the NEW information the player revealed about themselves. Do not repeat info already recorded in your existing knowledge. Write in the same language the conversation is in."
+      }
+    ]
+  },
+  {
+    "name": "query_settlement",
+    "description": "Query real-time information about a settlement on the Calradia map.\n\nUsage:\n- Call this when you need to know who currently owns a settlement, its prosperity, or its type.\n- The name parameter should match the Chinese or English settlement name (e.g., \"俄尼拉\" or \"Onica\").\n- Returns: name, type (town/castle/village), owner clan, owner kingdom, prosperity level.",
+    "parameters": [
+      {
+        "name": "name",
+        "type": "string",
+        "description": "Name of the settlement to query, in Chinese or English."
+      }
+    ]
+  },
+  {
+    "name": "query_world_state",
+    "description": "Get a summary of the current world situation.\n\nUsage:\n- Call this to understand the state of Calradia: which kingdoms are at war, their total strength, recent events.\n- No parameters needed.\n- Returns: list of kingdoms with their strength and current wars.",
+    "parameters": []
+  },
+  {
+    "name": "move_to_settlement",
+    "description": "Order your party to travel to a specific settlement on the Calradia map.\n\nUsage:\n- Call this when you DECIDE to go somewhere (visit a city, attend a tournament, meet someone, go to a feast).\n- The settlement_name must be a valid town or castle name in Chinese or English.\n- Your party will physically travel across the map and enter the settlement upon arrival.\n- This only works if you are leading a party (not a governor, prisoner, or in an army).\n- Do NOT call this if you are already at the target settlement.\n- After calling this, you should call wait_at_settlement to specify how long to stay.",
+    "parameters": [
+      {
+        "name": "settlement_name",
+        "type": "string",
+        "description": "Name of the target settlement (town or castle), in Chinese or English."
+      }
+    ]
+  },
+  {
+    "name": "wait_at_settlement",
+    "description": "Wait at your current settlement for a specified duration before you can move again.\n\nUsage:\n- Call this after moving to or being at a settlement to declare how long you will stay.\n- The hours parameter is the number of in-game hours to stay. 24 hours = 1 day.\n- Common durations: 12 (half day), 24 (one day), 72 (three days), 168 (one week).\n- Maximum: 720 hours (30 days).\n- Do NOT call this if you are not currently at a settlement.\n- Do NOT call this with absurdly high values (e.g., 10000 hours) — use a reasonable stay duration.",
+    "parameters": [
+      {
+        "name": "hours",
+        "type": "integer",
+        "description": "Number of in-game hours to stay at the settlement (1-720)."
+      }
+    ]
+  }
+]

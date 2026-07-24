@@ -1,0 +1,14 @@
+# Build output
+bin/
+obj/
+
+# Decompiled game source (5000+ files, read-only)
+BLSource/
+
+# IDE / editor
+.idea/
+.vscode/
+
+# OS
+Thumbs.db
+desktop.ini

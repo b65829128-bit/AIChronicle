@@ -1,0 +1,50 @@
+[
+  {
+    "name": "read_file",
+    "description": "Read content from one of your personal files.\n\nUsage:\n- Use this when you need to recall information: what you know about the player, your current goals, or your relationships.\n- The path must be relative to your personal directory. Examples: \"knowledge/玩家名.txt\", \"goals/current.txt\", \"relationships/某人.txt\"\n- Use line_start and line_count to read only what you need.",
+    "parameters": [
+      {
+        "name": "path",
+        "type": "string",
+        "description": "Relative file path within your character directory, e.g. \"knowledge/玩家名.txt\""
+      },
+      {
+        "name": "line_start",
+        "type": "integer",
+        "description": "Line number to start reading from (1-based). Omit to read from the beginning."
+      },
+      {
+        "name": "line_count",
+        "type": "integer",
+        "description": "Number of lines to read. Omit to read to the end."
+      }
+    ]
+  },
+  {
+    "name": "append_file",
+    "description": "Append new information to one of your personal files.\n\nUsage:\n- Use this when you learn something new about the player: their identity, background, intentions, or opinions.\n- Only write to files in your personal directory.\n- Do NOT overwrite — new information is always appended, never replaced.\n- The content should be a single concise sentence in Chinese.",
+    "parameters": [
+      {
+        "name": "path",
+        "type": "string",
+        "description": "Relative file path, e.g. \"knowledge/玩家名.txt\""
+      },
+      {
+        "name": "content",
+        "type": "string",
+        "description": "A single sentence to append, in Chinese."
+      }
+    ]
+  },
+  {
+    "name": "list_dir",
+    "description": "List files and directories within your personal directory.\n\nUsage:\n- Use this to discover what files you have (e.g., who you have relationship files for, what knowledge files exist).\n- The path is relative to your character directory. Use \"\" for root.",
+    "parameters": [
+      {
+        "name": "path",
+        "type": "string",
+        "description": "Relative path to list, e.g. \"\" for root, \"knowledge\" for knowledge folder."
+      }
+    ]
+  }
+]
