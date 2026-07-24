@@ -127,13 +127,13 @@ namespace MyFirstMod
         private readonly Hero _hero;
         private readonly CharacterPrompt _charPrompt;
         private List<ChatHistoryEntry> _sessionMessages = new();
-        private int _chatFontSize = 18;
-        private int _chatSenderFontSize = 14;
-        private int _chatTimeFontSize = 10;
-        private int _messageSpacing = 16;
-        private int _contentIndent = 12;
-        private int _senderTopGap = 2;
-        private int _contentTopGap = 8;
+        private int _chatFontSize = 24;
+        private int _chatSenderFontSize = 22;
+        private int _chatTimeFontSize = 22;
+        private int _messageSpacing = 60;
+        private int _contentIndent = 15;
+        private int _senderTopGap = 6;
+        private int _contentTopGap = 6;
 
         public Action? OnClose { get; set; }
 
@@ -180,13 +180,13 @@ namespace MyFirstMod
             _hero = hero;
             _charPrompt = PromptManager.LoadCharacterPrompt(hero);
             _titleText = $"与 {_charPrompt.HeroName} 对话";
-            _chatFontSize = MySettings.Instance?.ChatFontSize ?? 18;
-            _chatSenderFontSize = MySettings.Instance?.ChatSenderFontSize ?? 14;
-            _chatTimeFontSize = MySettings.Instance?.ChatTimeFontSize ?? 10;
-            _messageSpacing = MySettings.Instance?.MessageSpacing ?? 16;
-            _contentIndent = MySettings.Instance?.ContentIndent ?? 12;
-            _senderTopGap = MySettings.Instance?.SenderTopGap ?? 2;
-            _contentTopGap = MySettings.Instance?.ContentTopGap ?? 8;
+            _chatFontSize = MySettings.Instance?.ChatFontSize ?? 24;
+            _chatSenderFontSize = MySettings.Instance?.ChatSenderFontSize ?? 22;
+            _chatTimeFontSize = MySettings.Instance?.ChatTimeFontSize ?? 22;
+            _messageSpacing = MySettings.Instance?.MessageSpacing ?? 60;
+            _contentIndent = MySettings.Instance?.ContentIndent ?? 15;
+            _senderTopGap = MySettings.Instance?.SenderTopGap ?? 6;
+            _contentTopGap = MySettings.Instance?.ContentTopGap ?? 6;
 
             try
             {
@@ -225,13 +225,13 @@ namespace MyFirstMod
             SendButtonText = "思考中...";
 
             var now = PromptManager.GetCurrentTimeString();
-            _chatFontSize = MySettings.Instance?.ChatFontSize ?? 18;
-            _chatSenderFontSize = MySettings.Instance?.ChatSenderFontSize ?? 14;
-            _chatTimeFontSize = MySettings.Instance?.ChatTimeFontSize ?? 10;
-            _messageSpacing = MySettings.Instance?.MessageSpacing ?? 16;
-            _contentIndent = MySettings.Instance?.ContentIndent ?? 12;
-            _senderTopGap = MySettings.Instance?.SenderTopGap ?? 2;
-            _contentTopGap = MySettings.Instance?.ContentTopGap ?? 8;
+            _chatFontSize = MySettings.Instance?.ChatFontSize ?? 24;
+            _chatSenderFontSize = MySettings.Instance?.ChatSenderFontSize ?? 22;
+            _chatTimeFontSize = MySettings.Instance?.ChatTimeFontSize ?? 22;
+            _messageSpacing = MySettings.Instance?.MessageSpacing ?? 60;
+            _contentIndent = MySettings.Instance?.ContentIndent ?? 15;
+            _senderTopGap = MySettings.Instance?.SenderTopGap ?? 6;
+            _contentTopGap = MySettings.Instance?.ContentTopGap ?? 6;
             Messages.Add(new ChatMessageVM("你", userMsg, "user", "#5DADE2FF", now,
                 _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
                 _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
@@ -322,19 +322,19 @@ namespace MyFirstMod
 
                     Messages.Add(new ChatMessageVM(_charPrompt.HeroName, displayText,
                         "assistant", "#F4D03FFF", now,
-                        MySettings.Instance?.ChatFontSize ?? 18,
-                        MySettings.Instance?.ChatSenderFontSize ?? 14,
-                        MySettings.Instance?.ChatTimeFontSize ?? 10,
-                        MySettings.Instance?.MessageSpacing ?? 16,
-                        MySettings.Instance?.ContentIndent ?? 12,
-                        MySettings.Instance?.SenderTopGap ?? 2,
-                        MySettings.Instance?.ContentTopGap ?? 8));
+                        MySettings.Instance?.ChatFontSize ?? 24,
+                        MySettings.Instance?.ChatSenderFontSize ?? 22,
+                        MySettings.Instance?.ChatTimeFontSize ?? 22,
+                        MySettings.Instance?.MessageSpacing ?? 60,
+                        MySettings.Instance?.ContentIndent ?? 15,
+                        MySettings.Instance?.SenderTopGap ?? 6,
+                        MySettings.Instance?.ContentTopGap ?? 6));
                 }
                 catch (Exception ex)
                 {
                     Messages.Add(new ChatMessageVM("系统", $"错误：{ex.Message}",
                         "system", "#E74C3CFF", PromptManager.GetCurrentTimeString(),
-                        18, 14, 10, 16, 12, 2, 8));
+                        24, 22, 22, 60, 15, 6, 6));
                 }
                 finally
                 {

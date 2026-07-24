@@ -68,9 +68,9 @@ namespace MyFirstMod
             }
         }
 
-        private int _chatFontSize = 18;
-        private int _chatSenderFontSize = 14;
-        private int _chatTimeFontSize = 10;
+        private int _chatFontSize = 24;
+        private int _chatSenderFontSize = 22;
+        private int _chatTimeFontSize = 22;
 
         [SettingPropertyInteger("对话字体大小", 8, 40, Order = 0, RequireRestart = false,
             HintText = "聊天窗口中对话内容的字体大小。")]
@@ -120,10 +120,10 @@ namespace MyFirstMod
             }
         }
 
-        private int _messageSpacing = 16;
-        private int _contentIndent = 12;
-        private int _senderTopGap = 2;
-        private int _contentTopGap = 8;
+        private int _messageSpacing = 60;
+        private int _contentIndent = 15;
+        private int _senderTopGap = 6;
+        private int _contentTopGap = 6;
 
         [SettingPropertyInteger("消息间距", 0, 80, Order = 3, RequireRestart = false,
             HintText = "两条消息之间的垂直间距。")]
@@ -188,6 +188,21 @@ namespace MyFirstMod
                 }
             }
         }
+
+        [SettingPropertyButton("重置聊天界面", Content = "恢复默认", Order = 7,
+            RequireRestart = false, HintText = "将所有聊天界面设置恢复为推荐默认值。")]
+        [SettingPropertyGroup("聊天界面")]
+        public Action ResetChatLayout { get; set; } = () =>
+        {
+            var s = MySettings.Instance!;
+            s.ChatFontSize = 24;
+            s.ChatSenderFontSize = 22;
+            s.ChatTimeFontSize = 22;
+            s.MessageSpacing = 60;
+            s.ContentIndent = 15;
+            s.SenderTopGap = 6;
+            s.ContentTopGap = 6;
+        };
 
         private int _maxRelationChange = 5;
 
