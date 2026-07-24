@@ -72,7 +72,7 @@ namespace MyFirstMod
         private int _chatSenderFontSize = 14;
         private int _chatTimeFontSize = 10;
 
-        [SettingPropertyInteger("对话字体大小", 12, 28, Order = 0, RequireRestart = false,
+        [SettingPropertyInteger("对话字体大小", 8, 40, Order = 0, RequireRestart = false,
             HintText = "聊天窗口中对话内容的字体大小。")]
         [SettingPropertyGroup("聊天界面")]
         public int ChatFontSize
@@ -88,7 +88,7 @@ namespace MyFirstMod
             }
         }
 
-        [SettingPropertyInteger("角色名字体大小", 10, 24, Order = 1, RequireRestart = false,
+        [SettingPropertyInteger("角色名字体大小", 6, 32, Order = 1, RequireRestart = false,
             HintText = "聊天窗口中角色名称的字体大小。")]
         [SettingPropertyGroup("聊天界面")]
         public int ChatSenderFontSize
@@ -104,7 +104,7 @@ namespace MyFirstMod
             }
         }
 
-        [SettingPropertyInteger("时间戳字体大小", 6, 18, Order = 2, RequireRestart = false,
+        [SettingPropertyInteger("时间戳字体大小", 4, 24, Order = 2, RequireRestart = false,
             HintText = "聊天窗口中时间戳的字体大小。")]
         [SettingPropertyGroup("聊天界面")]
         public int ChatTimeFontSize
@@ -123,9 +123,9 @@ namespace MyFirstMod
         private int _messageSpacing = 16;
         private int _contentIndent = 12;
         private int _senderTopGap = 2;
-        private int _contentTopGap = 4;
+        private int _contentTopGap = 8;
 
-        [SettingPropertyInteger("消息间距", 4, 40, Order = 3, RequireRestart = false,
+        [SettingPropertyInteger("消息间距", 0, 80, Order = 3, RequireRestart = false,
             HintText = "两条消息之间的垂直间距。")]
         [SettingPropertyGroup("聊天界面")]
         public int MessageSpacing
@@ -141,7 +141,7 @@ namespace MyFirstMod
             }
         }
 
-        [SettingPropertyInteger("对话缩进", 0, 30, Order = 4, RequireRestart = false,
+        [SettingPropertyInteger("对话缩进", 0, 60, Order = 4, RequireRestart = false,
             HintText = "对话内容相对于角色名的左侧缩进。")]
         [SettingPropertyGroup("聊天界面")]
         public int ContentIndent
@@ -157,7 +157,7 @@ namespace MyFirstMod
             }
         }
 
-        [SettingPropertyInteger("角色名上间距", 0, 12, Order = 5, RequireRestart = false,
+        [SettingPropertyInteger("角色名上间距", 0, 30, Order = 5, RequireRestart = false,
             HintText = "角色名与时间戳之间的间距。")]
         [SettingPropertyGroup("聊天界面")]
         public int SenderTopGap
@@ -173,7 +173,7 @@ namespace MyFirstMod
             }
         }
 
-        [SettingPropertyInteger("对话上间距", 0, 12, Order = 6, RequireRestart = false,
+        [SettingPropertyInteger("对话上间距", 0, 30, Order = 6, RequireRestart = false,
             HintText = "对话内容与角色名之间的间距。")]
         [SettingPropertyGroup("聊天界面")]
         public int ContentTopGap

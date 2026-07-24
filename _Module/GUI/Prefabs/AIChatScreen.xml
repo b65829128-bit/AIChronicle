@@ -69,8 +69,8 @@
                                                  Text="@ContentText"
                                                  MarginLeft="@ContentIndent"
                                                  MarginTop="@ContentTopGap"
-                                                 Brush="ChatLog.Text"
                                                  Brush.FontSize="@FontSize"
+                                                 Brush.FontColor="#FAF4DEFF"
                                                  ClipContents="false" />
                               </Children>
                             </Widget>

@@ -18,7 +18,7 @@ namespace MyFirstMod
         private int _messageSpacing = 16;
         private int _contentIndent = 12;
         private int _senderTopGap = 2;
-        private int _contentTopGap = 4;
+        private int _contentTopGap = 8;
 
         [DataSourceProperty]
         public string SenderText
@@ -133,7 +133,7 @@ namespace MyFirstMod
         private int _messageSpacing = 16;
         private int _contentIndent = 12;
         private int _senderTopGap = 2;
-        private int _contentTopGap = 4;
+        private int _contentTopGap = 8;
 
         public Action? OnClose { get; set; }
 
@@ -186,7 +186,7 @@ namespace MyFirstMod
             _messageSpacing = MySettings.Instance?.MessageSpacing ?? 16;
             _contentIndent = MySettings.Instance?.ContentIndent ?? 12;
             _senderTopGap = MySettings.Instance?.SenderTopGap ?? 2;
-            _contentTopGap = MySettings.Instance?.ContentTopGap ?? 4;
+            _contentTopGap = MySettings.Instance?.ContentTopGap ?? 8;
 
             try
             {
@@ -231,7 +231,7 @@ namespace MyFirstMod
             _messageSpacing = MySettings.Instance?.MessageSpacing ?? 16;
             _contentIndent = MySettings.Instance?.ContentIndent ?? 12;
             _senderTopGap = MySettings.Instance?.SenderTopGap ?? 2;
-            _contentTopGap = MySettings.Instance?.ContentTopGap ?? 4;
+            _contentTopGap = MySettings.Instance?.ContentTopGap ?? 8;
             Messages.Add(new ChatMessageVM("你", userMsg, "user", "#5DADE2FF", now,
                 _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
                 _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
@@ -328,13 +328,13 @@ namespace MyFirstMod
                         MySettings.Instance?.MessageSpacing ?? 16,
                         MySettings.Instance?.ContentIndent ?? 12,
                         MySettings.Instance?.SenderTopGap ?? 2,
-                        MySettings.Instance?.ContentTopGap ?? 4));
+                        MySettings.Instance?.ContentTopGap ?? 8));
                 }
                 catch (Exception ex)
                 {
                     Messages.Add(new ChatMessageVM("系统", $"错误：{ex.Message}",
                         "system", "#E74C3CFF", PromptManager.GetCurrentTimeString(),
-                        18, 14, 10, 16, 12, 2, 4));
+                        18, 14, 10, 16, 12, 2, 8));
                 }
                 finally
                 {
