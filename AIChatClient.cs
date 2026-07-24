@@ -332,7 +332,7 @@ namespace MyFirstMod
             };
             _pendingInquiry = inquiry;
 
-            mre.Wait();
+            mre.Wait(TimeSpan.FromSeconds(30));
 
             if (inquiry.Result)
             {
@@ -357,7 +357,9 @@ namespace MyFirstMod
                 $"{hero.Name} 向你要 {amount} 金币。\n你当前拥有 {Hero.MainHero.Gold} 金币。",
                 true, true, "同意", "拒绝",
                 () => { inquiry.Result = true; inquiry.Event.Set(); },
-                () => { inquiry.Result = false; inquiry.Event.Set(); }));
+                () => { inquiry.Result = false; inquiry.Event.Set(); }),
+                pauseGameActiveState: true,
+                prioritize: true);
         }
 
         public static void Tick()
