@@ -69,10 +69,12 @@ namespace MyFirstMod
         }
 
         private int _chatFontSize = 18;
+        private int _chatSenderFontSize = 14;
+        private int _chatTimeFontSize = 10;
 
-        [SettingPropertyInteger("聊天字体大小", 12, 28, Order = 0, RequireRestart = false,
-            HintText = "AI 聊天窗口中消息文字的字体大小。")]
-        [SettingPropertyGroup("游戏设置")]
+        [SettingPropertyInteger("对话字体大小", 12, 28, Order = 0, RequireRestart = false,
+            HintText = "聊天窗口中对话内容的字体大小。")]
+        [SettingPropertyGroup("聊天界面")]
         public int ChatFontSize
         {
             get => _chatFontSize;
@@ -81,6 +83,38 @@ namespace MyFirstMod
                 if (_chatFontSize != value)
                 {
                     _chatFontSize = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyInteger("角色名字体大小", 10, 24, Order = 1, RequireRestart = false,
+            HintText = "聊天窗口中角色名称的字体大小。")]
+        [SettingPropertyGroup("聊天界面")]
+        public int ChatSenderFontSize
+        {
+            get => _chatSenderFontSize;
+            set
+            {
+                if (_chatSenderFontSize != value)
+                {
+                    _chatSenderFontSize = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyInteger("时间戳字体大小", 6, 18, Order = 2, RequireRestart = false,
+            HintText = "聊天窗口中时间戳的字体大小。")]
+        [SettingPropertyGroup("聊天界面")]
+        public int ChatTimeFontSize
+        {
+            get => _chatTimeFontSize;
+            set
+            {
+                if (_chatTimeFontSize != value)
+                {
+                    _chatTimeFontSize = value;
                     OnPropertyChanged();
                 }
             }

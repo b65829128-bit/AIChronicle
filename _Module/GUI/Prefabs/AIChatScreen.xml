@@ -50,24 +50,24 @@
                                     HeightSizePolicy="CoverChildren"
                                     MarginBottom="16">
                               <Children>
-                                <TextWidget WidthSizePolicy="StretchToParent"
-                                            HeightSizePolicy="CoverChildren"
-                                            HorizontalAlignment="Center"
-                                            Text="@TimeText"
-                                            Brush.FontSize="10"
-                                            Brush.FontColor="#888888FF"
-                                            ClipContents="false" />
-                                <TextWidget WidthSizePolicy="CoverChildren"
-                                            HeightSizePolicy="CoverChildren"
-                                            Text="@SenderText"
-                                            MarginTop="2"
-                                            Brush="ChatLog.TabText"
-                                            Brush.FontColor="@Color"
-                                            ClipContents="false" />
+                                 <TextWidget WidthSizePolicy="StretchToParent"
+                                             HeightSizePolicy="CoverChildren"
+                                             HorizontalAlignment="Center"
+                                             Text="@TimeText"
+                                             Brush.FontSize="@TimeFontSize"
+                                             Brush.FontColor="#888888FF"
+                                             ClipContents="false" />
+                                 <TextWidget WidthSizePolicy="CoverChildren"
+                                             HeightSizePolicy="CoverChildren"
+                                             Text="@SenderText"
+                                             MarginTop="2"
+                                             Brush.FontSize="@SenderFontSize"
+                                             Brush.FontColor="@Color"
+                                             ClipContents="false" />
                                 <RichTextWidget WidthSizePolicy="StretchToParent"
                                                 HeightSizePolicy="CoverChildren"
                                                 Text="@ContentText"
-                                                MarginLeft="12" MarginTop="2"
+                                                MarginLeft="12" MarginTop="4"
                                                 Brush="ChatLog.Text"
                                                 Brush.FontSize="@FontSize"
                                                 ClipContents="false" />

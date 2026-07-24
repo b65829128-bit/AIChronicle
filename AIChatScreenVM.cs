@@ -13,6 +13,8 @@ namespace MyFirstMod
         private string _timeText = "";
         private string _color = "#FFFFFFFF";
         private int _fontSize = 18;
+        private int _senderFontSize = 14;
+        private int _timeFontSize = 10;
 
         [DataSourceProperty]
         public string SenderText
@@ -49,15 +51,32 @@ namespace MyFirstMod
             set => SetField(ref _fontSize, value, "FontSize");
         }
 
+        [DataSourceProperty]
+        public int SenderFontSize
+        {
+            get => _senderFontSize;
+            set => SetField(ref _senderFontSize, value, "SenderFontSize");
+        }
+
+        [DataSourceProperty]
+        public int TimeFontSize
+        {
+            get => _timeFontSize;
+            set => SetField(ref _timeFontSize, value, "TimeFontSize");
+        }
+
         public string Role { get; }
 
-        public ChatMessageVM(string sender, string content, string role, string color, string timeText, int fontSize)
+        public ChatMessageVM(string sender, string content, string role, string color,
+            string timeText, int fontSize, int senderFontSize, int timeFontSize)
         {
             _senderText = sender;
             _contentText = content;
             _timeText = timeText;
             _color = color;
             _fontSize = fontSize;
+            _senderFontSize = senderFontSize;
+            _timeFontSize = timeFontSize;
             Role = role;
         }
     }
@@ -72,6 +91,8 @@ namespace MyFirstMod
         private readonly CharacterPrompt _charPrompt;
         private List<ChatHistoryEntry> _sessionMessages = new();
         private int _chatFontSize = 18;
+        private int _chatSenderFontSize = 14;
+        private int _chatTimeFontSize = 10;
 
         public Action? OnClose { get; set; }
 
@@ -119,6 +140,8 @@ namespace MyFirstMod
             _charPrompt = PromptManager.LoadCharacterPrompt(hero);
             _titleText = $"与 {_charPrompt.HeroName} 对话";
             _chatFontSize = MySettings.Instance?.ChatFontSize ?? 18;
+            _chatSenderFontSize = MySettings.Instance?.ChatSenderFontSize ?? 14;
+            _chatTimeFontSize = MySettings.Instance?.ChatTimeFontSize ?? 10;
 
             try
             {
@@ -135,7 +158,8 @@ namespace MyFirstMod
                 if (entry.Role == "tool") continue;
                 var sender = entry.Role == "user" ? "你" : _charPrompt.HeroName;
                 var color = entry.Role == "user" ? "#5DADE2FF" : "#F4D03FFF";
-                Messages.Add(new ChatMessageVM(sender, entry.Content, entry.Role, color, loadTime, _chatFontSize));
+                Messages.Add(new ChatMessageVM(sender, entry.Content, entry.Role, color, loadTime,
+                    _chatFontSize, _chatSenderFontSize, _chatTimeFontSize));
             }
         }
 
@@ -156,7 +180,10 @@ namespace MyFirstMod
 
             var now = PromptManager.GetCurrentTimeString();
             _chatFontSize = MySettings.Instance?.ChatFontSize ?? 18;
-            Messages.Add(new ChatMessageVM("你", userMsg, "user", "#5DADE2FF", now, _chatFontSize));
+            _chatSenderFontSize = MySettings.Instance?.ChatSenderFontSize ?? 14;
+            _chatTimeFontSize = MySettings.Instance?.ChatTimeFontSize ?? 10;
+            Messages.Add(new ChatMessageVM("你", userMsg, "user", "#5DADE2FF", now,
+                _chatFontSize, _chatSenderFontSize, _chatTimeFontSize));
             _sessionMessages.Add(new ChatHistoryEntry { Role = "user", Content = userMsg });
             PromptManager.AppendChatLog(_hero, "user", userMsg);
 
@@ -243,12 +270,16 @@ namespace MyFirstMod
                     }
 
                     Messages.Add(new ChatMessageVM(_charPrompt.HeroName, displayText,
-                        "assistant", "#F4D03FFF", now, MySettings.Instance?.ChatFontSize ?? 18));
+                        "assistant", "#F4D03FFF", now,
+                        MySettings.Instance?.ChatFontSize ?? 18,
+                        MySettings.Instance?.ChatSenderFontSize ?? 14,
+                        MySettings.Instance?.ChatTimeFontSize ?? 10));
                 }
                 catch (Exception ex)
                 {
                     Messages.Add(new ChatMessageVM("系统", $"错误：{ex.Message}",
-                        "system", "#E74C3CFF", PromptManager.GetCurrentTimeString(), _chatFontSize));
+                        "system", "#E74C3CFF", PromptManager.GetCurrentTimeString(),
+                        18, 14, 10));
                 }
                 finally
                 {
