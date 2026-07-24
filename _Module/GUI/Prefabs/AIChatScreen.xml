@@ -46,9 +46,10 @@
                                    VerticalAlignment="Bottom"
                                    StackLayout.LayoutMethod="VerticalTopToBottom">
                           <ItemTemplate>
-                             <Widget WidthSizePolicy="StretchToParent"
-                                     HeightSizePolicy="CoverChildren"
-                                     MarginBottom="@MessageSpacing">
+                            <ListPanel WidthSizePolicy="StretchToParent"
+                                    HeightSizePolicy="CoverChildren"
+                                    MarginBottom="@MessageSpacing"
+                                    StackLayout.LayoutMethod="VerticalTopToBottom">
                               <Children>
                                  <TextWidget WidthSizePolicy="StretchToParent"
                                              HeightSizePolicy="CoverChildren"
@@ -73,7 +74,7 @@
                                                  Brush.FontColor="#FAF4DEFF"
                                                  ClipContents="false" />
                               </Children>
-                            </Widget>
+                            </ListPanel>
                           </ItemTemplate>
                         </ListPanel>
                       </Children>
