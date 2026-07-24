@@ -120,7 +120,10 @@
 | `NPCs/{自己}/knowledge/{玩家名}.txt` | 读 + 追加 |
 | `NPCs/{自己}/relationships/{其他}.txt` | 读 + 追加 |
 | `NPCs/{自己}/goals/*.txt` | 读 + 追加 |
+| `NPCs/{自己}/chat_logs/*.txt` | 读 + 追加 |
+| `NPCs/{自己}/decisions/*.txt` | 读 + 追加 |
 | `World/factions.txt` | 只读 |
+| `World/settlements.txt` | 只读 |
 | 其他 NPC 的任何文件 | **禁止** |
 
 ### 扩展方式
@@ -385,7 +388,7 @@ Bannerlord 使用自研的 GauntletUI 框架。UI 开发分两层：
 
 ### 设计原则
 
-本模组使用 OpenAI 的 **function calling（工具调用）** 机制处理 AI 与游戏世界的交互。当前可用工具包括：认知更新、定居点查询、世界状态查询、NPC 行军移动、等待停留。未来所有 AI-世界交互都应基于此机制扩展。
+本模组使用 OpenAI 的 **function calling（工具调用）** 机制处理 AI 与游戏世界的交互。当前可用工具包括：认知更新、定居点查询、世界状态查询、NPC 行军移动、等待停留、修改好感度、赠送/索要金币。未来所有 AI-世界交互都应基于此机制扩展。
 
 ### 为什么用 function calling 而不是文本标记
 
