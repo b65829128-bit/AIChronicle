@@ -56,10 +56,16 @@
                                             Brush="GameTip.Title.Text"
                                             Brush.FontColor="@Color"
                                             ClipContents="false" />
+                                <TextWidget WidthSizePolicy="CoverChildren"
+                                            HeightSizePolicy="CoverChildren"
+                                            Text="@TimeText"
+                                            MarginLeft="10"
+                                            Brush="ChatLog.Time.Text"
+                                            ClipContents="false" />
                                 <RichTextWidget WidthSizePolicy="StretchToParent"
                                                 HeightSizePolicy="CoverChildren"
-                                                Text="@ContentText"
-                                                MarginLeft="12" MarginTop="18"
+                                                Text="@FormattedContent"
+                                                MarginLeft="12" MarginTop="20"
                                                 Brush="ChatLog.Text"
                                                 ClipContents="false" />
                               </Children>

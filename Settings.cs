@@ -68,6 +68,24 @@ namespace MyFirstMod
             }
         }
 
+        private int _chatFontSize = 18;
+
+        [SettingPropertyInteger("聊天字体大小", 12, 28, Order = 0, RequireRestart = false,
+            HintText = "AI 聊天窗口中消息文字的字体大小。")]
+        [SettingPropertyGroup("游戏设置")]
+        public int ChatFontSize
+        {
+            get => _chatFontSize;
+            set
+            {
+                if (_chatFontSize != value)
+                {
+                    _chatFontSize = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private int _maxRelationChange = 5;
 
         [SettingPropertyInteger("最大好感变化", 1, 30, Order = 0, RequireRestart = false,
