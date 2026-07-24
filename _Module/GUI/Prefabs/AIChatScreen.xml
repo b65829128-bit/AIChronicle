@@ -50,19 +50,24 @@
                                     HeightSizePolicy="CoverChildren"
                                     MarginBottom="10">
                               <Children>
-                                <RichTextWidget WidthSizePolicy="CoverChildren"
+                                <TextWidget WidthSizePolicy="CoverChildren"
                                             HeightSizePolicy="CoverChildren"
-                                            Text="@FormattedSender"
+                                            Text="@SenderText"
+                                            Brush="ChatLog.TabText"
+                                            Brush.FontColor="@Color"
                                             ClipContents="false" />
-                                <RichTextWidget WidthSizePolicy="CoverChildren"
+                                <TextWidget WidthSizePolicy="CoverChildren"
                                             HeightSizePolicy="CoverChildren"
-                                            Text="@FormattedTime"
+                                            Text="@TimeText"
                                             MarginLeft="8"
+                                            Brush="ChatLog.TabText"
+                                            Brush.FontSize="12"
                                             ClipContents="false" />
                                 <RichTextWidget WidthSizePolicy="StretchToParent"
                                                 HeightSizePolicy="CoverChildren"
-                                                Text="@FormattedContent"
-                                                MarginTop="4"
+                                                Text="@ContentText"
+                                                MarginTop="6"
+                                                Brush="ChatLog.Text"
                                                 ClipContents="false" />
                               </Children>
                             </Widget>
