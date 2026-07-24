@@ -155,6 +155,7 @@ namespace MyFirstMod
             SendButtonText = "思考中...";
 
             var now = PromptManager.GetCurrentTimeString();
+            _chatFontSize = MySettings.Instance?.ChatFontSize ?? 18;
             Messages.Add(new ChatMessageVM("你", userMsg, "user", "#5DADE2FF", now, _chatFontSize));
             _sessionMessages.Add(new ChatHistoryEntry { Role = "user", Content = userMsg });
             PromptManager.AppendChatLog(_hero, "user", userMsg);
@@ -242,7 +243,7 @@ namespace MyFirstMod
                     }
 
                     Messages.Add(new ChatMessageVM(_charPrompt.HeroName, displayText,
-                        "assistant", "#F4D03FFF", now, _chatFontSize));
+                        "assistant", "#F4D03FFF", now, MySettings.Instance?.ChatFontSize ?? 18));
                 }
                 catch (Exception ex)
                 {

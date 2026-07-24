@@ -48,26 +48,28 @@
                           <ItemTemplate>
                             <Widget WidthSizePolicy="StretchToParent"
                                     HeightSizePolicy="CoverChildren"
-                                    MarginBottom="10">
+                                    MarginBottom="16">
                               <Children>
-                                <TextWidget WidthSizePolicy="CoverChildren"
+                                <TextWidget WidthSizePolicy="StretchToParent"
                                             HeightSizePolicy="CoverChildren"
-                                            Text="@SenderText"
-                                            Brush="ChatLog.TabText"
-                                            Brush.FontColor="@Color"
+                                            HorizontalAlignment="Center"
+                                            Text="@TimeText"
+                                            Brush.FontSize="10"
+                                            Brush.FontColor="#888888FF"
                                             ClipContents="false" />
                                 <TextWidget WidthSizePolicy="CoverChildren"
                                             HeightSizePolicy="CoverChildren"
-                                            Text="@TimeText"
-                                            MarginLeft="8"
+                                            Text="@SenderText"
+                                            MarginTop="2"
                                             Brush="ChatLog.TabText"
-                                            Brush.FontSize="12"
+                                            Brush.FontColor="@Color"
                                             ClipContents="false" />
                                 <RichTextWidget WidthSizePolicy="StretchToParent"
                                                 HeightSizePolicy="CoverChildren"
                                                 Text="@ContentText"
-                                                MarginTop="6"
+                                                MarginLeft="12" MarginTop="2"
                                                 Brush="ChatLog.Text"
+                                                Brush.FontSize="@FontSize"
                                                 ClipContents="false" />
                               </Children>
                             </Widget>
