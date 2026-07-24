@@ -41,11 +41,12 @@
     "name": "wait_at_settlement",
     "description": "Wait at your current settlement for a specified duration before you can move again.\n\nUsage:\n- Call this after moving to or being at a settlement to declare how long you will stay.\n- The hours parameter is the number of in-game hours to stay. 24 hours = 1 day.\n- Common durations: 12 (half day), 24 (one day), 72 (three days), 168 (one week).\n- Maximum: 720 hours (30 days).\n- Do NOT call this if you are not currently at a settlement.\n- Do NOT call this with absurdly high values (e.g., 10000 hours) — use a reasonable stay duration.",
     "parameters": [
-    {
-      "name": "hours",
-      "type": "integer",
-      "description": "Number of in-game hours to stay at the settlement (1-720)."
-    }
+      {
+        "name": "hours",
+        "type": "integer",
+        "description": "Number of in-game hours to stay at the settlement (1-720)."
+      }
+    ]
   },
   {
     "name": "change_relation",
