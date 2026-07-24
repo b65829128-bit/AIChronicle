@@ -72,7 +72,7 @@
   },
   {
     "name": "request_gold_from_player",
-    "description": "Request gold from the player. This will show a confirmation dialog to the player — you will be told whether they accepted or refused.\n\nUsage:\n- Call this when you decide to ask the player for gold (as payment, tribute, bribe, demand, etc.).\n- The amount should not exceed what the player can reasonably afford.\n- The result will tell you whether the player ACCEPTED or REFUSED. You should respond accordingly in your next message.\n- The player CANNOT lie or make empty promises — the gold is transferred immediately if they accept.\n- Do NOT call this with zero or negative amounts.",
+    "description": "Receive gold FROM the player. This will ask the player to confirm, and you will be told whether they accepted or refused.\n\nUsage:\n- Call this ANY TIME money should flow FROM the player TO you — regardless of who initiated the transaction.\n- Typical scenarios include (but are not limited to):\n  - The player offers you a reward, payment, gift, or bribe.\n  - You demand payment, tribute, compensation, or a toll from the player.\n  - The player agrees to pay you for a service, job, or favor you performed.\n  - The player promises you money for any reason.\n- The key rule: whenever the player says or implies they will give you gold, call this function immediately to collect it. Do NOT just say \"thank you\" and move on.\n- The result will tell you whether the player ACCEPTED (gold was transferred) or REFUSED (they backed out). Respond accordingly.\n- The player CANNOT lie — the gold is transferred immediately if they accept.\n- Do NOT call this with zero or negative amounts.",
     "parameters": [
       {
         "name": "amount",
