@@ -16,7 +16,10 @@
 - LLM 会以领主的身份角色扮演回复（中世纪贵族口吻，中文）
 - 关掉聊天窗口后**回到对话界面**，可以继续正常交谈
 - AI 可以在对话中了解玩家，通过 **function calling** 机制自动更新对玩家的认知
-- 首次对话时自动用 LLM 为 NPC 生成性格描述（基于游戏内人物数据）
+- 首次对话时自动用 LLM 为 NPC 生成**结构化 persona**（动机、性格特质、表达风格三段式）
+- **Entity 系统**：玩家和所有 NPC 统一为 Entity，Agent 不区分"玩家"和"其他 NPC"
+- **动态上下文组装**：ContextBuilder 根据交互双方动态构建系统提示词
+- **工具能力过滤**：每个 Entity 有 EntityCapability 集合，无部队的 NPC 不拿到行军工具
 - 认知更新机制使用 OpenAI function calling 协议
   - Agent 可以调用 `query_settlement` 查询任意定居点实时信息（所有者、繁荣度）
   - Agent 可以调用 `query_world_state` 获取当前世界局势（各王国兵力、交战状态）
@@ -26,6 +29,14 @@
   - Agent 可以调用 `change_relation` 修改对玩家的好感度（单次上限在 MCM 中设置，默认 +-5）
   - Agent 可以调用 `give_gold_to_player` 赠送玩家金币（直接转账）
   - Agent 可以调用 `request_gold_from_player` 向玩家索要金币（弹出确认对话框，玩家无法口头答应但不给钱）
+
+### 书信系统
+
+- 战役地图上按 **O 键**打开收信人列表（仅显示对话过的领主）
+- 选择收信人后进入写信界面，Agent 以书信格式回复
+- 书信模式下金币类工具禁用（`give_gold`、`request_gold`），行军和关系类工具正常
+- Agent 可调用 `send_letter` 工具给任意 Entity 写信（支持中文名）
+- 信件存入收信人 `mailbox/inbox/` 目录
 
 ### 提示词系统（文件化、可热重载）
 
@@ -41,6 +52,7 @@ _Module/Prompts/
 ├── tool_call_prompt.txt         # 独立工具调用的代理提示词（热重载）
 ├── Templates/                   # NPC 目录模板
 │   ├── persona.txt
+│   ├── context_template.txt
 │   ├── knowledge_player.txt
 │   ├── goals_current.txt
 │   ├── archive.txt
@@ -50,27 +62,30 @@ _Module/Prompts/
         ├── system_prompt.txt     # 本战役的系统提示词（可独立编辑，热重载）
         ├── world_info.txt        # 本战役的世界背景（可编辑，热重载）
         └── NPCs/                 # Agent 管理的 NPC 文件系统
-            └── {领主名}/          # 每个 NPC 独立目录
+            └── {entity_id}/        # 每个 Entity 独立目录
                 ├── character.json # 基础 ID 信息（只读，自动生成）
-                ├── persona.txt    # 性格描述（LLM 首次对话生成）
+                ├── persona.txt    # 结构化 persona（动机、性格特质、表达风格三段式）
                 ├── knowledge/
                 ├── chat_logs/
                 ├── relationships/
                 ├── goals/
-                └── decisions/
+                ├── decisions/
+                └── mailbox/
+                    └── inbox/
 ```
 
 - **Agent 系统**：每个 NPC 有独立文件系统，Agent 通过 `read_file`/`append_file`/`list_dir` 工具管理记忆
 - **信息隔离**：Agent 只能操作自己目录下的文件 + World/ 目录，不能读取其他 NPC 的信息
-- **解耦存储**：聊天记录（`chat_logs/`）、对玩家认知（`knowledge/`）、NPC 性格（`persona.txt`）全部独立文件，Agent 按需精确读取
-- **LLM 生成性格**：首次对话时自动调用 LLM 根据游戏内人物数据生成 NPC 性格描述
+- **解耦存储**：聊天记录（`chat_logs/`）、对 Entity 认知（`knowledge/`）、NPC 性格（`persona.txt`）全部独立文件，Agent 按需精确读取
+- **LLM 生成 persona**：首次对话时自动调用 LLM 根据游戏内人物数据生成结构化 persona（动机、性格特质、表达风格三段式）
+- **ContextBuilder**：根据交互双方动态组装系统提示词，通过 `context_template.txt` 模板注入 Entity 的 persona 和能力信息
 - **世界信息系统**：卡拉迪亚大陆介绍，每个战役可独立编辑
 - **系统提示词**：控制 AI 行为风格的核心提示，每个战役独立
 - **工具定义**（`tools.json`）：定义 AI 可调用的游戏函数
 - **Agent 工具**（`agent_tools.json`）：定义 Agent 的文件操作工具
-- **个人信息系统**：每个 NPC 独立，对玩家的了解逐步积累，不会互相覆盖
+- **个人信息系统**：每个 NPC 独立，对目标的了解逐步积累，不会互相覆盖
 - NPC 个人信息在**首次对话时自动生成**，之后复用
-- AI 有权修改"对玩家的了解"字段（通过 function calling 自动触发），但不能修改聊天记录
+- AI 有权修改"对目标的了解"字段（通过 function calling 自动触发），但不能修改聊天记录
 - **玩家有权修改任何提示词文件**
 
 ### 全中文界面
@@ -154,14 +169,19 @@ MyFirstMod/
 ├── AIChatScreen.cs       # 聊天屏幕管理器（静态类，GauntletLayer 挂载）
 ├── AIChatScreenVM.cs     # 聊天 ViewModel（消息列表、输入绑定、function calling 处理）
 ├── LordChatBehavior.cs   # CampaignBehavior：对话中插入聊天选项，管理战役 ID
+├── LetterListScreen.cs   # 书信系统屏幕管理器（战役地图 O 键入口）
 ├── PromptManager.cs      # 提示词管理器（文件热重载、战役目录、角色 JSON 读写）
-├── AgentManager.cs        # Agent 管理器（NPC 文件系统、路径权限、工具执行）
+├── AgentManager.cs       # Agent 管理器（NPC 文件系统、路径权限、工具执行）
+├── Entity.cs             # Entity 数据模型（统一玩家/NPC，附能力标签）
+├── EntityManager.cs      # Entity 生命周期管理、查找与缓存
+├── ContextBuilder.cs     # 动态上下文组装（persona + 能力 + 模板）
 ├── AGENTS.md             # AI 开发工作流文档
 ├── README_MOD.md         # 本文件（功能说明）
 ├── _Module/
 │   ├── SubModule.xml     # 模组元数据
 │   ├── GUI/Prefabs/
-│   │   └── AIChatScreen.xml  # 聊天窗口 GauntletUI 布局
+│   │   ├── AIChatScreen.xml      # 聊天窗口 GauntletUI 布局
+│   │   └── LetterListScreen.xml  # 书信系统界面布局
 │   └── Prompts/
 │       ├── system_prompt.txt      # 系统提示词模板（玩家可编辑，热重载）
 │       ├── world_info.txt         # 默认世界背景
@@ -169,7 +189,7 @@ MyFirstMod/
 │       ├── agent_system.txt       # Agent 系统提示词模板
 │       ├── agent_tools.json       # Agent 文件工具（热重载）
 │       ├── tool_call_prompt.txt   # 工具调用代理提示词（热重载）
-│       ├── Templates/             # NPC 目录模板
+│       ├── Templates/             # NPC 目录模板（含 context_template.txt）
 │       └── Campaigns/             # 各战役独立目录（运行时自动创建）
 └── BLSource/             # 反编译的游戏源码（5332 个文件，只读）
 ```

@@ -14,18 +14,21 @@ namespace MyFirstMod
     public static class AgentManager
     {
         private static string _baseDir = "";
-        private static string _currentNpcId = "";
-        private static string _currentNpcDir => Path.Combine(_baseDir, _currentNpcId);
+        private static string _agentEntityId = "";
+        private static string _targetEntityId = "";
+        private static string _agentDir => Path.Combine(_baseDir, _agentEntityId);
         private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
         private static readonly HashSet<string> _readableDirs = new()
         {
-            "", "knowledge", "relationships", "goals", "chat_logs", "decisions"
+            "", "knowledge", "relationships", "goals", "chat_logs", "decisions",
+            "mailbox", "mailbox/inbox", "mailbox/sent"
         };
 
         private static readonly HashSet<string> _writableDirs = new()
         {
-            "knowledge", "relationships", "goals", "chat_logs", "decisions"
+            "knowledge", "relationships", "goals", "chat_logs", "decisions",
+            "mailbox", "mailbox/inbox", "mailbox/sent"
         };
 
         private static readonly HashSet<string> _readableWorldFiles = new()
@@ -33,41 +36,73 @@ namespace MyFirstMod
             "factions.txt", "settlements.txt"
         };
 
+        public static string ActiveAgentId => _agentEntityId;
+        public static string ActiveTargetId => _targetEntityId;
+
         public static void Initialize(string baseDir)
         {
             _baseDir = baseDir;
             Directory.CreateDirectory(_baseDir);
         }
 
-        public static void SetCurrentNpc(string npcId)
+        public static void Activate(string agentEntityId, string targetEntityId)
         {
-            _currentNpcId = SanitizeDir(npcId);
-            InitNpcDirectory();
+            _agentEntityId = SanitizeDir(agentEntityId);
+            _targetEntityId = SanitizeDir(targetEntityId);
+            InitAgentDirectory();
         }
 
+        [Obsolete("Use Activate(agentEntityId, targetEntityId) instead.")]
+        public static void SetCurrentNpc(string npcId)
+        {
+            Activate(npcId, npcId);
+        }
+
+        public static string? GetAgentDir()
+        {
+            if (string.IsNullOrEmpty(_agentEntityId)) return null;
+            return _agentDir;
+        }
+
+        [Obsolete("Use GetAgentDir() instead.")]
         public static string? GetCurrentNpcDir()
         {
-            if (string.IsNullOrEmpty(_currentNpcDir)) return null;
-            return _currentNpcDir;
+            return GetAgentDir();
         }
 
         public static string? GetChatLogPath()
         {
-            if (string.IsNullOrEmpty(_currentNpcDir)) return null;
-            var playerName = Hero.MainHero?.Name?.ToString() ?? "player";
-            return Path.Combine(_currentNpcDir, "chat_logs", SanitizeFile(playerName) + ".txt");
+            if (string.IsNullOrEmpty(_agentDir)) return null;
+            return Path.Combine(_agentDir, "chat_logs", SanitizeFile(_targetEntityId) + ".txt");
         }
 
+        public static string? GetTargetKnowledgePath()
+        {
+            if (string.IsNullOrEmpty(_agentDir)) return null;
+            return Path.Combine(_agentDir, "knowledge", SanitizeFile(_targetEntityId) + ".txt");
+        }
+
+        [Obsolete("Use GetTargetKnowledgePath() instead.")]
         public static string? GetPlayerKnowledgePath()
         {
-            if (string.IsNullOrEmpty(_currentNpcDir)) return null;
-            var playerName = Hero.MainHero?.Name?.ToString() ?? "player";
-            return Path.Combine(_currentNpcDir, "knowledge", SanitizeFile(playerName) + ".txt");
+            return GetTargetKnowledgePath();
         }
 
-        private static void InitNpcDirectory()
+        public static string? GetRelationshipPath(string targetEntityId)
         {
-            var dir = _currentNpcDir;
+            if (string.IsNullOrEmpty(_agentDir)) return null;
+            return Path.Combine(_agentDir, "relationships", SanitizeFile(targetEntityId) + ".txt");
+        }
+
+        public static string? GetGoalsPath()
+        {
+            if (string.IsNullOrEmpty(_agentDir)) return null;
+            return Path.Combine(_agentDir, "goals", "current.txt");
+        }
+
+        private static void InitAgentDirectory()
+        {
+            var dir = _agentDir;
             if (Directory.Exists(dir)) return;
 
             Directory.CreateDirectory(dir);
@@ -76,11 +111,16 @@ namespace MyFirstMod
             Directory.CreateDirectory(Path.Combine(dir, "goals"));
             Directory.CreateDirectory(Path.Combine(dir, "chat_logs"));
             Directory.CreateDirectory(Path.Combine(dir, "decisions"));
+            Directory.CreateDirectory(Path.Combine(dir, "mailbox", "inbox"));
+            Directory.CreateDirectory(Path.Combine(dir, "mailbox", "sent"));
         }
 
         public static string LoadPersona(Hero hero)
         {
-            var path = Path.Combine(_currentNpcDir, "persona.txt");
+            if (string.IsNullOrEmpty(_agentDir))
+                return "名字：" + (hero.Name?.ToString() ?? "未知") + "\n性别：" + (hero.IsFemale ? "女" : "男") + "\n文化：" + (hero.Culture?.Name?.ToString() ?? "未知") + "\n说话风格：使用中世纪贵族的正式口吻。";
+
+            var path = Path.Combine(_agentDir, "persona.txt");
             if (File.Exists(path))
                 return File.ReadAllText(path, Encoding.UTF8);
 
@@ -111,15 +151,15 @@ namespace MyFirstMod
                 var persona = GeneratePersonaViaLLM(basicInfo.ToString(), name).Result;
                 if (!string.IsNullOrEmpty(persona))
                 {
-                    var p = Path.Combine(_currentNpcDir, "persona.txt");
+                    var p = Path.Combine(_agentDir, "persona.txt");
                     File.WriteAllText(p, persona, Encoding.UTF8);
                     return persona;
                 }
             }
             catch { }
 
-            var fallback = basicInfo + "说话风格：使用中世纪贵族的正式口吻。";
-            var fallbackPath = Path.Combine(_currentNpcDir, "persona.txt");
+            var fallback = $"[MOTIVATION]\n{basicInfo}\n[TRAITS]\n- 未知\n\n[SPEECH_STYLE]\n使用中世纪贵族的正式口吻。";
+            var fallbackPath = Path.Combine(_agentDir, "persona.txt");
             File.WriteAllText(fallbackPath, fallback, Encoding.UTF8);
             return fallback;
         }
@@ -130,13 +170,23 @@ namespace MyFirstMod
             if (settings == null || string.IsNullOrEmpty(settings.ApiKey))
                 return "";
 
-            var prompt = $"你正在为一个游戏角色生成简短的性格描述。根据以下信息，为名叫{name}的NPC生成一段2-3句话的角色描述，包括他的性格特点和说话风格。只输出描述本身，不要加任何前缀。\n\n{info}";
+            var prompt = "你正在为一个游戏角色生成性格描述。根据以下信息，为名叫" + name + "的NPC生成性格描述。\n\n"
+                + "请严格按以下格式输出（保留所有标签）：\n"
+                + "[MOTIVATION]\n"
+                + "（2-3句话描述这个角色的核心动机和人生追求）\n\n"
+                + "[TRAITS]\n"
+                + "- 性格特质1：简要描述\n"
+                + "- 性格特质2：简要描述\n"
+                + "- 性格特质3：简要描述\n\n"
+                + "[SPEECH_STYLE]\n"
+                + "（1句话描述这个角色的说话风格和语言习惯，使用中文中世纪贵族口吻）\n\n"
+                + "人物信息：\n" + info;
 
             var payload = new
             {
                 model = settings.Model,
                 messages = new[] { new { role = "user", content = prompt } },
-                max_tokens = 200,
+                max_tokens = 400,
                 temperature = 0.7f
             };
 
@@ -145,7 +195,7 @@ namespace MyFirstMod
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
-            request.Headers.Add("Authorization", $"Bearer {settings.ApiKey}");
+            request.Headers.Add("Authorization", "Bearer " + settings.ApiKey);
 
             var response = await _http.SendAsync(request);
             response.EnsureSuccessStatusCode();
@@ -158,27 +208,27 @@ namespace MyFirstMod
         public static string ExecuteReadFile(string path, int? lineStart, int? lineCount)
         {
             if (!IsPathAllowed(path, read: true))
-                return $"[拒绝] 没有权限读取：{path}";
+                return "[拒绝] 没有权限读取：" + path;
 
             var fullPath = ResolvePath(path);
             if (fullPath == null)
-                return $"[错误] 路径解析失败：{path}";
+                return "[错误] 路径解析失败：" + path;
 
             if (!File.Exists(fullPath))
-                return $"[不存在] {path}";
+                return "[不存在] " + path;
 
             var lines = File.ReadAllLines(fullPath, Encoding.UTF8);
 
             var start = (lineStart ?? 1) - 1;
             if (start < 0) start = 0;
-            if (start >= lines.Length) return $"[空] {path} 只有 {lines.Length} 行";
+            if (start >= lines.Length) return "[空] " + path + " 只有 " + lines.Length + " 行";
 
             var count = lineCount ?? (lines.Length - start);
             var end = Math.Min(start + count, lines.Length);
 
             var result = new StringBuilder();
             for (var i = start; i < end; i++)
-                result.AppendLine($"{i + 1}: {lines[i]}");
+                result.AppendLine((i + 1) + ": " + lines[i]);
 
             return result.ToString().TrimEnd();
         }
@@ -186,11 +236,11 @@ namespace MyFirstMod
         public static string ExecuteAppendFile(string path, string content)
         {
             if (!IsPathAllowed(path, read: true, write: true))
-                return $"[拒绝] 没有写入权限：{path}";
+                return "[拒绝] 没有写入权限：" + path;
 
             var fullPath = ResolvePath(path);
             if (fullPath == null)
-                return $"[错误] 路径解析失败";
+                return "[错误] 路径解析失败";
 
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
@@ -203,10 +253,10 @@ namespace MyFirstMod
         {
             var fullPath = ResolvePath(path);
             if (fullPath == null)
-                return $"[错误] 路径解析失败";
+                return "[错误] 路径解析失败";
 
             if (!Directory.Exists(fullPath))
-                return $"[不存在] {path}";
+                return "[不存在] " + path;
 
             var entries = Directory.GetFileSystemEntries(fullPath);
             if (entries.Length == 0)
@@ -217,11 +267,69 @@ namespace MyFirstMod
             {
                 var fname = Path.GetFileName(entry);
                 if (Directory.Exists(entry))
-                    result.AppendLine($"[DIR]  {fname}/");
+                    result.AppendLine("[DIR]  " + fname + "/");
                 else
-                    result.AppendLine($"[FILE] {fname}");
+                    result.AppendLine("[FILE] " + fname);
             }
             return result.ToString().TrimEnd();
+        }
+
+        public static List<string> GetAllRelationshipIds()
+        {
+            if (string.IsNullOrEmpty(_agentDir)) return new List<string>();
+
+            var relDir = Path.Combine(_agentDir, "relationships");
+            if (!Directory.Exists(relDir)) return new List<string>();
+
+            var ids = new List<string>();
+            foreach (var file in Directory.GetFiles(relDir, "*.txt"))
+            {
+                var id = Path.GetFileNameWithoutExtension(file);
+                if (!string.IsNullOrEmpty(id))
+                    ids.Add(id);
+            }
+            return ids;
+        }
+
+        public static string? ReadRelationship(string targetEntityId)
+        {
+            var path = GetRelationshipPath(targetEntityId);
+            if (path == null || !File.Exists(path)) return null;
+            return File.ReadAllText(path, Encoding.UTF8).Trim();
+        }
+
+        public static string? ReadKnowledge(string targetEntityId)
+        {
+            if (string.IsNullOrEmpty(_agentDir)) return null;
+            var path = Path.Combine(_agentDir, "knowledge", SanitizeFile(targetEntityId) + ".txt");
+            if (!File.Exists(path)) return null;
+            return File.ReadAllText(path, Encoding.UTF8).Trim();
+        }
+
+        public static string? ReadGoals()
+        {
+            if (string.IsNullOrEmpty(_agentDir)) return null;
+            var path = Path.Combine(_agentDir, "goals", "current.txt");
+            if (!File.Exists(path)) return null;
+            return File.ReadAllText(path, Encoding.UTF8).Trim();
+        }
+
+        public static void StoreOutgoingLetter(string senderId, string recipientId, string content)
+        {
+            var senderDir = Path.Combine(_baseDir, SanitizeDir(senderId));
+            var recipientDir = Path.Combine(_baseDir, SanitizeDir(recipientId));
+
+            Directory.CreateDirectory(Path.Combine(senderDir, "mailbox", "sent"));
+            Directory.CreateDirectory(Path.Combine(recipientDir, "mailbox", "inbox"));
+
+            var sentPath = Path.Combine(senderDir, "mailbox", "sent", SanitizeFile(recipientId) + ".txt");
+            var inboxPath = Path.Combine(recipientDir, "mailbox", "inbox", SanitizeFile(senderId) + ".txt");
+
+            var timestamp = PromptManager.GetCurrentTimeString();
+            var entry = "[" + timestamp + "]\n" + content.Trim() + "\n";
+
+            File.AppendAllText(sentPath, entry, Encoding.UTF8);
+            File.AppendAllText(inboxPath, entry, Encoding.UTF8);
         }
 
         private static bool IsPathAllowed(string relPath, bool read, bool write = false)
@@ -248,11 +356,11 @@ namespace MyFirstMod
             if (_readableWorldFiles.Contains(relPath))
                 return Path.Combine(_baseDir, "World", relPath);
 
-            if (string.IsNullOrEmpty(_currentNpcDir))
+            if (string.IsNullOrEmpty(_agentDir))
                 return null;
 
-            var full = Path.Combine(_currentNpcDir, relPath);
-            return full.StartsWith(_currentNpcDir) ? full : null;
+            var full = Path.Combine(_agentDir, relPath);
+            return full.StartsWith(_agentDir) ? full : null;
         }
 
         private static string SanitizeDir(string name)

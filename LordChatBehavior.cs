@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Conversation;
 using TaleWorlds.Core;
@@ -10,6 +11,9 @@ namespace MyFirstMod
     public class LordChatBehavior : CampaignBehaviorBase
     {
         private string? _campaignId;
+        private List<string> _knownNpcIds = new();
+
+        public List<string> KnownNpcIds => _knownNpcIds;
 
         public override void RegisterEvents()
         {
@@ -20,6 +24,7 @@ namespace MyFirstMod
         public override void SyncData(IDataStore dataStore)
         {
             dataStore.SyncData("myfirstmod_campaign_id", ref _campaignId);
+            dataStore.SyncData("myfirstmod_known_npcs", ref _knownNpcIds);
         }
 
         public string GetOrCreateCampaignId()
@@ -66,6 +71,11 @@ namespace MyFirstMod
         {
             var hero = Hero.OneToOneConversationHero;
             if (hero == null) return;
+
+            var entity = EntityManager.GetOrCreateEntity(hero);
+            if (!_knownNpcIds.Contains(entity.Id))
+                _knownNpcIds.Add(entity.Id);
+
             AIChatScreen.RequestOpen(hero);
         }
     }

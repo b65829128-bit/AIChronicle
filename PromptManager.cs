@@ -85,6 +85,8 @@ namespace MyFirstMod
         private static string _cachedAgentPrompt = "";
         private static DateTime _lastAgentPromptCheck;
 
+        public static string PromptsBaseDir => _promptsBaseDir;
+
         public static bool IsInitialized => _campaignDir != "";
 
         public static void Initialize(string modulePath)
@@ -121,6 +123,7 @@ namespace MyFirstMod
 
             var npcBase = Path.Combine(_campaignDir, "NPCs");
             AgentManager.Initialize(npcBase);
+            EntityManager.Initialize(npcBase);
         }
 
         public static string BuildSystemPrompt(string lordName, CharacterPrompt charPrompt)
@@ -136,8 +139,13 @@ namespace MyFirstMod
                 .Replace("{current_time}", GetCurrentTimeString());
         }
 
-        public static string BuildAgentSystemPrompt(Hero hero, CharacterPrompt charPrompt)
+        public static string BuildAgentSystemPrompt(Hero hero, CharacterPrompt charPrompt, string intent = "conversation")
         {
+            var agentId = AgentManager.ActiveAgentId;
+            var targetId = AgentManager.ActiveTargetId;
+            if (!string.IsNullOrEmpty(agentId) && !string.IsNullOrEmpty(targetId))
+                return ContextBuilder.Build(agentId, targetId, intent);
+
             var template = LoadAgentSystemPromptTemplate();
             var worldInfo = MySettings.Instance?.UseWorldInfo == true ? LoadWorldInfo() : "";
             var persona = AgentManager.LoadPersona(hero);
@@ -175,6 +183,20 @@ namespace MyFirstMod
             };
 
             return $"第{year}年，{season}第{day}日，{timeOfDay}";
+        }
+
+        public static string? GetWorldInfoPath()
+        {
+            var path = Path.Combine(_campaignDir, "world_info.txt");
+            return File.Exists(path) ? path : null;
+        }
+
+        public static List<ToolDef> LoadAllTools()
+        {
+            var combined = new List<ToolDef>();
+            combined.AddRange(LoadTools());
+            combined.AddRange(LoadAgentTools());
+            return combined;
         }
 
         private static string LoadSystemPromptTemplate()
@@ -298,9 +320,9 @@ namespace MyFirstMod
             File.WriteAllText(path, json, Encoding.UTF8);
         }
 
-        public static void UpdatePlayerKnowledge(Hero hero, string newKnowledge)
+        public static void UpdateTargetKnowledge(string newKnowledge)
         {
-            var path = AgentManager.GetPlayerKnowledgePath();
+            var path = AgentManager.GetTargetKnowledgePath();
             if (path == null) return;
 
             var existing = File.Exists(path) ? File.ReadAllText(path, Encoding.UTF8).Trim() : "";
@@ -312,7 +334,7 @@ namespace MyFirstMod
             File.WriteAllText(path, content, Encoding.UTF8);
         }
 
-        public static List<ChatHistoryEntry> LoadChatLog(Hero hero)
+        public static List<ChatHistoryEntry> LoadChatLog()
         {
             var path = AgentManager.GetChatLogPath();
             if (path == null || !File.Exists(path))
@@ -351,7 +373,7 @@ namespace MyFirstMod
             return entries;
         }
 
-        public static void AppendChatLog(Hero hero, string role, string content)
+        public static void AppendChatLog(string role, string content)
         {
             var path = AgentManager.GetChatLogPath();
             if (path == null) return;
@@ -379,7 +401,7 @@ namespace MyFirstMod
 
         private static string GetCharacterFilePath(Hero hero)
         {
-            var npcDir = AgentManager.GetCurrentNpcDir();
+            var npcDir = AgentManager.GetAgentDir();
             if (npcDir != null)
                 return Path.Combine(npcDir, "character.json");
 

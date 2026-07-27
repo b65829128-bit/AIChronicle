@@ -22,7 +22,25 @@ namespace MyFirstMod
             SubModule.RequestChatOpen(hero);
         }
 
+        public static void RequestOpenLetter(Hero hero)
+        {
+            if (_layer != null)
+                return;
+
+            SubModule.RequestLetterOpen(hero);
+        }
+
         public static void DoOpen(Hero hero)
+        {
+            DoOpenWithIntent(hero, "conversation");
+        }
+
+        public static void DoOpenLetter(Hero hero)
+        {
+            DoOpenWithIntent(hero, "letter");
+        }
+
+        private static void DoOpenWithIntent(Hero hero, string intent)
         {
             if (_layer != null)
                 return;
@@ -37,7 +55,7 @@ namespace MyFirstMod
             }
 
             _parentScreen = topScreen;
-            _vm = new AIChatScreenVM(hero);
+            _vm = new AIChatScreenVM(hero, intent);
 
             _vm.OnClose = () =>
             {

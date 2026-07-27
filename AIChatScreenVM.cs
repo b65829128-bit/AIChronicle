@@ -126,6 +126,7 @@ namespace MyFirstMod
         private bool _isLoading;
         private readonly Hero _hero;
         private readonly CharacterPrompt _charPrompt;
+        private readonly string _intent;
         private List<ChatHistoryEntry> _sessionMessages = new();
         private int _chatFontSize = 24;
         private int _chatSenderFontSize = 22;
@@ -175,11 +176,12 @@ namespace MyFirstMod
         [DataSourceProperty]
         public MBBindingList<ChatMessageVM> Messages { get; } = new();
 
-        public AIChatScreenVM(Hero hero)
+        public AIChatScreenVM(Hero hero, string intent = "conversation")
         {
             _hero = hero;
             _charPrompt = PromptManager.LoadCharacterPrompt(hero);
-            _titleText = $"与 {_charPrompt.HeroName} 对话";
+            _intent = intent;
+            _titleText = intent == "letter" ? $"给 {_charPrompt.HeroName} 写信" : $"与 {_charPrompt.HeroName} 对话";
             _chatFontSize = MySettings.Instance?.ChatFontSize ?? 24;
             _chatSenderFontSize = MySettings.Instance?.ChatSenderFontSize ?? 22;
             _chatTimeFontSize = MySettings.Instance?.ChatTimeFontSize ?? 22;
@@ -190,11 +192,13 @@ namespace MyFirstMod
 
             try
             {
-                AgentManager.SetCurrentNpc(hero.Name?.ToString() ?? "unknown");
+                var playerHero = Hero.MainHero;
+                if (playerHero != null)
+                    EntityManager.ActivateInteraction(hero, playerHero);
             }
             catch { }
 
-            var history = PromptManager.LoadChatLog(hero);
+            var history = PromptManager.LoadChatLog();
             _sessionMessages.AddRange(history);
 
             var loadTime = PromptManager.GetCurrentTimeString();
@@ -236,7 +240,7 @@ namespace MyFirstMod
                 _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
                 _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
             _sessionMessages.Add(new ChatHistoryEntry { Role = "user", Content = userMsg });
-            PromptManager.AppendChatLog(_hero, "user", userMsg);
+            PromptManager.AppendChatLog("user", userMsg);
 
             Task.Run(async () =>
             {
@@ -244,7 +248,7 @@ namespace MyFirstMod
                 {
                     _charPrompt.ChatHistory = _sessionMessages;
                     var useIndependent = MySettings.Instance?.IndependentToolCalling == true;
-                    var chatResponse = await AIChatClient.SendMessage(_charPrompt, _hero, !useIndependent);
+                    var chatResponse = await AIChatClient.SendMessage(_charPrompt, _hero, !useIndependent, _intent);
                     var displayText = chatResponse.Content;
 
                     if (useIndependent)
@@ -283,7 +287,7 @@ namespace MyFirstMod
                             ToolCallId = kv.Key
                         });
                     }
-                    PromptManager.AppendChatLog(_hero, "assistant", displayText);
+                    PromptManager.AppendChatLog("assistant", displayText);
 
                     foreach (var tc in chatResponse.ToolCalls)
                     {
@@ -314,7 +318,7 @@ namespace MyFirstMod
 
                     if (chatResponse.LearnedKnowledge != null)
                     {
-                        PromptManager.UpdatePlayerKnowledge(_hero, chatResponse.LearnedKnowledge);
+                        PromptManager.UpdateTargetKnowledge(chatResponse.LearnedKnowledge);
                         InformationManager.DisplayMessage(new InformationMessage(
                             $"[MyFirstMod] {_charPrompt.HeroName} 更新了对你的认知",
                             Colors.Cyan));

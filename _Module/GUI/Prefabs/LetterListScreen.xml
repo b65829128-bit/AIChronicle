@@ -1,0 +1,88 @@
+<Prefab>
+  <Window>
+    <Widget WidthSizePolicy="StretchToParent" HeightSizePolicy="StretchToParent"
+            Sprite="BlankWhiteSquare_9" Color="#000000AA">
+      <Children>
+        <Widget WidthSizePolicy="Fixed" HeightSizePolicy="Fixed"
+                SuggestedWidth="420" SuggestedHeight="480"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Sprite="BlankWhiteSquare_9" Color="#1E1E2EFF" DoNotAcceptEvents="true">
+          <Children>
+            <Widget WidthSizePolicy="StretchToParent" HeightSizePolicy="Fixed"
+                    SuggestedHeight="42"
+                    Sprite="BlankWhiteSquare_9" Color="#2A2A3AFF" DoNotAcceptEvents="true">
+              <Children>
+                <TextWidget WidthSizePolicy="CoverChildren" HeightSizePolicy="CoverChildren"
+                            VerticalAlignment="Center" MarginLeft="15"
+                            Text="选择收信人" Brush="FullScreenNotice.Title" />
+                <ButtonWidget WidthSizePolicy="Fixed" HeightSizePolicy="Fixed"
+                              SuggestedWidth="28" SuggestedHeight="28"
+                              HorizontalAlignment="Right" VerticalAlignment="Center"
+                              MarginRight="8"
+                              Brush="SPChatlog.Checkbox.CombatLog"
+                              Command.Click="ExecuteClose"
+                              UpdateChildrenStates="true" />
+              </Children>
+            </Widget>
+            <Widget WidthSizePolicy="StretchToParent" HeightSizePolicy="StretchToParent"
+                    MarginTop="42" MarginBottom="0" DoNotAcceptEvents="true">
+              <Children>
+                <ScrollablePanel Id="NpcScrollPanel" WidthSizePolicy="StretchToParent"
+                                 HeightSizePolicy="StretchToParent"
+                                 AutoHideScrollBars="false"
+                                 ClipRect="NpcClipRect" InnerPanel="NpcClipRect\NpcList"
+                                 VerticalScrollbar="..\NpcScrollbar\VerticalScrollbar">
+                  <Children>
+                    <Widget Id="NpcClipRect" ClipContents="true"
+                            WidthSizePolicy="StretchToParent" HeightSizePolicy="StretchToParent"
+                            MarginLeft="10" MarginRight="10" MarginTop="5" MarginBottom="5">
+                      <Children>
+                        <ListPanel Id="NpcList" DataSource="{Messages}"
+                                   WidthSizePolicy="StretchToParent"
+                                   HeightSizePolicy="CoverChildren"
+                                   StackLayout.LayoutMethod="VerticalTopToBottom">
+                          <ItemTemplate>
+                            <ButtonWidget WidthSizePolicy="StretchToParent"
+                                          HeightSizePolicy="Fixed" SuggestedHeight="44"
+                                          MarginBottom="3"
+                                          Brush="ButtonBrush2"
+                                          Command.Click="ExecuteSelect"
+                                          UpdateChildrenStates="true"
+                                          DoNotPassEventsToChildren="true">
+                              <Children>
+                                <TextWidget WidthSizePolicy="StretchToParent"
+                                            HeightSizePolicy="StretchToParent"
+                                            Text="@NpcLabel" MarginLeft="10"
+                                            Brush="OverlayPopup.ButtonText" FontSize="18"/>
+                              </Children>
+                            </ButtonWidget>
+                          </ItemTemplate>
+                        </ListPanel>
+                      </Children>
+                    </Widget>
+                  </Children>
+                </ScrollablePanel>
+                <Widget Id="NpcScrollbar" WidthSizePolicy="Fixed" HeightSizePolicy="StretchToParent"
+                        SuggestedWidth="8" HorizontalAlignment="Right" DoNotAcceptEvents="true">
+                  <Children>
+                    <ScrollbarWidget Id="VerticalScrollbar" WidthSizePolicy="Fixed"
+                                     HeightSizePolicy="StretchToParent" SuggestedWidth="8"
+                                     AlignmentAxis="Vertical"
+                                     Handle="VerticalScrollbarHandle" MaxValue="100" MinValue="0">
+                      <Children>
+                        <ImageWidget Id="VerticalScrollbarHandle" WidthSizePolicy="Fixed"
+                                     HeightSizePolicy="Fixed"
+                                     SuggestedWidth="8" SuggestedHeight="20"
+                                     Brush="FaceGen.Scrollbar.Handle" />
+                      </Children>
+                    </ScrollbarWidget>
+                  </Children>
+                </Widget>
+              </Children>
+            </Widget>
+          </Children>
+        </Widget>
+      </Children>
+    </Widget>
+  </Window>
+</Prefab>

@@ -46,5 +46,21 @@
         "description": "Relative path to list, e.g. \"\" for root, \"knowledge\" for knowledge folder."
       }
     ]
+  },
+  {
+    "name": "send_letter",
+    "description": "Send a written letter to another entity. The letter will be delivered to their mailbox.\n\nUsage:\n- Call this when you need to communicate with someone who is not present — you are writing a letter, not speaking in person.\n- The recipient will see your letter and may reply later.\n- The content should be the full body of your letter, written in formal written style.",
+    "parameters": [
+      {
+        "name": "recipient_entity_id",
+        "type": "string",
+        "description": "The entity ID or Chinese name of the recipient. Use the [ID: xxx] shown in context if available, otherwise use the Chinese name (e.g. \"拉盖娅\")."
+      },
+      {
+        "name": "content",
+        "type": "string",
+        "description": "The full body of the letter in Chinese."
+      }
+    ]
   }
 ]

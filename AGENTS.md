@@ -88,17 +88,25 @@
 本模组采用 **Agent 驱动架构**，受 opencode 设计启发。不是"玩家 ↔ LLM 对话"，而是：
 
 ```
-玩家 ↔ 前台角色（只管说话，不调工具）
-            ↕
-    Agent 核心（读文件、做决策、写回、调游戏函数）
-            ↕
-    文件系统（NPC 的记忆、目标、关系 = 结构化目录）
+Entity（玩家/NPC，统一抽象）
+      ↕
+Context Builder（动态组装：身份 + 记忆 + 目标 + 感知 + 可用工具）
+      ↕
+Agent 核心（读文件、做决策、写回、调游戏函数）
+      ↕
+文件系统（每个 Entity 的独立目录 = 结构化记忆）
 ```
+
+Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 的 Entity。
 
 ### 关键设计
 
 | 原则 | 说明 |
 |------|------|
+| **Entity 平等** | 玩家和所有 NPC 统一为 Entity，由 EntityController（Human/Agent）区分 |
+| **动态 Context** | ContextBuilder 根据当前交互双方动态组装系统提示词 |
+| **能力过滤** | 每个 Entity 有 EntityCapability 集合，工具列表按能力自动过滤 |
+| **书信模式** | 支持书信 intent，工具按场景限制（信件中禁用 give_gold/request_gold），O 键唤起收信人列表 |
 | **文件即知识库** | NPC 的记忆、目标、对玩家的认知都是文件，Agent 通过 `read_file`/`append_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
 | **工具定义文件化** | 所有工具定义在 `tools.json` 和 `agent_tools.json` 中，热重载，不硬编码 |
@@ -109,7 +117,7 @@
 
 | 模型 | 用途 | 提示词来源 |
 |------|------|-----------|
-| Agent 模型 | 思考、读写文件、调工具、决定回什么 | `agent_system.txt` + `agent_tools.json` + `tools.json` |
+| Agent 模型 | 思考、读写文件、调工具、决定回什么 | `context_template.txt` → ContextBuilder 动态组装 |
 | 前台模型 | 把 Agent 给的上下文变成自然对话 | 极简，不带工具，只做角色扮演 |
 
 ### 信息隔离规则（硬约束）
@@ -117,7 +125,7 @@
 | 当前 NPC 可访问 | 权限 |
 |---------------|------|
 | `NPCs/{自己}/persona.txt` | 只读 |
-| `NPCs/{自己}/knowledge/{玩家名}.txt` | 读 + 追加 |
+| `NPCs/{自己}/knowledge/{entity_id}.txt` | 读 + 追加 |
 | `NPCs/{自己}/relationships/{其他}.txt` | 读 + 追加 |
 | `NPCs/{自己}/goals/*.txt` | 读 + 追加 |
 | `NPCs/{自己}/chat_logs/*.txt` | 读 + 追加 |
@@ -133,6 +141,13 @@
 1. `tools.json` 或 `agent_tools.json` 中加一条工具定义（遵循 opencode 风格的 `description` 格式）
 2. `AIChatClient.ExecuteToolCall` 的 `switch` 中加一个 `case`
 3. 如果工具需要跨帧追踪（如移动、等待等异步操作），还需在 `AIChatClient.Tick()` 中添加处理逻辑（`SubModule.OnApplicationTick` 已配置为每帧调用 `Tick()`）
+
+#### 新增 Entity 类型
+
+1. 在 `Entity.cs` 的 `EntityCapability` 枚举中添加新能力
+2. 在 `EntityManager.ComputeCapabilities()` 中为新 Entity 类型计算能力集合
+3. 在 `ContextBuilder` 的 `CapabilityToolMap` 中建立能力→工具映射
+4. 在 `tools.json` 的 `parameters.properties` 中添加 `capability_required` 字段
 
 ---
 
@@ -162,14 +177,20 @@ C:\Users\yangui\BLMods\MyFirstMod\
 ├── LordChatBehavior.cs        ← 对话中插入聊天选项，战役 ID 管理
 ├── PromptManager.cs           ← 提示词管理器（文件热重载、战役目录、角色 JSON）
 ├── AgentManager.cs            ← Agent 管理器（NPC 文件系统、路径权限、LLM 生成 persona）
+├── Entity.cs                  ← Entity 抽象（玩家/NPC 统一模型、EntityCapability）
+├── EntityManager.cs           ← Entity 生命周期管理
+├── ContextBuilder.cs          ← Context 动态组装器
+├── LetterListScreen.cs        ← 书信收信人列表屏幕
 ├── _Module/
 │   ├── SubModule.xml         ← 模组元数据（ID、依赖、DLL路径）
 │   ├── GUI/
 │   │   └── Prefabs/
-│   │       └── AIChatScreen.xml  ← 聊天窗口布局
+│   │       ├── AIChatScreen.xml  ← 聊天窗口布局
+│   │       └── LetterListScreen.xml ← 书信收信人列表
 │   └── Prompts/
 │       ├── system_prompt.txt  ← 系统提示词模板（玩家可编辑，热重载）
 │       ├── world_info.txt     ← 默认世界背景
+│       ├── context_template.txt ← Context 模板（ContextBuilder 动态组装用）
 │       ├── tools.json         ← 游戏工具定义（热重载）
 │       ├── agent_system.txt   ← Agent 系统提示词模板
 │       ├── agent_tools.json   ← Agent 文件工具定义（热重载）
@@ -179,11 +200,13 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │           └── {战役名}/
 │               ├── world_info.txt  ← 本战役世界背景
 │               └── NPCs/          ← Agent 管理的 NPC 文件系统
-│                   └── {领主名}/
-│                       ├── character.json
-│                       ├── persona.txt
+│                   └── {entity_id}/
+│                       ├── persona.txt   ← [MOTIVATION]/[TRAITS]/[SPEECH_STYLE]
 │                       ├── knowledge/
 │                       ├── chat_logs/
+│                       ├── mailbox/
+│                       │   ├── inbox/
+│                       │   └── outbox/
 │                       ├── relationships/
 │                       ├── goals/
 │                       └── decisions/

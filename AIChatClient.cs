@@ -29,6 +29,7 @@ namespace MyFirstMod
         private static readonly HttpClient _client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
 
         private static Hero? _currentHero;
+        private static string _currentIntent = "conversation";
 
         private sealed class PendingAction
         {
@@ -52,13 +53,22 @@ namespace MyFirstMod
 
         private static object BuildTools()
         {
-            var gameTools = PromptManager.LoadTools();
-            var agentTools = PromptManager.LoadAgentTools();
+            var activeAgent = EntityManager.ActiveAgent;
+            List<ToolDef> toolDefs;
+            if (activeAgent != null)
+            {
+                toolDefs = ContextBuilder.GetFilteredTools(activeAgent, _currentIntent);
+            }
+            else
+            {
+                toolDefs = PromptManager.LoadAllTools();
+            }
+            return BuildTools(toolDefs);
+        }
 
-            var all = new List<ToolDef>(gameTools);
-            all.AddRange(agentTools);
-
-            return all.Select(d => new
+        private static object BuildTools(List<ToolDef> toolDefs)
+        {
+            return toolDefs.Select(d => new
             {
                 type = "function",
                 function = new
@@ -120,6 +130,9 @@ namespace MyFirstMod
 
                     case "request_gold_from_player":
                         return ExecuteRequestGoldFromPlayer(args["amount"]?.ToObject<int>() ?? 0);
+
+                    case "send_letter":
+                        return ExecuteSendLetter(args["recipient_entity_id"]?.ToString() ?? "", args["content"]?.ToString() ?? "");
 
                     default:
                         return $"未知工具：{name}";
@@ -342,6 +355,21 @@ namespace MyFirstMod
             return $"玩家拒绝了支付 {amount} 金币的请求。";
         }
 
+        private static string ExecuteSendLetter(string recipientId, string content)
+        {
+            if (string.IsNullOrEmpty(recipientId)) return "[错误] 请提供收信人实体 ID 或名称";
+            if (string.IsNullOrEmpty(content)) return "[错误] 信件内容不能为空";
+            if (_currentHero == null) return "[错误] 无当前领主";
+            var senderEntity = EntityManager.GetEntityByHero(_currentHero);
+            if (senderEntity == null) return "[错误] 发信人实体不存在";
+            var resolvedId = EntityManager.ResolveEntityId(recipientId);
+            if (resolvedId == null) return $"[错误] 未找到名为 \"{recipientId}\" 的实体";
+            AgentManager.StoreOutgoingLetter(senderEntity.Id, resolvedId, content);
+            var recipientEntity = EntityManager.GetEntityById(resolvedId);
+            var recipientName = recipientEntity?.Name ?? resolvedId;
+            return $"信件已发送给 {recipientName}。";
+        }
+
         public static void CheckPendingInquiry()
         {
             var inquiry = _pendingInquiry;
@@ -549,12 +577,13 @@ namespace MyFirstMod
             };
         }
 
-        public static async Task<ChatResponse> SendMessage(CharacterPrompt charPrompt, Hero? hero = null, bool includeTools = true)
+        public static async Task<ChatResponse> SendMessage(CharacterPrompt charPrompt, Hero? hero = null, bool includeTools = true, string intent = "conversation")
         {
             _currentHero = hero;
+            _currentIntent = intent;
             var settings = MySettings.Instance!;
             var systemPrompt = hero != null
-                ? PromptManager.BuildAgentSystemPrompt(hero, charPrompt)
+                ? PromptManager.BuildAgentSystemPrompt(hero, charPrompt, intent)
                 : PromptManager.BuildSystemPrompt(charPrompt.HeroName, charPrompt);
 
             var historyLimit = settings.ChatHistoryLimit;
