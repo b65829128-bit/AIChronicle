@@ -69,6 +69,9 @@ namespace MyFirstMod
                 if (agentEntity?.HeroRef == null || targetEntity?.HeroRef == null)
                     return;
 
+                if (agentEntity.Controller != EntityController.Agent)
+                    return;
+
                 var agentName = agentEntity.Name;
                 var targetName = targetEntity.Name;
 

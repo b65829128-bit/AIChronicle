@@ -130,6 +130,9 @@ namespace MyFirstMod
             if (File.Exists(path))
                 return File.ReadAllText(path, Encoding.UTF8);
 
+            if (hero == Hero.MainHero)
+                return "[MOTIVATION]\n你是一位在卡拉迪亚大陆闯荡的冒险者。\n\n[TRAITS]\n- 待探索\n\n[SPEECH_STYLE]\n自由发挥。";
+
             return GeneratePersona(hero);
         }
 
@@ -347,6 +350,24 @@ namespace MyFirstMod
 
             File.AppendAllText(sentPath, entry, Encoding.UTF8);
             File.AppendAllText(inboxPath, entry, Encoding.UTF8);
+        }
+
+        public static List<string> ListInbox(string entityId)
+        {
+            var inboxDir = Path.Combine(_baseDir, entityId, "mailbox", "inbox");
+            if (!Directory.Exists(inboxDir))
+                return new List<string>();
+            return Directory.GetFiles(inboxDir, "*.txt")
+                .Select(f => Path.GetFileNameWithoutExtension(f))
+                .Where(n => !string.IsNullOrEmpty(n))
+                .ToList()!;
+        }
+
+        public static string? ReadInboxLetter(string entityId, string fileName)
+        {
+            var path = Path.Combine(_baseDir, entityId, "mailbox", "inbox", SanitizeFile(fileName) + ".txt");
+            if (!File.Exists(path)) return null;
+            return File.ReadAllText(path, Encoding.UTF8).Trim();
         }
 
         private static bool IsPathAllowed(string relPath, bool read, bool write = false)

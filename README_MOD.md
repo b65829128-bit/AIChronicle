@@ -33,8 +33,9 @@
 
 ### 书信系统
 
-- 战役地图上按 **O 键**打开收信人列表（仅显示对话过的领主）
-- 选择收信人后进入写信界面，Agent 以书信格式回复
+- 战役地图上按 **O 键**打开书信面板（收件箱 + 已知领主列表）
+- **收件箱**：以 `[来信] 发信人` 格式显示收到的信件，点击可阅读全文并一键回复
+- **写信**：选择一位对话过的领主，进入写信界面
 - 书信模式下当面交易类工具禁用（`give_gold`、`request_gold`），行军和关系类工具正常
 - Agent 可调用 `send_letter` 给任意人物写信（支持中文名或 entity ID）
 - 收信端由 `AgentScheduler` 异步激活处理（每帧一个事件，最多 N 层级联）
@@ -84,7 +85,7 @@ _Module/Prompts/
 - **Agent 系统**：每个 NPC 有独立文件系统，Agent 通过 `read_file`/`append_file`/`list_dir` 工具管理记忆
 - **信息隔离**：Agent 只能操作自己目录下的文件 + World/ 目录，不能读取其他 NPC 的信息
 - **解耦存储**：聊天记录（`chat_logs/`）、对 Entity 认知（`knowledge/`）、NPC 性格（`persona.txt`）全部独立文件，Agent 按需精确读取
-- **LLM 生成 persona**：首次对话时自动调用 LLM 根据游戏内人物数据生成结构化 persona（动机、性格特质、表达风格三段式）
+- **LLM 生成 persona**：首次对话时自动调用 LLM 为 NPC 生成结构化 persona（玩家角色除外，使用静态占位文本）
 - **ContextBuilder**：根据交互双方动态组装系统提示词，通过 `context_template.txt` 模板注入 Entity 的 persona 和能力信息
 - **世界信息系统**：卡拉迪亚大陆介绍，每个战役可独立编辑
 - **系统提示词**：控制 AI 行为风格的核心提示，每个战役独立
