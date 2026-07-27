@@ -1,18 +1,18 @@
 [
   {
     "name": "update_knowledge",
-    "description": "Record new information learned about the PLAYER (the person you are speaking to) in this conversation turn.\n\nUsage:\n- Call this function whenever the PLAYER reveals or claims information about themselves: their identity, background, intentions, position, experiences, or opinions.\n- The knowledge must be about the PLAYER — do NOT record information about yourself or your own background.\n- Record what the player claimed even if you are uncertain or skeptical.\n- The knowledge parameter must be a single concise sentence summarizing the new information.\n- Do NOT call this function if the PLAYER did not reveal any new information in this turn.\n- This function is for system use only; the player does not see its output.",
+    "description": "Record new information learned about the other person (the person you are speaking to) in this conversation turn.\n\nUsage:\n- Call this function whenever the other person reveals or claims information about themselves: their identity, background, intentions, position, experiences, or opinions.\n- The knowledge must be about the other person — do NOT record information about yourself or your own background.\n- Record what the other person claimed even if you are uncertain or skeptical.\n- The knowledge parameter must be a single concise sentence summarizing the new information.\n- Do NOT call this function if the other person did not reveal any new information in this turn.\n- This function is for system use only; the other person does not see its output.",
     "parameters": [
       {
         "name": "knowledge",
         "type": "string",
-        "description": "A single sentence describing ONLY the NEW information the player revealed about themselves. Do not repeat info already recorded in your existing knowledge. Write in the same language the conversation is in."
+        "description": "A single sentence describing ONLY the NEW information the other person revealed about themselves. Do not repeat info already recorded in your existing knowledge. Write in the same language the conversation is in."
       }
     ]
   },
   {
     "name": "query_character",
-    "description": "Query basic public information about a character on the Calradia map.\n\nUsage:\n- Call this when you need to know who someone is: their family, allegiance, status, location, or military strength.\n- The name parameter should match the Chinese or English character name (e.g., \"拉盖娅\" or \"Rhagaea\").\n- This returns PUBLIC information that any noble would reasonably know or could ask their steward.\n- Returns: name, gender, culture, status (king/vassal/mercenary), clan, kingdom, encyclopedia description, clan tier & renown, current state (in settlement/on campaign/imprisoned), party info with rough troop count, current location.\n- Call this at the beginning of a conversation if you don't know the other person.",
+    "description": "Query authoritative system-level public information about a character on the Calradia map. This data is canonical and overrides any stale knowledge you may have.\n\nUsage:\n- Call this at the beginning of EVERY conversation to get the other person's current identity, allegiance, and status.\n- The name parameter should match the Chinese or English character name (e.g., \"拉盖娅\" or \"Rhagaea\").\n- If the returned info conflicts with your knowledge files, the system data is ALWAYS correct — update your knowledge with append_file to stay current.\n- Returns: name, gender, culture, status (king/vassal/mercenary), clan, kingdom, encyclopedia description, clan tier & renown, current state (in settlement/on campaign/imprisoned), party info with rough troop count, current location.",
     "parameters": [
       {
         "name": "name",
@@ -61,35 +61,132 @@
   },
   {
     "name": "change_relation",
-    "description": "Change your relationship points toward the player. Positive means more friendly, negative means more hostile.\n\nUsage:\n- Call this when your attitude toward the player has meaningfully changed — for example, the player insulted you, helped you, threatened you, or showed great respect.\n- The delta parameter should reflect the magnitude and direction of the change. Small things = 1-2 points. Significant events = 3-5 points.\n- Positive delta = your opinion of the player improves. Negative delta = it worsens.\n- The absolute value of delta is capped by the game setting (default 5).\n- Do NOT call this for trivial things or for every conversation turn.\n- This function has no visible output to the player.",
+    "description": "Change your relationship points toward someone. Positive means more friendly, negative means more hostile.\n\nUsage:\n- Call this when your attitude toward someone has meaningfully changed — for example, they insulted you, helped you, threatened you, or showed great respect.\n- The target_entity_id specifies WHOSE relationship to change, using their entity ID or Chinese name. Omit to target the current conversation partner.\n- The delta parameter should reflect the magnitude and direction of the change. Small things = 1-2 points. Significant events = 3-5 points.\n- Positive delta = your opinion of them improves. Negative delta = it worsens.\n- The absolute value of delta is capped by the game setting (default 5).\n- Do NOT call this for trivial things or for every conversation turn.\n- This function has no visible output to the target.",
     "parameters": [
       {
         "name": "delta",
         "type": "integer",
         "description": "Amount to change relation. Positive = friendlier, negative = more hostile. Clamped to [-max, max] where max is set in game settings (default 5)."
+      },
+      {
+        "name": "target_entity_id",
+        "type": "string",
+        "description": "Entity ID or Chinese name of the person whose relationship to change. Omit to target the current conversation partner."
       }
     ]
   },
   {
-    "name": "give_gold_to_player",
-    "description": "Give gold to the player from your personal wealth.\n\nUsage:\n- Call this when you decide to give the player gold (as a reward, gift, payment, bribe, etc.).\n- The amount must not exceed your current gold.\n- This is a direct transfer — the gold is immediately deducted from you and given to the player.\n- Do NOT call this with zero or negative amounts.\n- Do NOT call this if you are just talking about giving gold without actually deciding to do it.",
+    "name": "give_gold",
+    "description": "Give gold to someone from your personal wealth.\n\nUsage:\n- Call this when you decide to give someone gold (as a reward, gift, payment, bribe, etc.).\n- The target_entity_id specifies WHO to give gold to, using their entity ID or Chinese name. Omit to target the current conversation partner.\n- The amount must not exceed your current gold.\n- This is a direct transfer — the gold is immediately deducted from you and given to the target.\n- Do NOT call this with zero or negative amounts.\n- Do NOT call this if you are just talking about giving gold without actually deciding to do it.",
     "parameters": [
       {
         "name": "amount",
         "type": "integer",
-        "description": "Amount of gold to give to the player. Must be > 0 and cannot exceed your current gold."
+        "description": "Amount of gold to give. Must be > 0 and cannot exceed your current gold."
+      },
+      {
+        "name": "target_entity_id",
+        "type": "string",
+        "description": "Entity ID or Chinese name of the recipient. Omit to target the current conversation partner."
       }
     ]
   },
   {
-    "name": "request_gold_from_player",
-    "description": "Receive gold FROM the player. This will ask the player to confirm, and you will be told whether they accepted or refused.\n\nUsage:\n- Call this ANY TIME money should flow FROM the player TO you — regardless of who initiated the transaction.\n- Typical scenarios include (but are not limited to):\n  - The player offers you a reward, payment, gift, or bribe.\n  - You demand payment, tribute, compensation, or a toll from the player.\n  - The player agrees to pay you for a service, job, or favor you performed.\n  - The player promises you money for any reason.\n- The key rule: whenever the player says or implies they will give you gold, call this function immediately to collect it. Do NOT just say \"thank you\" and move on.\n- The result will tell you whether the player ACCEPTED (gold was transferred) or REFUSED (they backed out). Respond accordingly.\n- The player CANNOT lie — the gold is transferred immediately if they accept.\n- Do NOT call this with zero or negative amounts.",
+    "name": "request_gold",
+    "description": "Receive gold FROM someone. This will ask them to confirm, and you will be told whether they accepted or refused.\n\nUsage:\n- Call this ANY TIME money should flow FROM someone TO you — regardless of who initiated the transaction.\n- The target_entity_id specifies WHO to request gold from, using their entity ID or Chinese name. Omit to target the current conversation partner.\n- Typical scenarios include (but are not limited to):\n  - Someone offers you a reward, payment, gift, or bribe.\n  - You demand payment, tribute, compensation, or a toll from someone.\n  - Someone agrees to pay you for a service, job, or favor you performed.\n  - Someone promises you money for any reason.\n- The key rule: whenever someone says or implies they will give you gold, call this function immediately to collect it. Do NOT just say \"thank you\" and move on.\n- The result will tell you whether they ACCEPTED (gold was transferred) or REFUSED (they backed out). Respond accordingly.\n- They CANNOT lie — the gold is transferred immediately if they accept.\n- Do NOT call this with zero or negative amounts.",
     "parameters": [
       {
         "name": "amount",
         "type": "integer",
-        "description": "Amount of gold to request from the player. Must be > 0."
+        "description": "Amount of gold to request. Must be > 0."
+      },
+      {
+        "name": "target_entity_id",
+        "type": "string",
+        "description": "Entity ID or Chinese name of the person to request gold from. Omit to target the current conversation partner."
       }
     ]
+  },
+  {
+    "name": "raid_settlement",
+    "description": "Send your party to raid a village — force it to give supplies, volunteers, or loot it.\n\nUsage:\n- Call this when you decide to raid/harass a village (as punishment, for resources, or as an act of war).\n- The settlement_name must be a village name in Chinese or English.\n- Your party will march there and begin raiding.\n- This is a hostile action that will anger the village's owner.\n- Do NOT call this if your party is not mobile or if you are a governor/prisoner.\n- Only works if you are leading a party.",
+    "parameters": [
+      {
+        "name": "settlement_name",
+        "type": "string",
+        "description": "Name of the village to raid, in Chinese or English."
+      }
+    ]
+  },
+  {
+    "name": "besiege_settlement",
+    "description": "Send your party to besiege a town or castle — begin a siege assault.\n\nUsage:\n- Call this when you decide to lay siege to a fortified settlement.\n- The settlement_name must be a town or castle name in Chinese or English.\n- Your party will march there and begin constructing siege engines.\n- This is a major military operation that may trigger or escalate war.\n- Do NOT call this for villages (use raid_settlement for villages).\n- Only works if you are leading a party.",
+    "parameters": [
+      {
+        "name": "settlement_name",
+        "type": "string",
+        "description": "Name of the town or castle to besiege, in Chinese or English."
+      }
+    ]
+  },
+  {
+    "name": "engage_party",
+    "description": "Send your party to chase and attack another mobile party on the map.\n\nUsage:\n- Call this when you decide to attack a specific party (enemy raiders, a rival lord's army, etc.).\n- The target_entity_id specifies WHOSE party to attack, using their entity ID or Chinese name.\n- Your party will pursue and engage them in battle.\n- This is a hostile action that may trigger or escalate war.\n- Do NOT call this to attack your own faction members.\n- Only works if you are leading a party.",
+    "parameters": [
+      {
+        "name": "target_entity_id",
+        "type": "string",
+        "description": "Entity ID or Chinese name of the person whose party to attack."
+      }
+    ]
+  },
+  {
+    "name": "defend_settlement",
+    "description": "Send your party to defend a settlement — stand guard and protect it from attackers.\n\nUsage:\n- Call this when you decide to defend a settlement (your fief, an ally's town, a threatened village).\n- The settlement_name must be a valid settlement name in Chinese or English.\n- Your party will march there and take a defensive stance.\n- This is a protective action, not hostile.\n- Only works if you are leading a party.",
+    "parameters": [
+      {
+        "name": "settlement_name",
+        "type": "string",
+        "description": "Name of the settlement to defend, in Chinese or English."
+      }
+    ]
+  },
+  {
+    "name": "patrol_settlement",
+    "description": "Send your party to patrol around a settlement — circle the area to deter enemies.\n\nUsage:\n- Call this when you decide to patrol around a settlement (keeping the peace, hunting bandits, guarding borders).\n- The settlement_name must be a valid settlement name in Chinese or English.\n- Your party will march there and patrol the surrounding area.\n- This is a non-aggressive protective action.\n- Only works if you are leading a party.",
+    "parameters": [
+      {
+        "name": "settlement_name",
+        "type": "string",
+        "description": "Name of the settlement to patrol around, in Chinese or English."
+      }
+    ]
+  },
+  {
+    "name": "escort_party",
+    "description": "Send your party to escort another party — follow and protect them as they travel.\n\nUsage:\n- Call this when you decide to escort someone (protecting a caravan, accompanying an ally, guarding a VIP).\n- The target_entity_id specifies WHOSE party to escort, using their entity ID or Chinese name.\n- Your party will follow and stay close to the target party.\n- This is a protective action that shows trust and alliance.\n- Only works if you are leading a party.",
+    "parameters": [
+      {
+        "name": "target_entity_id",
+        "type": "string",
+        "description": "Entity ID or Chinese name of the person whose party to escort."
+      }
+    ]
+  },
+  {
+    "name": "go_around_party",
+    "description": "Send your party to navigate around another party — avoid them by going around.\n\nUsage:\n- Call this when you decide to avoid a party (dodging a stronger enemy, bypassing a neutral force).\n- The target_entity_id specifies WHOSE party to avoid, using their entity ID or Chinese name. Omit to target the current conversation partner's party.\n- Your party will find a path around them without engaging.\n- This is a defensive/evasive action.\n- Only works if you are leading a party.",
+    "parameters": [
+      {
+        "name": "target_entity_id",
+        "type": "string",
+        "description": "Entity ID or Chinese name of the person whose party to avoid. Omit to target the current conversation partner's party."
+      }
+    ]
+  },
+  {
+    "name": "cancel_action",
+    "description": "Cancel your current party task and return your party to autonomous AI control.\n\nUsage:\n- Call this when you want to stop your current mission (defending, patrolling, escorting, etc.) and let your party act on its own.\n- After calling this, you can issue a new order (move_to_settlement, raid_settlement, etc.) if you want.\n- This only cancels the task you previously issued through a tool call — it does not affect the game's own AI decisions.\n- No parameters needed.",
+    "parameters": []
   }
 ]

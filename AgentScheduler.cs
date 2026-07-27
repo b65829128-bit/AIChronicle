@@ -10,7 +10,8 @@ namespace MyFirstMod
 {
     public enum ActivationEventType
     {
-        LetterReceived
+        LetterReceived,
+        BehaviorCheckIn
     }
 
     public class ActivationEvent
@@ -75,9 +76,18 @@ namespace MyFirstMod
                 var agentName = agentEntity.Name;
                 var targetName = targetEntity.Name;
 
-                InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] {targetName} 给 {agentName} 写了一封信",
-                    Colors.Cyan));
+                if (evt.Type == ActivationEventType.BehaviorCheckIn)
+                {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"[MyFirstMod] {agentName} 正在重新评估当前任务...",
+                        Colors.Cyan));
+                }
+                else
+                {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"[MyFirstMod] {targetName} 给 {agentName} 写了一封信",
+                        Colors.Cyan));
+                }
 
                 EntityManager.ActivateInteraction(agentEntity.HeroRef, targetEntity.HeroRef);
 
@@ -91,8 +101,13 @@ namespace MyFirstMod
                     }
                 };
 
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"[MyFirstMod] {agentName} 正在思考下一步行动...",
+                    Colors.Cyan));
+
+                var intent = evt.Type == ActivationEventType.BehaviorCheckIn ? "chat" : "letter";
                 var response = await AIChatClient.SendMessage(
-                    charPrompt, agentEntity.HeroRef, includeTools: true, intent: "letter");
+                    charPrompt, agentEntity.HeroRef, includeTools: true, intent: intent);
 
                 if (!string.IsNullOrEmpty(response.Content))
                 {

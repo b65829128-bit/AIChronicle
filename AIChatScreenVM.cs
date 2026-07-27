@@ -304,11 +304,41 @@ namespace MyFirstMod
                             {
                                 var a = Newtonsoft.Json.Linq.JObject.Parse(tc.Arguments);
                                 var path = a["path"]?.ToString() ?? "";
+                                var pattern = a["pattern"]?.ToString() ?? "";
+                                var set = a["settlement_name"]?.ToString() ?? "";
+                                var tid = a["target_entity_id"]?.ToString();
+                                var tname = !string.IsNullOrEmpty(tid)
+                                    ? (EntityManager.ResolveEntityId(tid!) != null
+                                        ? EntityManager.GetEntityById(EntityManager.ResolveEntityId(tid!)!)?.Name ?? tid
+                                        : tid)
+                                    : "";
                                 toolDesc = tc.Name switch
                                 {
                                     "read_file" => $"读取了记忆：{path}",
                                     "append_file" => $"更新了记忆：{path}",
+                                    "write_file" => $"写入了文件：{path}",
+                                    "edit_file" => $"修改了文件：{path}",
+                                    "delete_file" => $"删除了文件：{path}",
                                     "list_dir" => $"浏览了目录：{path}",
+                                    "glob" => $"搜索了文件：{pattern}",
+                                    "grep" => $"搜索了关键词：{pattern}",
+                                    "send_letter" => $"给 {tname} 写了一封信",
+                                    "move_to_settlement" => $"下令部队前往 {set}",
+                                    "wait_at_settlement" => $"决定在当前位置停留",
+                                    "raid_settlement" => $"下令劫掠 {set}",
+                                    "besiege_settlement" => $"下令围攻 {set}",
+                                    "engage_party" => $"下令追击 {tname} 的部队",
+                                    "defend_settlement" => $"下令驻防 {set}",
+                                    "patrol_settlement" => $"下令巡逻 {set} 周边",
+                                    "escort_party" => $"下令护送 {tname} 的部队",
+                                    "go_around_party" => $"下令绕开 {tname} 的部队",
+                                    "cancel_action" => "取消了当前任务",
+                                    "change_relation" => $"调整了对{tname}的好感度",
+                                    "give_gold" => $"赠予了{tname}金币",
+                                    "request_gold" => $"向{tname}索要了金币",
+                                    "query_character" => "查询了人物信息",
+                                    "query_settlement" => "查询了定居点信息",
+                                    "query_world_state" => "获取了世界局势",
                                     _ => $"调用了 {tc.Name}"
                                 };
                             }

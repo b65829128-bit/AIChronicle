@@ -25,18 +25,28 @@
   - Agent 可以调用 `query_world_state` 获取当前世界局势（各王国兵力、交战状态）
   - Agent 可以调用 `move_to_settlement` 工具，让 NPC 部队实际行军移动到地图上的城镇/城堡（非瞬移）
   - Agent 可以调用 `wait_at_settlement` 工具，让 NPC 在到达城镇后停留指定时长（游戏内小时）
-  - NPC 移动期间保留逃离逻辑：被强敌追赶时会逃跑，逃离结束后自动恢复原目的地
-  - Agent 可以调用 `change_relation` 修改对玩家的好感度（单次上限在 MCM 中设置，默认 +-5）
-  - Agent 可以调用 `give_gold_to_player` 赠送玩家金币（直接转账）
-  - Agent 可以调用 `request_gold_from_player` 向玩家索要金币（弹出确认对话框，玩家无法口头答应但不给钱）
-  - Agent 可以调用 `query_character` 查询任意人物的公开信息（方案B级别：身份、家族、王国、兵力、当前位置等）
+  - Agent 可以调用 `raid_settlement` 劫掠村庄（强征物资 / 强拉壮丁 / 洗劫）
+  - Agent 可以调用 `besiege_settlement` 围攻城镇或城堡
+  - Agent 可以调用 `engage_party` 追击并攻击另一支部队
+  - Agent 可以调用 `defend_settlement` 驻防守卫某个定居点
+  - Agent 可以调用 `patrol_settlement` 围绕定居点巡逻警戒
+  - Agent 可以调用 `escort_party` 护送跟随另一支部队
+  - Agent 可以调用 `go_around_party` 绕行回避某支部队
+  - 所有行军/军事工具在被中断（逃离、战斗）后自动恢复原任务，不会丢失指令
+  - Agent 可以调用 `cancel_action` 取消当前任务，让部队回归自主 AI 控制
+  - 持续性任务（驻防/巡逻/护送）到达目标后启动定时签到：到时 Agent 自动激活，可自行决定是否继续、转去做别的事、或向阵营领袖汇报
+  - Agent 可以调用 `change_relation` 修改对任意人物的好感度（单次上限在 MCM 中设置，默认 +-5），可指定目标实体
+  - Agent 可以调用 `give_gold` 赠予任意人物金币（直接转账），可指定目标实体
+  - Agent 可以调用 `request_gold` 向任意人物索要金币（向玩家索要时弹出确认对话框，向 NPC 索要时自动划转）
+  - Agent 可以调用 `query_character` 查询任意人物的公开信息
+  - Agent 可以调用 `grep` 在个人文件系统中按关键词搜索，定位到具体文件和行号后再用 `read_file` 精读
 
 ### 书信系统
 
 - 战役地图上按 **O 键**打开书信面板（收件箱 + 已知领主列表）
 - **收件箱**：以 `[来信] 发信人` 格式显示收到的信件，点击可阅读全文并一键回复
 - **写信**：选择一位对话过的领主，进入写信界面
-- 书信模式下当面交易类工具禁用（`give_gold`、`request_gold`），行军和关系类工具正常
+- 书信模式下金币转移类工具禁用（`give_gold`、`request_gold`），行军/军事和关系类工具正常
 - Agent 可调用 `send_letter` 给任意人物写信（支持中文名或 entity ID）
 - 收信端由 `AgentScheduler` 异步激活处理（每帧一个事件，最多 N 层级联）
 - 级联深度在 MCM 中可调（默认 5，超出的只存档不处理）
@@ -82,7 +92,7 @@ _Module/Prompts/
 > `query_character` 返回结果以「该人物：」开头作为补充约定。
 > 禁止使用「TA」「他/她」「其」等模糊人称。未来添加新提示词文件时必须遵守此约定。
 
-- **Agent 系统**：每个 NPC 有独立文件系统，Agent 通过 `read_file`/`append_file`/`list_dir` 工具管理记忆
+- **Agent 系统**：每个 NPC 有独立文件系统，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`list_dir`/`glob`/`grep`/`send_letter` 工具管理记忆
 - **信息隔离**：Agent 只能操作自己目录下的文件 + World/ 目录，不能读取其他 NPC 的信息
 - **解耦存储**：聊天记录（`chat_logs/`）、对 Entity 认知（`knowledge/`）、NPC 性格（`persona.txt`）全部独立文件，Agent 按需精确读取
 - **LLM 生成 persona**：首次对话时自动调用 LLM 为 NPC 生成结构化 persona（玩家角色除外，使用静态占位文本）

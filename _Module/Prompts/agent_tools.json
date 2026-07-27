@@ -1,12 +1,12 @@
 [
   {
     "name": "read_file",
-    "description": "Read content from one of your personal files.\n\nUsage:\n- Use this when you need to recall information: what you know about the player, your current goals, or your relationships.\n- The path must be relative to your personal directory. Examples: \"knowledge/玩家名.txt\", \"goals/current.txt\", \"relationships/某人.txt\"\n- Use line_start and line_count to read only what you need.",
+    "description": "Read content from one of your personal files.\n\nUsage:\n- Use this when you need to recall information: what you know about the other person, your current goals, or your relationships.\n- The path must be relative to your personal directory. Examples: \"knowledge/对方名.txt\", \"goals/current.txt\", \"relationships/某人.txt\"\n- Use line_start and line_count to read only what you need.",
     "parameters": [
       {
         "name": "path",
         "type": "string",
-        "description": "Relative file path within your character directory, e.g. \"knowledge/玩家名.txt\""
+        "description": "Relative file path within your character directory, e.g. \"knowledge/对方名.txt\""
       },
       {
         "name": "line_start",
@@ -22,12 +22,12 @@
   },
   {
     "name": "append_file",
-    "description": "Append new information to one of your personal files.\n\nUsage:\n- Use this when you learn something new about the player: their identity, background, intentions, or opinions.\n- Only write to files in your personal directory.\n- Do NOT overwrite — new information is always appended, never replaced.\n- The content should be a single concise sentence in Chinese.",
+    "description": "Append new information to one of your personal files.\n\nUsage:\n- Use this when you learn something new about the other person: their identity, background, intentions, or opinions.\n- Only write to files in your personal directory.\n- Do NOT overwrite — new information is always appended, never replaced.\n- The content should be a single concise sentence in Chinese.",
     "parameters": [
       {
         "name": "path",
         "type": "string",
-        "description": "Relative file path, e.g. \"knowledge/玩家名.txt\""
+        "description": "Relative file path, e.g. \"knowledge/对方名.txt\""
       },
       {
         "name": "content",
@@ -44,6 +44,81 @@
         "name": "path",
         "type": "string",
         "description": "Relative path to list, e.g. \"\" for root, \"knowledge\" for knowledge folder."
+      }
+    ]
+  },
+  {
+    "name": "grep",
+    "description": "Search your personal files and world files for a keyword or phrase.\n\nUsage:\n- Use this before calling read_file — to find which files contain information you need and which lines to read.\n- The pattern parameter is the keyword or phrase to search for (e.g., a person's name, a place, a topic).\n- The path parameter (optional) limits the search scope. Use \"knowledge\", \"chat_logs\", \"relationships\", \"goals\", \"decisions\", \"mailbox\", \"World\", or leave empty for all.\n- Returns each match as: file_path:line_number: matching line content.\n- This lets you pinpoint exactly which file and line to read, rather than guessing.",
+    "parameters": [
+      {
+        "name": "pattern",
+        "type": "string",
+        "description": "The keyword or phrase to search for."
+      },
+      {
+        "name": "path",
+        "type": "string",
+        "description": "Subdirectory or file to limit search to. \"knowledge\", \"chat_logs\", \"relationships\", etc. \"World\" for world files. Empty or omitted for all of your directory."
+      }
+    ]
+  },
+  {
+    "name": "write_file",
+    "description": "Create a new file or overwrite an existing one entirely.\n\nUsage:\n- Use this to create a new record from scratch or replace all content in a file.\n- The content replaces the entire file — use edit_file if you only need to change part of a file.\n- Do NOT write to chat_logs/ or persona.txt.\n- The path is relative to your personal directory.",
+    "parameters": [
+      {
+        "name": "path",
+        "type": "string",
+        "description": "Relative file path, e.g. \"goals/current.txt\""
+      },
+      {
+        "name": "content",
+        "type": "string",
+        "description": "Full content to write to the file."
+      }
+    ]
+  },
+  {
+    "name": "glob",
+    "description": "Find files in your personal directory matching a pattern.\n\nUsage:\n- Use this to discover files by name pattern, e.g. \"knowledge/*.txt\" to list all knowledge files, or \"goals/*\" to find all goals.\n- The pattern supports * (match anything) and ? (match one character).\n- Returns matching file paths relative to your directory.\n- The pattern is relative to your personal directory. Use \"World/*.txt\" for world files.",
+    "parameters": [
+      {
+        "name": "pattern",
+        "type": "string",
+        "description": "Glob pattern, e.g. \"knowledge/*.txt\", \"relationships/*\", \"goals/new_*\". Supports * and ? wildcards."
+      }
+    ]
+  },
+  {
+    "name": "edit_file",
+    "description": "Perform exact string replacement in one of your personal files.\n\nUsage:\n- Use this to UPDATE outdated information — e.g., when query_character reveals someone's status has changed, replace the stale record with current facts.\n- The old_string must match EXACTLY one occurrence in the file. Include enough surrounding context to make it unique.\n- The old_string is replaced with new_string in-place.\n- Do NOT edit chat_logs (conversation records are immutable) or persona.txt.\n- The path is relative to your personal directory.",
+    "parameters": [
+      {
+        "name": "path",
+        "type": "string",
+        "description": "Relative file path, e.g. \"knowledge/对方名.txt\""
+      },
+      {
+        "name": "old_string",
+        "type": "string",
+        "description": "The exact text to find and replace. Must match exactly one occurrence."
+      },
+      {
+        "name": "new_string",
+        "type": "string",
+        "description": "The replacement text."
+      }
+    ]
+  },
+  {
+    "name": "delete_file",
+    "description": "Delete one of your personal files.\n\nUsage:\n- Use this to remove obsolete records — completed goals, resolved decisions, outdated relationship notes.\n- The path is relative to your personal directory.\n- Do NOT delete chat_logs, persona.txt, or character.json.\n- Deletion is permanent.",
+    "parameters": [
+      {
+        "name": "path",
+        "type": "string",
+        "description": "Relative file path to delete, e.g. \"goals/old_plan.txt\""
       }
     ]
   },

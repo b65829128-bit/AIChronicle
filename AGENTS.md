@@ -107,9 +107,9 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **动态 Context** | ContextBuilder 根据当前交互双方动态组装系统提示词 |
 | **能力过滤** | 每个 Entity 有 EntityCapability 集合，工具列表按能力自动过滤 |
 | **书信模式** | 支持书信 intent，工具按场景限制（信件中禁用 give_gold/request_gold），O 键唤起收信人列表 |
-| **文件即知识库** | NPC 的记忆、目标、对玩家的认知都是文件，Agent 通过 `read_file`/`append_file` 精确读写 |
+| **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 所有工具定义在 `tools.json` 和 `agent_tools.json` 中，热重载，不硬编码 |
+| **工具定义文件化** | 23 个工具定义在 `tools.json`（15 个游戏工具）和 `agent_tools.json`（8 个文件工具）中，热重载，不硬编码 |
 | **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`tool_call_prompt.txt` 均为文件 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环（max N 轮或无限），模型调用工具 → 执行 → 追加结果 → 重请求 |
 | **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
@@ -126,11 +126,13 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | 当前 NPC 可访问 | 权限 |
 |---------------|------|
 | `NPCs/{自己}/persona.txt` | 只读 |
-| `NPCs/{自己}/knowledge/{entity_id}.txt` | 读 + 追加 |
-| `NPCs/{自己}/relationships/{其他}.txt` | 读 + 追加 |
-| `NPCs/{自己}/goals/*.txt` | 读 + 追加 |
-| `NPCs/{自己}/chat_logs/*.txt` | 读 + 追加 |
-| `NPCs/{自己}/decisions/*.txt` | 读 + 追加 |
+| `NPCs/{自己}/character.json` | 只读 |
+| `NPCs/{自己}/knowledge/{entity_id}.txt` | 读 + 写 + 追加 + 编辑 + 删除 |
+| `NPCs/{自己}/relationships/{其他}.txt` | 读 + 写 + 追加 + 编辑 + 删除 |
+| `NPCs/{自己}/goals/*.txt` | 读 + 写 + 追加 + 编辑 + 删除 |
+| `NPCs/{自己}/chat_logs/*.txt` | 只读（不可修改） |
+| `NPCs/{自己}/decisions/*.txt` | 读 + 写 + 追加 + 编辑 + 删除 |
+| `NPCs/{自己}/mailbox/**` | 读 + 写 + 追加 + 编辑 + 删除 |
 | `World/factions.txt` | 只读 |
 | `World/settlements.txt` | 只读 |
 | 其他 NPC 的任何文件 | **禁止** |
@@ -141,7 +143,14 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 1. `tools.json` 或 `agent_tools.json` 中加一条工具定义（遵循 opencode 风格的 `description` 格式）
 2. `AIChatClient.ExecuteToolCall` 的 `switch` 中加一个 `case`
-3. 如果工具需要跨帧追踪（如移动、等待等异步操作），还需在 `AIChatClient.Tick()` 中添加处理逻辑（`SubModule.OnApplicationTick` 已配置为每帧调用 `Tick()`）
+3. 如果工具涉及部队行为（移动、劫掠、围攻等），还需：
+   - 在 `Execute*` 方法中注册 `PendingAction`（通过 `GetOrCreateAction` 设置 `Behavior` 和目标）
+   - 在 `AIChatClient.Tick()` 的 switch 中添加对应行为的恢复/清理逻辑
+   - 对于持续性行为（驻防、巡逻、护送），设置 `CheckInHours` 以启用定时签到
+4. `AIChatScreenVM` 的 toolCall 显示 switch 中加对应描述
+5. `ContextBuilder.CapabilityToolMap` 中按能力映射（若需能力过滤）
+
+`SubModule.OnApplicationTick` 已配置为每帧调用 `Tick()`。
 
 #### 新增 Entity 类型
 
@@ -203,12 +212,12 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │   └── Prompts/
 │       ├── system_prompt.txt  ← 系统提示词模板（玩家可编辑，热重载）
 │       ├── world_info.txt     ← 默认世界背景
-│       ├── context_template.txt ← Context 模板（ContextBuilder 动态组装用）
 │       ├── tools.json         ← 游戏工具定义（热重载）
 │       ├── agent_system.txt   ← Agent 系统提示词模板
 │       ├── agent_tools.json   ← Agent 文件工具定义（热重载）
 │       ├── tool_call_prompt.txt ← 独立工具调用代理提示词（热重载）
 │       ├── Templates/         ← NPC 目录模板
+│       │   ├── context_template.txt ← Context 模板
 │       └── Campaigns/         ← 各战役目录（运行时创建）
 │           └── {战役名}/
 │               ├── world_info.txt  ← 本战役世界背景
@@ -507,7 +516,7 @@ Usage:
 
 ### 当前实现
 
-`AIChatClient.cs` 中定义了所有游戏工具。每次 API 请求都附带工具定义。模型自行判断是否需要调用。返回的 `ChatResponse` 包含：
+`AIChatClient.cs` 中定义了所有 23 个工具（15 个游戏工具 + 8 个文件/通信工具）。每次 API 请求都附带能力过滤后的工具定义。模型自行判断是否需要调用。返回的 `ChatResponse` 包含：
 - `Content`：角色扮演文本回复
 - `LearnedKnowledge`：如果模型调用了 `update_knowledge`，这里包含新认知
 - `ToolCalls`：原始工具调用数据（用于构建反馈闭环）
@@ -539,14 +548,12 @@ Usage:
 
 基于同一套 `tools` 机制可以扩展：
 - ~~领主决定去某个领地 → `travel_to(settlement)`~~ （已实现为 `move_to_settlement` + `wait_at_settlement`）
-- ~~给玩家物品/金钱 → `give_item(item, amount)`~~ （已实现为 `give_gold_to_player` + `request_gold_from_player`）
-- ~~改变对玩家的态度 → `change_relation(delta)`~~ （已实现为 `change_relation`）
-- 发起战斗/外交提议 → `propose_action(action_type)`
-
-扩展时只需：
-1. 在 `_Module/Prompts/tools.json` 中新增函数定义（热重载，无需重新编译）
-2. 在 `AIChatClient` 的 `tool_calls` 响应解析中新增对应的处理
-3. 在 C# 端实现对应的游戏逻辑
+- ~~给玩家物品/金钱 → `give_item(item, amount)`~~ （已实现为 `give_gold` + `request_gold`，支持 target_entity_id）
+- ~~改变对目标的态度 → `change_relation(delta)`~~ （已实现，支持 target_entity_id）
+- ~~领主军事行动 → 劫掠/围攻/追击/驻防/巡逻/护送/绕行~~ （已全部实现为 7 个部队 AI 工具 + 中断恢复 + 定时签到）
+- ~~文件编辑 → `write_file`/`edit_file`/`delete_file`/`glob`~~ （已实现，chat_logs 和 persona.txt 为只读保护）
+- 发起外交/王国级动作 → `declare_war` / `make_peace` / `join_kingdom` / `gift_fief`
+- 物品交易 → `give_item`
 
 ### 流式架构（已实现，参考 opencode）
 
@@ -574,7 +581,8 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 
 - 每帧消费一个激活事件（`ConcurrentQueue`，线程安全）
 - `ActivationEvent.Depth` 控制级联深度，MCM 可调（默认 5）
-- 玩家可见：左下角弹 `xxx 给 xxx 写了一封信`
+- 支持两种事件类型：`LetterReceived`（来信）和 `BehaviorCheckIn`（定时签到）
+- 玩家可见：左下角弹 `xxx 给 xxx 写了一封信` / `xxx 正在思考下一步行动...`
 - 防递归：书信规则强调"除非必要不回信" + 深度硬上限
 - 聊天记录使用显式路径（`GetChatLogPathFor`）防线程竞态
 
@@ -602,13 +610,50 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 
 ## 工具清单
 
+### 开发工具
+
 | 工具 | 路径 | 用途 |
 |------|------|------|
 | dnSpy GUI | `C:\Users\yangui\Tools\dnSpy\dnSpy-net-win64\dnSpy.exe` | 反编译、调试、查看游戏源码 |
 | dnSpy CLI | `C:\Users\yangui\Tools\dnSpy\dnSpy-net-win64\dnSpy.Console.exe` | 批量反编译（命令行） |
 | dotnet CLI | `dotnet` | 编译、创建新项目 |
 | Rider | `C:\Program Files\JetBrains\JetBrains Rider 2026.2\bin\rider64.exe` | IDE |
-| `query_character` | `tools.json` | 方案B级别角色查询（性别、文化、身份、家族、王国、百科描述、家族等级声望、状态、军队兵力、当前位置） |
+
+### 游戏工具（tools.json，15 个）
+
+| 工具 | 类别 | 说明 |
+|------|------|------|
+| `query_character` | 查询 | 查询人物公开档案（身份/家族/王国/兵力/位置），系统权威数据 |
+| `query_settlement` | 查询 | 查询定居点信息（所有者/繁荣度/类型） |
+| `query_world_state` | 查询 | 获取世界局势（王国兵力/交战状态） |
+| `update_knowledge` | 认知 | 记录关于对方的新认知 |
+| `change_relation` | 关系 | 修改对任意人物的好感度（支持 target_entity_id） |
+| `give_gold` | 经济 | 赠予任意人物金币（支持 target_entity_id） |
+| `request_gold` | 经济 | 向任意人物索要金币（玩家需确认，NPC 自动划转） |
+| `move_to_settlement` | 行军 | 部队行军到城镇/城堡 |
+| `wait_at_settlement` | 行军 | 在定居点停留指定时长 |
+| `raid_settlement` | 军事 | 劫掠村庄 |
+| `besiege_settlement` | 军事 | 围攻城镇/城堡 |
+| `engage_party` | 军事 | 追击并攻击另一支部队 |
+| `defend_settlement` | 军事 | 驻防守卫定居点（持续性，72h 签到） |
+| `patrol_settlement` | 军事 | 巡逻定居点周边（持续性，48h 签到） |
+| `escort_party` | 军事 | 护送跟随另一支部队（持续性，24h 签到） |
+| `go_around_party` | 行军 | 绕行回避某支部队 |
+| `cancel_action` | 控制 | 取消当前任务，回归自主 AI |
+
+### 文件工具（agent_tools.json，8 个）
+
+| 工具 | 说明 |
+|------|------|
+| `read_file` | 读取文件内容（支持行号范围） |
+| `write_file` | 创建新文件或完整重写 |
+| `append_file` | 追加内容到文件末尾 |
+| `edit_file` | 精确替换文件中的文本（必须唯一匹配） |
+| `delete_file` | 删除文件 |
+| `list_dir` | 列出目录内容 |
+| `glob` | 按文件名模式匹配（如 `knowledge/*.txt`） |
+| `grep` | 按关键词搜索文件内容 |
+| `send_letter` | 给其他 Entity 写信 |
 
 ## 故障排查
 

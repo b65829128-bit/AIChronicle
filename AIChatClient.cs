@@ -34,9 +34,14 @@ namespace MyFirstMod
         private sealed class PendingAction
         {
             public Hero Hero = null!;
+            public AiBehavior Behavior;
             public Settlement? TargetSettlement;
+            public MobileParty? TargetParty;
             public int WaitHours;
+            public float CheckInHours;
             public CampaignTime? ArrivedAt;
+            public bool TargetReached;
+            public bool CheckInQueued;
         }
 
         private static readonly Dictionary<string, PendingAction> _pendingActions = new();
@@ -106,6 +111,30 @@ namespace MyFirstMod
                         var content = args["content"]?.ToString() ?? "";
                         return AgentManager.ExecuteAppendFile(apath, content);
 
+                    case "write_file":
+                        var wpath = args["path"]?.ToString() ?? "";
+                        var wcontent = args["content"]?.ToString() ?? "";
+                        return AgentManager.ExecuteWriteFile(wpath, wcontent);
+
+                    case "glob":
+                        var glpattern = args["pattern"]?.ToString() ?? "";
+                        return AgentManager.ExecuteGlob(glpattern);
+
+                    case "edit_file":
+                        var epath = args["path"]?.ToString() ?? "";
+                        var eold = args["old_string"]?.ToString() ?? "";
+                        var enew = args["new_string"]?.ToString() ?? "";
+                        return AgentManager.ExecuteEditFile(epath, eold, enew);
+
+                    case "delete_file":
+                        var dpath = args["path"]?.ToString() ?? "";
+                        return AgentManager.ExecuteDeleteFile(dpath);
+
+                    case "grep":
+                        var gpattern = args["pattern"]?.ToString() ?? "";
+                        var gpath = args["path"]?.ToString() ?? "";
+                        return AgentManager.ExecuteGrep(gpattern, gpath);
+
                     case "list_dir":
                         var lpath = args["path"]?.ToString() ?? "";
                         return AgentManager.ExecuteListDir(lpath);
@@ -126,13 +155,37 @@ namespace MyFirstMod
                         return ExecuteWaitAtSettlement(args["hours"]?.ToObject<int>() ?? 0);
 
                     case "change_relation":
-                        return ExecuteChangeRelation(args["delta"]?.ToObject<int>() ?? 0);
+                        return ExecuteChangeRelation(args["delta"]?.ToObject<int>() ?? 0, args["target_entity_id"]?.ToString());
 
-                    case "give_gold_to_player":
-                        return ExecuteGiveGoldToPlayer(args["amount"]?.ToObject<int>() ?? 0);
+                    case "give_gold":
+                        return ExecuteGiveGold(args["amount"]?.ToObject<int>() ?? 0, args["target_entity_id"]?.ToString());
 
-                    case "request_gold_from_player":
-                        return ExecuteRequestGoldFromPlayer(args["amount"]?.ToObject<int>() ?? 0);
+                    case "request_gold":
+                        return ExecuteRequestGold(args["amount"]?.ToObject<int>() ?? 0, args["target_entity_id"]?.ToString());
+
+                    case "cancel_action":
+                        return ExecuteCancelAction();
+
+                    case "raid_settlement":
+                        return ExecuteRaidSettlement(args["settlement_name"]?.ToString() ?? "");
+
+                    case "besiege_settlement":
+                        return ExecuteBesiegeSettlement(args["settlement_name"]?.ToString() ?? "");
+
+                    case "engage_party":
+                        return ExecuteEngageParty(args["target_entity_id"]?.ToString() ?? "");
+
+                    case "defend_settlement":
+                        return ExecuteDefendSettlement(args["settlement_name"]?.ToString() ?? "");
+
+                    case "patrol_settlement":
+                        return ExecutePatrolSettlement(args["settlement_name"]?.ToString() ?? "");
+
+                    case "escort_party":
+                        return ExecuteEscortParty(args["target_entity_id"]?.ToString() ?? "");
+
+                    case "go_around_party":
+                        return ExecuteGoAroundParty(args["target_entity_id"]?.ToString());
 
                     case "send_letter":
                         return ExecuteSendLetter(args["recipient_entity_id"]?.ToString() ?? "", args["content"]?.ToString() ?? "");
@@ -158,6 +211,7 @@ namespace MyFirstMod
                 if (!heroName.Contains(name) && !name.Contains(heroName)) continue;
 
                 var sb = new System.Text.StringBuilder();
+                sb.AppendLine("【系统公开档案 — 以下信息为卡拉迪亚公认事实，不容质疑】");
                 sb.AppendLine("===== 该人物：" + heroName + " =====");
 
                 sb.AppendLine("性别：" + (hero.IsFemale ? "女" : "男"));
@@ -310,6 +364,7 @@ namespace MyFirstMod
             if (party.CurrentSettlement == target)
             {
                 var action = GetOrCreateAction(_currentHero);
+                action.Behavior = AiBehavior.GoToSettlement;
                 action.TargetSettlement = target;
                 return $"已经在{target.Name}了。";
             }
@@ -326,6 +381,7 @@ namespace MyFirstMod
             party.SetMoveGoToSettlement(target, navType, false);
 
             var action2 = GetOrCreateAction(_currentHero);
+            action2.Behavior = AiBehavior.GoToSettlement;
             action2.TargetSettlement = target;
 
             return $"部队已出发前往{target.Name}。";
@@ -374,10 +430,184 @@ namespace MyFirstMod
             return action;
         }
 
-        private static string ExecuteChangeRelation(int delta)
+        private static MobileParty? FindPartyByEntityId(string? targetEntityId)
+        {
+            if (string.IsNullOrEmpty(targetEntityId))
+                return MobileParty.MainParty;
+
+            var entityId = EntityManager.ResolveEntityId(targetEntityId!);
+            if (entityId == null) return null;
+
+            var entity = EntityManager.GetEntityById(entityId);
+            var hero = entity?.HeroRef;
+            return hero?.PartyBelongedTo;
+        }
+
+        private static string ExecuteRaidSettlement(string settlementName)
+        {
+            if (_currentHero == null) return "[错误] 无当前部队指挥官";
+
+            var target = FindSettlement(settlementName);
+            if (target == null) return $"[错误] 未找到定居点：{settlementName}";
+            if (!target.IsVillage) return $"[错误] {target.Name} 不是村庄，请使用 besiege_settlement 攻打城镇/城堡";
+
+            var party = _currentHero.PartyBelongedTo;
+            if (party == null) return $"[错误] {_currentHero.Name} 没有带领部队";
+            if (!party.IsActive) return "[错误] 部队当前不可用";
+
+            SetPartyAiAction.GetActionForRaidingSettlement(party, target, MobileParty.NavigationType.Default, false, false);
+            var ra = GetOrCreateAction(_currentHero);
+            ra.Behavior = AiBehavior.RaidSettlement;
+            ra.TargetSettlement = target;
+            return $"部队已出发劫掠{target.Name}。";
+        }
+
+        private static string ExecuteBesiegeSettlement(string settlementName)
+        {
+            if (_currentHero == null) return "[错误] 无当前部队指挥官";
+
+            var target = FindSettlement(settlementName);
+            if (target == null) return $"[错误] 未找到定居点：{settlementName}";
+            if (!target.IsTown && !target.IsCastle) return $"[错误] {target.Name} 不是城镇或城堡，请使用 raid_settlement 劫掠村庄";
+
+            var party = _currentHero.PartyBelongedTo;
+            if (party == null) return $"[错误] {_currentHero.Name} 没有带领部队";
+            if (!party.IsActive) return "[错误] 部队当前不可用";
+
+            SetPartyAiAction.GetActionForBesiegingSettlement(party, target, MobileParty.NavigationType.Default, false);
+            var ba = GetOrCreateAction(_currentHero);
+            ba.Behavior = AiBehavior.BesiegeSettlement;
+            ba.TargetSettlement = target;
+            return $"部队已出发围攻{target.Name}。";
+        }
+
+        private static string ExecuteEngageParty(string targetEntityId)
+        {
+            if (_currentHero == null) return "[错误] 无当前部队指挥官";
+            if (string.IsNullOrEmpty(targetEntityId)) return "[错误] 请指定要攻击的目标实体";
+
+            var party = _currentHero.PartyBelongedTo;
+            if (party == null) return $"[错误] {_currentHero.Name} 没有带领部队";
+            if (!party.IsActive) return "[错误] 部队当前不可用";
+
+            var targetParty = FindPartyByEntityId(targetEntityId);
+            if (targetParty == null) return $"[错误] 未找到 {targetEntityId} 的部队";
+            if (targetParty == party) return $"[错误] 不能攻击自己的部队";
+
+            SetPartyAiAction.GetActionForEngagingParty(party, targetParty, MobileParty.NavigationType.Default, false);
+            var ea = GetOrCreateAction(_currentHero);
+            ea.Behavior = AiBehavior.EngageParty;
+            ea.TargetParty = targetParty;
+            return $"部队已出发追击{targetParty.Name?.ToString() ?? targetEntityId}。";
+        }
+
+        private static string ExecuteDefendSettlement(string settlementName)
+        {
+            if (_currentHero == null) return "[错误] 无当前部队指挥官";
+
+            var target = FindSettlement(settlementName);
+            if (target == null) return $"[错误] 未找到定居点：{settlementName}";
+
+            var party = _currentHero.PartyBelongedTo;
+            if (party == null) return $"[错误] {_currentHero.Name} 没有带领部队";
+            if (!party.IsActive) return "[错误] 部队当前不可用";
+
+            SetPartyAiAction.GetActionForDefendingSettlement(party, target, MobileParty.NavigationType.Default, false, false);
+            var da = GetOrCreateAction(_currentHero);
+            da.Behavior = AiBehavior.DefendSettlement;
+            da.TargetSettlement = target;
+            da.CheckInHours = 72f;
+            return $"部队已出发驻防{target.Name}。";
+        }
+
+        private static string ExecutePatrolSettlement(string settlementName)
+        {
+            if (_currentHero == null) return "[错误] 无当前部队指挥官";
+
+            var target = FindSettlement(settlementName);
+            if (target == null) return $"[错误] 未找到定居点：{settlementName}";
+
+            var party = _currentHero.PartyBelongedTo;
+            if (party == null) return $"[错误] {_currentHero.Name} 没有带领部队";
+            if (!party.IsActive) return "[错误] 部队当前不可用";
+
+            SetPartyAiAction.GetActionForPatrollingAroundSettlement(party, target, MobileParty.NavigationType.Default, false, false);
+            var pa = GetOrCreateAction(_currentHero);
+            pa.Behavior = AiBehavior.PatrolAroundPoint;
+            pa.TargetSettlement = target;
+            pa.CheckInHours = 48f;
+            return $"部队已出发巡逻{target.Name}周边。";
+        }
+
+        private static string ExecuteEscortParty(string targetEntityId)
+        {
+            if (_currentHero == null) return "[错误] 无当前部队指挥官";
+            if (string.IsNullOrEmpty(targetEntityId)) return "[错误] 请指定要护送的目标实体";
+
+            var party = _currentHero.PartyBelongedTo;
+            if (party == null) return $"[错误] {_currentHero.Name} 没有带领部队";
+            if (!party.IsActive) return "[错误] 部队当前不可用";
+
+            var targetParty = FindPartyByEntityId(targetEntityId);
+            if (targetParty == null) return $"[错误] 未找到 {targetEntityId} 的部队";
+            if (targetParty == party) return $"[错误] 不能护送自己的部队";
+
+            SetPartyAiAction.GetActionForEscortingParty(party, targetParty, MobileParty.NavigationType.Default, false, false);
+            var esa = GetOrCreateAction(_currentHero);
+            esa.Behavior = AiBehavior.EscortParty;
+            esa.TargetParty = targetParty;
+            esa.CheckInHours = 24f;
+            return $"部队已出发护送{targetParty.Name?.ToString() ?? targetEntityId}。";
+        }
+
+        private static string ExecuteGoAroundParty(string? targetEntityId)
+        {
+            if (_currentHero == null) return "[错误] 无当前部队指挥官";
+
+            var party = _currentHero.PartyBelongedTo;
+            if (party == null) return $"[错误] {_currentHero.Name} 没有带领部队";
+            if (!party.IsActive) return "[错误] 部队当前不可用";
+
+            var targetParty = FindPartyByEntityId(targetEntityId);
+            if (targetParty == null) return $"[错误] 未找到目标部队";
+            if (targetParty == party) return $"[错误] 不能绕过自己的部队";
+
+            SetPartyAiAction.GetActionForGoingAroundParty(party, targetParty, MobileParty.NavigationType.Default, false);
+            return $"部队已绕开{targetParty.Name?.ToString() ?? "目标部队"}。";
+        }
+
+        private static string ExecuteCancelAction()
+        {
+            if (_currentHero == null)
+                return "[错误] 无当前部队指挥官";
+
+            var key = _currentHero.Id.ToString();
+            if (_pendingActions.Remove(key))
+                return "当前任务已取消，部队恢复自主行动。";
+
+            return "当前没有待执行的任务。";
+        }
+
+        private static Hero? ResolveTargetHero(string? targetEntityId)
+        {
+            if (string.IsNullOrEmpty(targetEntityId))
+                return Hero.MainHero;
+
+            var entityId = EntityManager.ResolveEntityId(targetEntityId!);
+            if (entityId == null) return null;
+
+            var entity = EntityManager.GetEntityById(entityId);
+            return entity?.HeroRef;
+        }
+
+        private static string ExecuteChangeRelation(int delta, string? targetEntityId)
         {
             if (_currentHero == null)
                 return "[错误] 无当前领主";
+
+            var target = ResolveTargetHero(targetEntityId);
+            if (target == null)
+                return $"[错误] 未找到目标实体：{targetEntityId}";
 
             var maxChange = MySettings.Instance?.MaxRelationChange ?? 5;
             if (Math.Abs(delta) > maxChange)
@@ -386,16 +616,20 @@ namespace MyFirstMod
             if (delta == 0)
                 return "[信息] 好感变化为 0，无需操作";
 
-            ChangeRelationAction.ApplyRelationChangeBetweenHeroes(_currentHero, Hero.MainHero, delta, true);
-            var currentRelation = _currentHero.GetRelation(Hero.MainHero);
+            ChangeRelationAction.ApplyRelationChangeBetweenHeroes(_currentHero, target, delta, true);
+            var currentRelation = _currentHero.GetRelation(target);
 
-            return $"对玩家的好感变化了{delta:+0;-0}点，当前好感度为{currentRelation}点。";
+            return $"对{target.Name}的好感变化了{delta:+0;-0}点，当前好感度为{currentRelation}点。";
         }
 
-        private static string ExecuteGiveGoldToPlayer(int amount)
+        private static string ExecuteGiveGold(int amount, string? targetEntityId)
         {
             if (_currentHero == null)
                 return "[错误] 无当前领主";
+
+            var target = ResolveTargetHero(targetEntityId);
+            if (target == null)
+                return $"[错误] 未找到目标实体：{targetEntityId}";
 
             if (amount <= 0)
                 return "[错误] 金币数额必须大于 0";
@@ -403,21 +637,31 @@ namespace MyFirstMod
             if (_currentHero.Gold < amount)
                 return $"[错误] {_currentHero.Name} 只有 {_currentHero.Gold} 金币，不足以赠送 {amount} 金币";
 
-            GiveGoldAction.ApplyBetweenCharacters(_currentHero, Hero.MainHero, amount);
+            GiveGoldAction.ApplyBetweenCharacters(_currentHero, target, amount);
 
-            return $"已赠予玩家 {amount} 金币。{_currentHero.Name} 剩余 {_currentHero.Gold} 金币。";
+            return $"已赠予{target.Name} {amount} 金币。{_currentHero.Name} 剩余 {_currentHero.Gold} 金币。";
         }
 
-        private static string ExecuteRequestGoldFromPlayer(int amount)
+        private static string ExecuteRequestGold(int amount, string? targetEntityId)
         {
             if (_currentHero == null)
                 return "[错误] 无当前领主";
 
+            var target = ResolveTargetHero(targetEntityId);
+            if (target == null)
+                return $"[错误] 未找到目标实体：{targetEntityId}";
+
             if (amount <= 0)
                 return "[错误] 金币数额必须大于 0";
 
-            if (Hero.MainHero.Gold < amount)
-                return $"[错误] 玩家只有 {Hero.MainHero.Gold} 金币，不足以支付 {amount} 金币";
+            if (target.Gold < amount)
+                return $"[错误] {target.Name} 只有 {target.Gold} 金币，不足以支付 {amount} 金币";
+
+            if (target != Hero.MainHero)
+            {
+                GiveGoldAction.ApplyBetweenCharacters(target, _currentHero, amount);
+                return $"{target.Name} 支付了 {amount} 金币。";
+            }
 
             using var mre = new ManualResetEventSlim(false);
             var inquiry = new PendingInquiry
@@ -434,9 +678,9 @@ namespace MyFirstMod
             if (inquiry.Result)
             {
                 GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, _currentHero, amount);
-                return $"玩家同意支付 {amount} 金币。";
+                return $"对方同意支付 {amount} 金币。";
             }
-            return $"玩家拒绝了支付 {amount} 金币的请求。";
+            return $"对方拒绝了支付 {amount} 金币的请求。";
         }
 
         private static string ExecuteSendLetter(string recipientId, string content)
@@ -514,7 +758,18 @@ namespace MyFirstMod
                         continue;
                     }
 
-                    if (action.TargetSettlement != null
+                    if (action.Behavior == AiBehavior.EngageParty
+                        || action.Behavior == AiBehavior.EscortParty)
+                    {
+                        if (action.TargetParty == null || !action.TargetParty.IsActive)
+                        {
+                            keysToRemove.Add(kv.Key);
+                            continue;
+                        }
+                    }
+
+                    if (action.Behavior == AiBehavior.GoToSettlement
+                        && action.TargetSettlement != null
                         && party.CurrentSettlement == action.TargetSettlement
                         && action.ArrivedAt == null)
                     {
@@ -538,8 +793,77 @@ namespace MyFirstMod
                         continue;
                     }
 
-                    if (action.TargetSettlement == null)
+                    if (action.TargetSettlement == null && action.TargetParty == null)
                         continue;
+
+                    bool isOneShot = action.Behavior == AiBehavior.RaidSettlement
+                        || action.Behavior == AiBehavior.BesiegeSettlement
+                        || action.Behavior == AiBehavior.EngageParty;
+
+                    if (!action.TargetReached && action.TargetSettlement != null)
+                    {
+                        if (action.Behavior == AiBehavior.BesiegeSettlement)
+                            action.TargetReached = party.BesiegedSettlement == action.TargetSettlement;
+                        else if (action.Behavior == AiBehavior.DefendSettlement
+                            || action.Behavior == AiBehavior.PatrolAroundPoint)
+                            action.TargetReached = party.DefaultBehavior == action.Behavior
+                                && party.TargetSettlement == action.TargetSettlement;
+                        else
+                            action.TargetReached = party.CurrentSettlement == action.TargetSettlement;
+
+                        if (action.TargetReached && action.ArrivedAt == null)
+                            action.ArrivedAt = CampaignTime.Now;
+                    }
+
+                    if (!action.TargetReached && action.TargetParty != null)
+                    {
+                        if (action.Behavior == AiBehavior.EngageParty)
+                            action.TargetReached = party.MapEvent != null;
+                        else if (action.Behavior == AiBehavior.EscortParty)
+                            action.TargetReached = party.DefaultBehavior == AiBehavior.EscortParty
+                                && party.TargetParty == action.TargetParty;
+
+                        if (action.TargetReached && action.ArrivedAt == null)
+                            action.ArrivedAt = CampaignTime.Now;
+                    }
+
+                    if (action.CheckInHours > 0f && action.TargetReached
+                        && !action.CheckInQueued && action.ArrivedAt != null
+                        && (CampaignTime.Now - action.ArrivedAt.Value).ToHours >= action.CheckInHours)
+                    {
+                        action.CheckInQueued = true;
+
+                        var agentEntity = EntityManager.GetEntityByHero(hero);
+                        if (agentEntity != null)
+                        {
+                            var locDesc = action.TargetSettlement?.Name?.ToString()
+                                ?? action.TargetParty?.Name?.ToString()
+                                ?? "当前位置";
+                            var behaviorDesc = action.Behavior switch
+                            {
+                                AiBehavior.DefendSettlement => "驻防",
+                                AiBehavior.PatrolAroundPoint => "巡逻",
+                                AiBehavior.EscortParty => "护送",
+                                _ => "执行任务"
+                            };
+
+                            var checkInContent =
+                                $"你已在{locDesc}{behaviorDesc}了{(int)action.CheckInHours}小时以上。\n" +
+                                "是否需要：1) 继续当前任务 2) 前往别处 3) 向阵营领袖汇报情况。";
+
+                            AgentScheduler.QueueEvent(new ActivationEvent
+                            {
+                                Type = ActivationEventType.BehaviorCheckIn,
+                                AgentId = agentEntity.Id,
+                                TargetId = agentEntity.Id,
+                                Content = checkInContent,
+                                Depth = 0
+                            });
+                        }
+
+                        keysToRemove.Add(kv.Key);
+                        continue;
+                    }
 
                     var shortTerm = party.ShortTermBehavior;
                     bool isFleeing = shortTerm == AiBehavior.FleeToPoint
@@ -549,13 +873,48 @@ namespace MyFirstMod
 
                     if (!isFleeing && !isFighting)
                     {
-                        if (party.DefaultBehavior != AiBehavior.GoToSettlement
-                            || party.TargetSettlement != action.TargetSettlement)
+                        if (isOneShot && action.TargetReached && party.DefaultBehavior != action.Behavior)
+                        {
+                            keysToRemove.Add(kv.Key);
+                            continue;
+                        }
+
+                        bool needsReissue = party.DefaultBehavior != action.Behavior;
+                        if (!needsReissue && action.TargetSettlement != null)
+                            needsReissue = party.TargetSettlement != action.TargetSettlement;
+                        if (!needsReissue && action.TargetParty != null)
+                            needsReissue = party.TargetParty != action.TargetParty;
+
+                        if (needsReissue)
                         {
                             var navType = party.IsCurrentlyAtSea
                                 ? MobileParty.NavigationType.Naval
                                 : MobileParty.NavigationType.Default;
-                            party.SetMoveGoToSettlement(action.TargetSettlement, navType, false);
+
+                            switch (action.Behavior)
+                            {
+                                case AiBehavior.GoToSettlement:
+                                    party.SetMoveGoToSettlement(action.TargetSettlement!, navType, false);
+                                    break;
+                                case AiBehavior.RaidSettlement:
+                                    SetPartyAiAction.GetActionForRaidingSettlement(party, action.TargetSettlement!, navType, false, false);
+                                    break;
+                                case AiBehavior.BesiegeSettlement:
+                                    SetPartyAiAction.GetActionForBesiegingSettlement(party, action.TargetSettlement!, navType, false);
+                                    break;
+                                case AiBehavior.EngageParty:
+                                    SetPartyAiAction.GetActionForEngagingParty(party, action.TargetParty!, navType, false);
+                                    break;
+                                case AiBehavior.DefendSettlement:
+                                    SetPartyAiAction.GetActionForDefendingSettlement(party, action.TargetSettlement!, navType, false, false);
+                                    break;
+                                case AiBehavior.PatrolAroundPoint:
+                                    SetPartyAiAction.GetActionForPatrollingAroundSettlement(party, action.TargetSettlement!, navType, false, false);
+                                    break;
+                                case AiBehavior.EscortParty:
+                                    SetPartyAiAction.GetActionForEscortingParty(party, action.TargetParty!, navType, false, false);
+                                    break;
+                            }
                         }
                     }
                 }

@@ -12,18 +12,18 @@ namespace MyFirstMod
     {
         private static readonly Dictionary<EntityCapability, string[]> CapabilityToolMap = new()
         {
-            [EntityCapability.FileSystem] = new[] { "read_file", "append_file", "list_dir" },
-            [EntityCapability.MoveParty] = new[] { "move_to_settlement" },
+            [EntityCapability.FileSystem] = new[] { "read_file", "append_file", "write_file", "edit_file", "delete_file", "list_dir", "glob" },
+            [EntityCapability.MoveParty] = new[] { "move_to_settlement", "raid_settlement", "besiege_settlement", "engage_party", "defend_settlement", "patrol_settlement", "escort_party", "go_around_party" },
             [EntityCapability.WaitAtSettlement] = new[] { "wait_at_settlement" },
-            [EntityCapability.GiveGold] = new[] { "give_gold_to_player" },
-            [EntityCapability.RequestGold] = new[] { "request_gold_from_player" },
+            [EntityCapability.GiveGold] = new[] { "give_gold" },
+            [EntityCapability.RequestGold] = new[] { "request_gold" },
             [EntityCapability.ChangeRelation] = new[] { "change_relation" },
             [EntityCapability.SendLetter] = new[] { "send_letter" },
         };
 
         private static readonly HashSet<string> LetterDisabledTools = new()
         {
-            "give_gold_to_player", "request_gold_from_player"
+            "give_gold", "request_gold"
         };
 
         public static string Build(string agentId, string targetId, string intent)
@@ -174,11 +174,13 @@ namespace MyFirstMod
                 + "- 使用中世纪贵族的正式口吻\n"
                 + "- 始终保持角色，绝对不要跳出角色去解释或评论\n"
                 + "- 你的回复就是你对对方说的话——不要添加任何元数据、标记、格式指令、或内心独白\n"
-                + "- 不要说你会做某件事但实际上不去调用对应工具——如果你说要给对方金币，就必须调用 give_gold_to_player\n"
-                + "- 不要说空话许诺——你的每一个承诺都必须通过 Function 来兑现\n\n"
+                + "- 不要说你会做某件事但实际上不去调用对应工具——如果你说要给对方金币，就必须调用 give_gold\n"
+                + "- 不要说空话许诺——你的每一个承诺都必须通过 Function 来兑现\n"
+                + "- query_character 返回的是系统级公开档案，身份/家族/王国等基本信息为公认事实，禁止质疑或否认\n"
+                + "- 如果 knowledge 中的记录与 query_character 返回的系统档案冲突，以系统档案为准，并用 append_file 更新 knowledge——人事变迁，记忆必须同步修正\n\n"
                 + "你的记忆系统使用规则：\n"
                 + "- 你有自己的文件系统，存储着你的记忆、目标和人际关系\n"
-                + "- 每次对话开始时，使用 query_character 查询对方的基本信息（身份、家族、王国等）——即使你没有私人认知记录，你作为贵族也应该知道这些公开信息\n"
+                + "- 每次对话开始时，使用 query_character 查询对方的基本信息（身份、家族、王国等）\n"
                 + "- 然后使用 read_file 读取 knowledge/{target_id}.txt 了解你对对方的私人认知\n"
                 + "- 然后使用 read_file 读取 goals/current.txt 了解你的当前计划\n"
                 + "- 当对方透露了关于他自己的新信息时，立即调用 append_file 将内容追加到 knowledge/{target_id}.txt\n"
