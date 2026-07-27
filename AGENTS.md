@@ -112,6 +112,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **工具定义文件化** | 所有工具定义在 `tools.json` 和 `agent_tools.json` 中，热重载，不硬编码 |
 | **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`tool_call_prompt.txt` 均为文件 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环（max N 轮或无限），模型调用工具 → 执行 → 追加结果 → 重请求 |
+| **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
 
 ### 两个模型
 
@@ -149,6 +150,17 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 3. 在 `ContextBuilder` 的 `CapabilityToolMap` 中建立能力→工具映射
 4. 在 `tools.json` 的 `parameters.properties` 中添加 `capability_required` 字段
 
+### 提示词设计规范（人称约定）
+
+所有提示词文件必须遵守统一的人称约定，防止 Agent 混淆自己与对方的信息：
+
+- 「你」= Agent 自己（如"你是拉盖娅，现任南帝国女皇"）
+- 「对方」= 正在交互的目标 Entity（如"对方是炎萌"）
+- 「该人物」= `query_character` 返回结果的前缀（如"该人物：拉盖娅"）
+- 禁止出现「TA」、「他/她」、「其」等模糊指代
+
+此约定适用于 `context_template.txt`、`agent_system.txt`、`tool_call_prompt.txt` 以及所有新增的工具返回格式。
+
 ---
 
 ## 环境概况
@@ -181,6 +193,7 @@ C:\Users\yangui\BLMods\MyFirstMod\
 ├── EntityManager.cs           ← Entity 生命周期管理
 ├── ContextBuilder.cs          ← Context 动态组装器
 ├── LetterListScreen.cs        ← 书信收信人列表屏幕
+├── AgentScheduler.cs          ← 信件异步事件驱动调度器
 ├── _Module/
 │   ├── SubModule.xml         ← 模组元数据（ID、依赖、DLL路径）
 │   ├── GUI/
@@ -200,7 +213,7 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │           └── {战役名}/
 │               ├── world_info.txt  ← 本战役世界背景
 │               └── NPCs/          ← Agent 管理的 NPC 文件系统
-│                   └── {entity_id}/
+│                   └── {entity_id}/                 ← {Name}_{StringId}（如 博泰罗_CharacterObject_1664）
 │                       ├── persona.txt   ← [MOTIVATION]/[TRAITS]/[SPEECH_STYLE]
 │                       ├── knowledge/
 │                       ├── chat_logs/
@@ -549,6 +562,22 @@ Usage:
 - 文本增量（delta）累积成完整回复
 - tool_calls delta 跨 chunk 累积（DeepSeek 协议中 tool_call 分多次 delta 传输）
 
+### 信件激活机制（AgentScheduler）
+
+信件系统采用异步事件驱动模型：
+
+```
+send_letter → StoreOutgoingLetter(文件) → AgentScheduler.QueueEvent(LetterReceived)
+                                                      ↓
+OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异步处理
+```
+
+- 每帧消费一个激活事件（`ConcurrentQueue`，线程安全）
+- `ActivationEvent.Depth` 控制级联深度，MCM 可调（默认 5）
+- 玩家可见：左下角弹 `xxx 给 xxx 写了一封信`
+- 防递归：书信规则强调"除非必要不回信" + 深度硬上限
+- 聊天记录使用显式路径（`GetChatLogPathFor`）防线程竞态
+
 ## 调试方法
 
 1. **Rider 附加进程调试**：
@@ -579,6 +608,7 @@ Usage:
 | dnSpy CLI | `C:\Users\yangui\Tools\dnSpy\dnSpy-net-win64\dnSpy.Console.exe` | 批量反编译（命令行） |
 | dotnet CLI | `dotnet` | 编译、创建新项目 |
 | Rider | `C:\Program Files\JetBrains\JetBrains Rider 2026.2\bin\rider64.exe` | IDE |
+| `query_character` | `tools.json` | 方案B级别角色查询（性别、文化、身份、家族、王国、百科描述、家族等级声望、状态、军队兵力、当前位置） |
 
 ## 故障排查
 

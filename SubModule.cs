@@ -54,6 +54,7 @@ namespace MyFirstMod
 
             AIChatClient.Tick();
             AIChatClient.CheckPendingInquiry();
+            AgentScheduler.Tick();
 
             var oDown = Input.IsKeyDown(InputKey.O);
             if (oDown && !_prevLetterO && Campaign.Current != null)

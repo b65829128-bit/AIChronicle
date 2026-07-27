@@ -336,7 +336,12 @@ namespace MyFirstMod
 
         public static List<ChatHistoryEntry> LoadChatLog()
         {
-            var path = AgentManager.GetChatLogPath();
+            return LoadChatLogFor(EntityManager.ActiveAgentId ?? "", EntityManager.ActiveTargetId ?? "");
+        }
+
+        public static List<ChatHistoryEntry> LoadChatLogFor(string agentId, string targetId)
+        {
+            var path = AgentManager.GetChatLogPathFor(agentId, targetId);
             if (path == null || !File.Exists(path))
                 return new List<ChatHistoryEntry>();
 
@@ -375,7 +380,12 @@ namespace MyFirstMod
 
         public static void AppendChatLog(string role, string content)
         {
-            var path = AgentManager.GetChatLogPath();
+            AppendChatLogFor(EntityManager.ActiveAgentId ?? "", EntityManager.ActiveTargetId ?? "", role, content);
+        }
+
+        public static void AppendChatLogFor(string agentId, string targetId, string role, string content)
+        {
+            var path = AgentManager.GetChatLogPathFor(agentId, targetId);
             if (path == null) return;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var timestamp = GetCurrentTimeString();

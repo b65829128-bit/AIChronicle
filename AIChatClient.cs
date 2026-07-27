@@ -110,6 +110,9 @@ namespace MyFirstMod
                         var lpath = args["path"]?.ToString() ?? "";
                         return AgentManager.ExecuteListDir(lpath);
 
+                    case "query_character":
+                        return ExecuteQueryCharacter(args["name"]?.ToString() ?? "");
+
                     case "query_settlement":
                         return QuerySettlement(args["name"]?.ToString() ?? "");
 
@@ -142,6 +145,87 @@ namespace MyFirstMod
             {
                 return $"工具执行错误：{ex.Message}";
             }
+        }
+
+        private static string ExecuteQueryCharacter(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return "[错误] 请提供人物名称";
+
+            foreach (var hero in Hero.AllAliveHeroes)
+            {
+                var heroName = hero.Name?.ToString() ?? "";
+                if (!heroName.Contains(name) && !name.Contains(heroName)) continue;
+
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("===== 该人物：" + heroName + " =====");
+
+                sb.AppendLine("性别：" + (hero.IsFemale ? "女" : "男"));
+                sb.AppendLine("文化：" + (hero.Culture?.Name?.ToString() ?? "未知"));
+
+                var statuses = new List<string>();
+                if (hero.Clan?.Kingdom?.RulingClan?.Leader == hero)
+                    statuses.Add("国王");
+                if (hero.Clan?.Leader == hero)
+                    statuses.Add("家族领袖");
+                else if (hero.Clan != null)
+                    statuses.Add("封臣");
+
+                if (hero.Clan?.IsUnderMercenaryService == true)
+                    statuses.Add("雇佣兵势力");
+                if (hero.IsWanderer && hero.Clan == null)
+                    statuses.Add("流浪者");
+                if (statuses.Count == 0)
+                    statuses.Add("平民");
+                sb.AppendLine("身份：" + string.Join("、", statuses));
+
+                sb.AppendLine("家族：" + (hero.Clan?.Name?.ToString() ?? "无"));
+                sb.AppendLine("王国：" + (hero.Clan?.Kingdom?.Name?.ToString() ?? "无"));
+
+                var enc = hero.EncyclopediaText?.ToString();
+                if (!string.IsNullOrEmpty(enc))
+                    sb.AppendLine("简述：" + enc);
+
+                var clan = hero.Clan;
+                if (clan != null)
+                {
+                    sb.AppendLine("家族等级：" + clan.Tier);
+                    sb.AppendLine("家族声望：" + clan.Renown.ToString("F0"));
+                }
+
+                var state = "正常";
+                if (hero.IsPrisoner) state = "囚禁中";
+                else if (hero.IsFugitive) state = "逃亡中";
+                else if (hero.IsDisabled) state = "失踪";
+                sb.AppendLine("当前状态：" + state);
+
+                var party = hero.PartyBelongedTo;
+                if (party != null && party.LeaderHero == hero)
+                {
+                    sb.AppendLine("军队：率领中");
+                    if (party.MemberRoster != null)
+                        sb.AppendLine("兵力：约 " + party.MemberRoster.TotalManCount + " 人");
+                }
+                else if (party != null)
+                {
+                    sb.AppendLine("军队：随 " + (party.LeaderHero?.Name?.ToString() ?? "他人") + " 行军");
+                }
+                else
+                {
+                    sb.AppendLine("军队：无");
+                }
+
+                if (hero.CurrentSettlement != null)
+                    sb.AppendLine("当前位置：" + hero.CurrentSettlement.Name?.ToString());
+                else if (party != null && party.CurrentSettlement != null)
+                    sb.AppendLine("当前位置：" + party.CurrentSettlement.Name?.ToString());
+                else
+                    sb.AppendLine("当前位置：野外行军");
+
+                return sb.ToString().TrimEnd();
+            }
+
+            return "[未找到] 名为 \"" + name + "\" 的人物";
         }
 
         private static string QuerySettlement(string name)
@@ -367,6 +451,20 @@ namespace MyFirstMod
             AgentManager.StoreOutgoingLetter(senderEntity.Id, resolvedId, content);
             var recipientEntity = EntityManager.GetEntityById(resolvedId);
             var recipientName = recipientEntity?.Name ?? resolvedId;
+
+            var nextDepth = AgentScheduler.IsProcessing
+                ? AgentScheduler.CurrentProcessingDepth + 1
+                : 0;
+
+            AgentScheduler.QueueEvent(new ActivationEvent
+            {
+                Type = ActivationEventType.LetterReceived,
+                AgentId = resolvedId,
+                TargetId = senderEntity.Id,
+                Content = content,
+                Depth = nextDepth
+            });
+
             return $"信件已发送给 {recipientName}。";
         }
 

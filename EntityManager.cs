@@ -88,6 +88,13 @@ namespace MyFirstMod
                 if (GenerateEntityId(hero) == id)
                     return GetOrCreateEntity(hero);
             }
+
+            foreach (var kv in _entityCache)
+            {
+                if (kv.Value.HeroRef?.StringId == id)
+                    return kv.Value;
+            }
+
             return null;
         }
 
@@ -125,22 +132,33 @@ namespace MyFirstMod
 
         private static string GenerateEntityId(Hero hero)
         {
+            var name = hero.Name?.ToString()?.Trim();
+            if (string.IsNullOrEmpty(name)) name = "unknown";
+
+            var namePart = SanitizeDir(name);
+
             if (!string.IsNullOrEmpty(hero.StringId))
-                return SanitizeDir(hero.StringId);
-            var name = hero.Name?.ToString() ?? "unknown";
-            var hash = Math.Abs(name.GetHashCode()).ToString("X4");
-            return SanitizeDir(name) + "_" + hash;
+                return namePart + "_" + SanitizeDir(hero.StringId);
+
+            var hash = Math.Abs(namePart.GetHashCode()).ToString("X4");
+            return namePart + "_" + hash;
         }
 
         private static string ComputeTitle(Hero hero)
         {
-            if (hero.Clan?.Leader == hero)
-                return hero.Clan.Name?.ToString() + "领袖";
-            if (hero == Hero.MainHero)
-                return "冒险者";
+            var parts = new List<string>();
+
             if (hero.Clan?.Kingdom?.RulingClan?.Leader == hero)
-                return hero.Clan.Kingdom.Name?.ToString() + "统治者";
-            return hero.Clan?.Name != null ? hero.Clan.Name + "成员" : "旅行者";
+                parts.Add(hero.Clan.Kingdom.Name?.ToString() + "统治者");
+            if (hero.Clan?.Leader == hero)
+                parts.Add(hero.Clan.Name?.ToString() + "领袖");
+            else if (hero.Clan != null)
+                parts.Add(hero.Clan.Name + "成员");
+
+            if (hero == Hero.MainHero && parts.Count == 0)
+                parts.Add("冒险者");
+
+            return parts.Count > 0 ? string.Join("、", parts) : "旅行者";
         }
 
         private static HashSet<EntityCapability> ComputeCapabilities(Hero hero, EntityController controller)

@@ -11,6 +11,17 @@
     ]
   },
   {
+    "name": "query_character",
+    "description": "Query basic public information about a character on the Calradia map.\n\nUsage:\n- Call this when you need to know who someone is: their family, allegiance, status, location, or military strength.\n- The name parameter should match the Chinese or English character name (e.g., \"拉盖娅\" or \"Rhagaea\").\n- This returns PUBLIC information that any noble would reasonably know or could ask their steward.\n- Returns: name, gender, culture, status (king/vassal/mercenary), clan, kingdom, encyclopedia description, clan tier & renown, current state (in settlement/on campaign/imprisoned), party info with rough troop count, current location.\n- Call this at the beginning of a conversation if you don't know the other person.",
+    "parameters": [
+      {
+        "name": "name",
+        "type": "string",
+        "description": "Name of the character to query, in Chinese or English."
+      }
+    ]
+  },
+  {
     "name": "query_settlement",
     "description": "Query real-time information about a settlement on the Calradia map.\n\nUsage:\n- Call this when you need to know who currently owns a settlement, its prosperity, or its type.\n- The name parameter should match the Chinese or English settlement name (e.g., \"俄尼拉\" or \"Onica\").\n- Returns: name, type (town/castle/village), owner clan, owner kingdom, prosperity level.",
     "parameters": [

@@ -29,14 +29,17 @@
   - Agent 可以调用 `change_relation` 修改对玩家的好感度（单次上限在 MCM 中设置，默认 +-5）
   - Agent 可以调用 `give_gold_to_player` 赠送玩家金币（直接转账）
   - Agent 可以调用 `request_gold_from_player` 向玩家索要金币（弹出确认对话框，玩家无法口头答应但不给钱）
+  - Agent 可以调用 `query_character` 查询任意人物的公开信息（方案B级别：身份、家族、王国、兵力、当前位置等）
 
 ### 书信系统
 
 - 战役地图上按 **O 键**打开收信人列表（仅显示对话过的领主）
 - 选择收信人后进入写信界面，Agent 以书信格式回复
-- 书信模式下金币类工具禁用（`give_gold`、`request_gold`），行军和关系类工具正常
-- Agent 可调用 `send_letter` 工具给任意 Entity 写信（支持中文名）
-- 信件存入收信人 `mailbox/inbox/` 目录
+- 书信模式下当面交易类工具禁用（`give_gold`、`request_gold`），行军和关系类工具正常
+- Agent 可调用 `send_letter` 给任意人物写信（支持中文名或 entity ID）
+- 收信端由 `AgentScheduler` 异步激活处理（每帧一个事件，最多 N 层级联）
+- 级联深度在 MCM 中可调（默认 5，超出的只存档不处理）
+- 所有信件的收发对玩家可见（左下角提示）
 
 ### 提示词系统（文件化、可热重载）
 
@@ -73,6 +76,10 @@ _Module/Prompts/
                 └── mailbox/
                     └── inbox/
 ```
+
+> **人称约定**：所有提示词文件中只使用「你」指代 Agent 自己、「对方」指代交互对象。
+> `query_character` 返回结果以「该人物：」开头作为补充约定。
+> 禁止使用「TA」「他/她」「其」等模糊人称。未来添加新提示词文件时必须遵守此约定。
 
 - **Agent 系统**：每个 NPC 有独立文件系统，Agent 通过 `read_file`/`append_file`/`list_dir` 工具管理记忆
 - **信息隔离**：Agent 只能操作自己目录下的文件 + World/ 目录，不能读取其他 NPC 的信息
@@ -114,6 +121,7 @@ _Module/Prompts/
 | 聊天历史上限（条） | 保留最近 N 条消息发给 AI | `20` |
 | 注入世界背景 | 是否在提示词中加入卡拉迪亚背景 | 开启 |
 | 最大好感变化 | Agent 单次修改好感度的上限 | `5` |
+| 信件级联深度上限 | NPC 间连环写信的最大层数 | `5` |
 | 对话字体大小 | 聊天窗口中对话内容的字号 | `24` |
 | 角色名字体大小 | 聊天窗口中角色名称的字号 | `22` |
 | 时间戳字体大小 | 聊天窗口中时间戳的字号 | `22` |
@@ -172,6 +180,7 @@ MyFirstMod/
 ├── LetterListScreen.cs   # 书信系统屏幕管理器（战役地图 O 键入口）
 ├── PromptManager.cs      # 提示词管理器（文件热重载、战役目录、角色 JSON 读写）
 ├── AgentManager.cs       # Agent 管理器（NPC 文件系统、路径权限、工具执行）
+├── AgentScheduler.cs     # 信件异步事件驱动调度器
 ├── Entity.cs             # Entity 数据模型（统一玩家/NPC，附能力标签）
 ├── EntityManager.cs      # Entity 生命周期管理、查找与缓存
 ├── ContextBuilder.cs     # 动态上下文组装（persona + 能力 + 模板）

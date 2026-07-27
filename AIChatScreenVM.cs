@@ -127,6 +127,8 @@ namespace MyFirstMod
         private readonly Hero _hero;
         private readonly CharacterPrompt _charPrompt;
         private readonly string _intent;
+        private readonly string _agentId = "";
+        private readonly string _targetId = "";
         private List<ChatHistoryEntry> _sessionMessages = new();
         private int _chatFontSize = 24;
         private int _chatSenderFontSize = 22;
@@ -194,11 +196,15 @@ namespace MyFirstMod
             {
                 var playerHero = Hero.MainHero;
                 if (playerHero != null)
+                {
                     EntityManager.ActivateInteraction(hero, playerHero);
+                    _agentId = EntityManager.ActiveAgentId ?? "";
+                    _targetId = EntityManager.ActiveTargetId ?? "";
+                }
             }
             catch { }
 
-            var history = PromptManager.LoadChatLog();
+            var history = PromptManager.LoadChatLogFor(_agentId, _targetId);
             _sessionMessages.AddRange(history);
 
             var loadTime = PromptManager.GetCurrentTimeString();
@@ -240,7 +246,7 @@ namespace MyFirstMod
                 _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
                 _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
             _sessionMessages.Add(new ChatHistoryEntry { Role = "user", Content = userMsg });
-            PromptManager.AppendChatLog("user", userMsg);
+            PromptManager.AppendChatLogFor(_agentId, _targetId, "user", userMsg);
 
             Task.Run(async () =>
             {
@@ -287,7 +293,7 @@ namespace MyFirstMod
                             ToolCallId = kv.Key
                         });
                     }
-                    PromptManager.AppendChatLog("assistant", displayText);
+                    PromptManager.AppendChatLogFor(_agentId, _targetId, "assistant", displayText);
 
                     foreach (var tc in chatResponse.ToolCalls)
                     {

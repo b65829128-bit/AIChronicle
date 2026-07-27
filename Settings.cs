@@ -330,9 +330,27 @@ namespace MyFirstMod
             }
         }
 
+        private int _maxLetterChainDepth = 5;
+
+        [SettingPropertyInteger("信件级联深度上限", 1, 10, Order = 6, RequireRestart = false,
+            HintText = "NPC 间连环写信的最大层数。超过此深度的收信只存档不处理。")]
+        [SettingPropertyGroup("游戏设置")]
+        public int MaxLetterChainDepth
+        {
+            get => _maxLetterChainDepth;
+            set
+            {
+                if (_maxLetterChainDepth != value)
+                {
+                    _maxLetterChainDepth = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private bool _useWorldInfo = true;
 
-        [SettingPropertyBool("注入世界背景", Order = 6, RequireRestart = false,
+        [SettingPropertyBool("注入世界背景", Order = 7, RequireRestart = false,
             HintText = "是否在提示词中加入卡拉迪亚大陆的背景介绍。关闭可节省 token。")]
         [SettingPropertyGroup("游戏设置")]
         public bool UseWorldInfo

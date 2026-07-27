@@ -72,8 +72,14 @@ namespace MyFirstMod
 
         public static string? GetChatLogPath()
         {
-            if (string.IsNullOrEmpty(_agentDir)) return null;
-            return Path.Combine(_agentDir, "chat_logs", SanitizeFile(_targetEntityId) + ".txt");
+            return GetChatLogPathFor(_agentEntityId, _targetEntityId);
+        }
+
+        public static string? GetChatLogPathFor(string agentEntityId, string targetEntityId)
+        {
+            if (string.IsNullOrEmpty(_baseDir) || string.IsNullOrEmpty(agentEntityId) || string.IsNullOrEmpty(targetEntityId))
+                return null;
+            return Path.Combine(_baseDir, agentEntityId, "chat_logs", SanitizeFile(targetEntityId) + ".txt");
         }
 
         public static string? GetTargetKnowledgePath()
@@ -301,9 +307,20 @@ namespace MyFirstMod
         public static string? ReadKnowledge(string targetEntityId)
         {
             if (string.IsNullOrEmpty(_agentDir)) return null;
+
             var path = Path.Combine(_agentDir, "knowledge", SanitizeFile(targetEntityId) + ".txt");
-            if (!File.Exists(path)) return null;
-            return File.ReadAllText(path, Encoding.UTF8).Trim();
+            if (File.Exists(path))
+                return File.ReadAllText(path, Encoding.UTF8).Trim();
+
+            var entity = EntityManager.GetEntityById(targetEntityId);
+            if (entity != null)
+            {
+                var namePath = Path.Combine(_agentDir, "knowledge", SanitizeFile(entity.Name) + ".txt");
+                if (File.Exists(namePath))
+                    return File.ReadAllText(namePath, Encoding.UTF8).Trim();
+            }
+
+            return null;
         }
 
         public static string? ReadGoals()
