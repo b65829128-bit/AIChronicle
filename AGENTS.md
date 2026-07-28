@@ -216,6 +216,7 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │       ├── agent_system.txt   ← Agent 系统提示词模板
 │       ├── agent_tools.json   ← Agent 文件工具定义（热重载）
 │       ├── tool_call_prompt.txt ← 独立工具调用代理提示词（热重载）
+│       ├── persona_generation.txt ← NPC性格生成提示词（玩家可编辑，热重载）
 │       ├── Templates/         ← NPC 目录模板
 │       │   ├── context_template.txt ← Context 模板
 │       └── Campaigns/         ← 各战役目录（运行时创建）

@@ -64,6 +64,7 @@ _Module/Prompts/
 ├── agent_system.txt             # Agent 系统提示词模板
 ├── agent_tools.json             # Agent 文件工具定义（热重载）
 ├── tool_call_prompt.txt         # 独立工具调用的代理提示词（热重载）
+├── persona_generation.txt       # NPC性格生成提示词（玩家可编辑，热重载）
 ├── Templates/                   # NPC 目录模板
 │   ├── persona.txt
 │   ├── context_template.txt
@@ -209,6 +210,7 @@ MyFirstMod/
 │       ├── agent_system.txt       # Agent 系统提示词模板
 │       ├── agent_tools.json       # Agent 文件工具（热重载）
 │       ├── tool_call_prompt.txt   # 工具调用代理提示词（热重载）
+│       ├── persona_generation.txt # NPC性格生成提示词（热重载）
 │       ├── Templates/             # NPC 目录模板（含 context_template.txt）
 │       └── Campaigns/             # 各战役独立目录（运行时自动创建）
 └── BLSource/             # 反编译的游戏源码（5332 个文件，只读）

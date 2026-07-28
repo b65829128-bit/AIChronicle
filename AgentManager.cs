@@ -19,6 +19,8 @@ namespace MyFirstMod
         private static string _agentDir => Path.Combine(_baseDir, _agentEntityId);
         private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
+        private static string _cachedPersonaPrompt = "";
+        private static DateTime _lastPersonaPromptCheck;  
         private static readonly HashSet<string> _readableDirs = new()
         {
             "", "knowledge", "relationships", "goals", "chat_logs", "decisions",
@@ -179,23 +181,15 @@ namespace MyFirstMod
             if (settings == null || string.IsNullOrEmpty(settings.ApiKey))
                 return "";
 
-            var prompt = "你正在为一个游戏角色生成性格描述。根据以下信息，为名叫" + name + "的NPC生成性格描述。\n\n"
-                + "请严格按以下格式输出（保留所有标签）：\n"
-                + "[MOTIVATION]\n"
-                + "（2-3句话描述这个角色的核心动机和人生追求）\n\n"
-                + "[TRAITS]\n"
-                + "- 性格特质1：简要描述\n"
-                + "- 性格特质2：简要描述\n"
-                + "- 性格特质3：简要描述\n\n"
-                + "[SPEECH_STYLE]\n"
-                + "（1句话描述这个角色的说话风格和语言习惯，使用中文中世纪贵族口吻）\n\n"
-                + "人物信息：\n" + info;
+            var prompt = LoadPersonaGenerationPrompt()
+                .Replace("{npc_name}", name)
+                .Replace("{npc_info}", info);
 
             var payload = new
             {
                 model = settings.Model,
                 messages = new[] { new { role = "user", content = prompt } },
-                max_tokens = 400,
+                max_tokens = 600,
                 temperature = 0.7f
             };
 
@@ -212,6 +206,24 @@ namespace MyFirstMod
             var body = await response.Content.ReadAsStringAsync();
             var result = JObject.Parse(body);
             return result["choices"]?[0]?["message"]?["content"]?.ToString()?.Trim() ?? "";
+        }
+
+        private static string LoadPersonaGenerationPrompt()
+        {
+            var path = Path.Combine(PromptManager.PromptsBaseDir, "persona_generation.txt");
+            if (!File.Exists(path))
+                return
+                    "你正在为游戏角色生成性格描述。根据以下信息，为名为{npc_name}的NPC生成性格。\n\n"
+                    + "严格按格式：\n[MOTIVATION]\n...\n[TRAITS]\n- ...\n[SPEECH_STYLE]\n...\n\n"
+                    + "{npc_info}";
+
+            var lastWrite = File.GetLastWriteTimeUtc(path);
+            if (_cachedPersonaPrompt == "" || lastWrite > _lastPersonaPromptCheck)
+            {
+                _cachedPersonaPrompt = File.ReadAllText(path, Encoding.UTF8);
+                _lastPersonaPromptCheck = lastWrite;
+            }
+            return _cachedPersonaPrompt;
         }
 
         public static string ExecuteReadFile(string path, int? lineStart, int? lineCount)
