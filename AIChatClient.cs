@@ -745,7 +745,7 @@ namespace MyFirstMod
                 sb.AppendLine($"【对 {enemy.Name}】已持续 {warDays} 天");
 
                 if (ourCasualties > 0 || enemyCasualties > 0)
-                    sb.AppendLine($"  我方阵亡 {enemyCasualties} | 敌方阵亡 {ourCasualties}");
+                    sb.AppendLine($"  我方阵亡 {ourCasualties} | 敌方阵亡 {enemyCasualties}");
                 if (ourTowns > 0 || enemyTowns > 0)
                     sb.AppendLine($"  攻下城镇 {ourTowns} 座 | 丢失城镇 {enemyTowns} 座");
                 if (ourCastles > 0 || enemyCastles > 0)
