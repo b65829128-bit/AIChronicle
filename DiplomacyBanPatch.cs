@@ -46,58 +46,24 @@ namespace MyFirstMod
         }
     }
 
-    [HarmonyPatch(typeof(DeclareWarDecision), "ApplyChosenOutcome")]
-    public static class BanDeclareWarApplyPatch
+    [HarmonyPatch(typeof(KingdomElection), "ApplyChosenOutcome")]
+    public static class BanPlayerDiplomacyPatch
     {
-        public static bool Prefix(DeclareWarDecision __instance)
+        public static bool Prefix(KingdomDecision ____decision)
         {
             InformationManager.DisplayMessage(new InformationMessage(
-                $"[MyFirstMod DEBUG] ApplyChosenOutcome hit: DeclareWar, proposer={__instance.ProposerClan?.Name}, ban={MySettings.Instance?.BanVanillaDiplomacy}",
+                $"[DEBUG] KingdomElection.ApplyChosenOutcome: proposer={____decision?.ProposerClan?.Name}, ban={MySettings.Instance?.BanVanillaDiplomacy}",
                 Colors.Yellow));
-            if (MySettings.Instance?.BanVanillaDiplomacy == true && __instance.ProposerClan == Clan.PlayerClan)
-                return false;
-            return true;
-        }
-    }
 
-    [HarmonyPatch(typeof(MakePeaceKingdomDecision), "ApplyChosenOutcome")]
-    public static class BanPeaceApplyPatch
-    {
-        public static bool Prefix(MakePeaceKingdomDecision __instance)
-        {
-            InformationManager.DisplayMessage(new InformationMessage(
-                $"[MyFirstMod DEBUG] ApplyChosenOutcome hit: MakePeace, proposer={__instance.ProposerClan?.Name}, ban={MySettings.Instance?.BanVanillaDiplomacy}",
-                Colors.Yellow));
-            if (MySettings.Instance?.BanVanillaDiplomacy == true && __instance.ProposerClan == Clan.PlayerClan)
+            if (MySettings.Instance?.BanVanillaDiplomacy == true
+                && !AIChatClient.IsAgentDiplomacyInProgress
+                && ____decision?.ProposerClan == Clan.PlayerClan)
+            {
+                InformationManager.DisplayMessage(new InformationMessage(
+                    "[MyFirstMod] 拦截了一次原版外交执行。",
+                    Colors.Cyan));
                 return false;
-            return true;
-        }
-    }
-
-    [HarmonyPatch(typeof(StartAllianceDecision), "ApplyChosenOutcome")]
-    public static class BanAllianceApplyPatch
-    {
-        public static bool Prefix(StartAllianceDecision __instance)
-        {
-            InformationManager.DisplayMessage(new InformationMessage(
-                $"[MyFirstMod DEBUG] ApplyChosenOutcome hit: Alliance, proposer={__instance.ProposerClan?.Name}, ban={MySettings.Instance?.BanVanillaDiplomacy}",
-                Colors.Yellow));
-            if (MySettings.Instance?.BanVanillaDiplomacy == true && __instance.ProposerClan == Clan.PlayerClan)
-                return false;
-            return true;
-        }
-    }
-
-    [HarmonyPatch(typeof(TradeAgreementDecision), "ApplyChosenOutcome")]
-    public static class BanTradeApplyPatch
-    {
-        public static bool Prefix(TradeAgreementDecision __instance)
-        {
-            InformationManager.DisplayMessage(new InformationMessage(
-                $"[MyFirstMod DEBUG] ApplyChosenOutcome hit: Trade, proposer={__instance.ProposerClan?.Name}, ban={MySettings.Instance?.BanVanillaDiplomacy}",
-                Colors.Yellow));
-            if (MySettings.Instance?.BanVanillaDiplomacy == true && __instance.ProposerClan == Clan.PlayerClan)
-                return false;
+            }
             return true;
         }
     }
