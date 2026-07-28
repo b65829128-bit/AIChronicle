@@ -230,6 +230,7 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │               └── NPCs/          ← Agent 管理的 NPC 文件系统
 │                   └── {entity_id}/                 ← {Name}_{StringId}（如 博泰罗_CharacterObject_1664）
 │                       ├── persona.txt   ← [MOTIVATION]/[TRAITS]/[SPEECH_STYLE]
+│                       ├── persona_meta.json ← 自定义人格维度（权力欲/归属重心/冒险倾向）
 │                       ├── knowledge/
 │                       ├── chat_logs/
 │                       ├── mailbox/

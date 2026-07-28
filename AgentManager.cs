@@ -7,6 +7,7 @@ using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.Library;
 
 namespace MyFirstMod
@@ -18,6 +19,7 @@ namespace MyFirstMod
         private static string _targetEntityId = "";
         private static string _agentDir => Path.Combine(_baseDir, _agentEntityId);
         private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
+        private static readonly Random _rng = new();
 
         private static string _cachedPersonaPrompt = "";
         private static DateTime _lastPersonaPromptCheck;  
@@ -123,6 +125,134 @@ namespace MyFirstMod
             Directory.CreateDirectory(Path.Combine(dir, "mailbox", "sent"));
         }
 
+        private static string GetPersonaMetaPath()
+        {
+            return Path.Combine(_agentDir, "persona_meta.json");
+        }
+
+        private class PersonaMeta
+        {
+            public int Ambition { get; set; }
+            public int LoyaltyType { get; set; }
+            public int RiskTolerance { get; set; }
+        }
+
+        private static PersonaMeta LoadOrCreatePersonaMeta(Hero hero)
+        {
+            var path = GetPersonaMetaPath();
+            if (File.Exists(path))
+            {
+                try
+                {
+                    var json = File.ReadAllText(path, Encoding.UTF8);
+                    var meta = JsonConvert.DeserializeObject<PersonaMeta>(json);
+                    if (meta != null) return meta;
+                }
+                catch { }
+            }
+
+            var newMeta = new PersonaMeta
+            {
+                Ambition = RollWeightedTrait(skewPositive: true),
+                LoyaltyType = RollLoyaltyType(),
+                RiskTolerance = RollWeightedTrait(skewPositive: false)
+            };
+
+            var dir = Path.GetDirectoryName(path);
+            if (dir != null) Directory.CreateDirectory(dir);
+            File.WriteAllText(path, JsonConvert.SerializeObject(newMeta, Formatting.Indented), Encoding.UTF8);
+            return newMeta;
+        }
+
+        private static int RollWeightedTrait(bool skewPositive)
+        {
+            var roll = _rng.Next(100);
+            if (skewPositive)
+            {
+                if (roll < 5) return -2;
+                if (roll < 25) return -1;
+                if (roll < 63) return 0;
+                if (roll < 88) return 1;
+                return 2;
+            }
+            else
+            {
+                if (roll < 6) return -2;
+                if (roll < 31) return -1;
+                if (roll < 69) return 0;
+                if (roll < 94) return 1;
+                return 2;
+            }
+        }
+
+        private static int RollLoyaltyType()
+        {
+            var roll = _rng.Next(100);
+            if (roll < 10) return 0;
+            if (roll < 50) return 1;
+            if (roll < 85) return 2;
+            return 3;
+        }
+
+        private static string BuildNativeTraitsText(Hero hero)
+        {
+            var sb = new StringBuilder();
+            AppendTraitLine(sb, "胆气（Valor）", hero.GetTraitLevel(DefaultTraits.Valor), "勇敢无畏", "胆小怯懦");
+            AppendTraitLine(sb, "仁慈（Mercy）", hero.GetTraitLevel(DefaultTraits.Mercy), "仁慈宽厚", "冷酷残忍");
+            AppendTraitLine(sb, "荣誉（Honor）", hero.GetTraitLevel(DefaultTraits.Honor), "守信重诺", "狡诈无信");
+            AppendTraitLine(sb, "慷慨（Generosity）", hero.GetTraitLevel(DefaultTraits.Generosity), "慷慨感恩", "自私忘恩");
+            AppendTraitLine(sb, "谋略（Calculating）", hero.GetTraitLevel(DefaultTraits.Calculating), "深谋远虑", "冲动鲁莽");
+            return sb.ToString().TrimEnd();
+        }
+
+        private static void AppendTraitLine(StringBuilder sb, string label, int value, string posDesc, string negDesc)
+        {
+            string desc;
+            if (value > 0) desc = $"（{posDesc}）";
+            else if (value < 0) desc = $"（{negDesc}）";
+            else desc = "（中庸）";
+            sb.AppendLine($"{label}：{value:+0;-0} {desc}");
+        }
+
+        private static string BuildCustomTraitsText(PersonaMeta meta)
+        {
+            var sb = new StringBuilder();
+
+            var ambDesc = meta.Ambition switch
+            {
+                2 => "极度渴望权力与地位，不惜一切代价向上爬",
+                1 => "有较强的进取心，希望在仕途上更进一步",
+                0 => "对权力持平常心，有则有、无则安",
+                -1 => "对权力敬而远之，更愿守好自己的一亩三分地",
+                -2 => "厌恶权力斗争，只想过太平日子",
+                _ => "?"
+            };
+            sb.AppendLine($"权力欲：{meta.Ambition:+0;-0} — {ambDesc}");
+
+            var loyDesc = meta.LoyaltyType switch
+            {
+                0 => "忠于自己——利益至上，不受家族或王国束缚",
+                1 => "忠于家族——家族利益高于一切",
+                2 => "忠于王国——以王国和君主的利益为优先",
+                3 => "忠于信念——坚持自己的理想和原则，超越世俗忠诚",
+                _ => "?"
+            };
+            sb.AppendLine($"归属重心：类型{meta.LoyaltyType} — {loyDesc}");
+
+            var riskDesc = meta.RiskTolerance switch
+            {
+                2 => "赌徒心态，愿意押上一切博取大收益",
+                1 => "偏好适度的风险，善于权衡利弊",
+                0 => "稳健行事，不冒不必要的风险",
+                -1 => "谨慎保守，常常犹豫不决",
+                -2 => "极度保守，惧怕任何冒险",
+                _ => "?"
+            };
+            sb.AppendLine($"冒险倾向：{meta.RiskTolerance:+0;-0} — {riskDesc}");
+
+            return sb.ToString().TrimEnd();
+        }
+
         public static string LoadPersona(Hero hero)
         {
             if (string.IsNullOrEmpty(_agentDir))
@@ -157,9 +287,13 @@ namespace MyFirstMod
             if (!string.IsNullOrEmpty(encyclopedia))
                 basicInfo.AppendLine($"百科描述：{encyclopedia}");
 
+            var meta = LoadOrCreatePersonaMeta(hero);
+            var nativeTraits = BuildNativeTraitsText(hero);
+            var customTraits = BuildCustomTraitsText(meta);
+
             try
             {
-                var persona = GeneratePersonaViaLLM(basicInfo.ToString(), name).Result;
+                var persona = GeneratePersonaViaLLM(basicInfo.ToString(), name, nativeTraits, customTraits).Result;
                 if (!string.IsNullOrEmpty(persona))
                 {
                     var p = Path.Combine(_agentDir, "persona.txt");
@@ -175,7 +309,7 @@ namespace MyFirstMod
             return fallback;
         }
 
-        private static async System.Threading.Tasks.Task<string> GeneratePersonaViaLLM(string info, string name)
+        private static async System.Threading.Tasks.Task<string> GeneratePersonaViaLLM(string info, string name, string nativeTraits, string customTraits)
         {
             var settings = MySettings.Instance;
             if (settings == null || string.IsNullOrEmpty(settings.ApiKey))
@@ -183,7 +317,9 @@ namespace MyFirstMod
 
             var prompt = LoadPersonaGenerationPrompt()
                 .Replace("{npc_name}", name)
-                .Replace("{npc_info}", info);
+                .Replace("{npc_info}", info)
+                .Replace("{native_traits}", nativeTraits)
+                .Replace("{custom_traits}", customTraits);
 
             var payload = new
             {
