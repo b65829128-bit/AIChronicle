@@ -264,8 +264,6 @@
       }
     ]
   },
-    ]
-  },
   {
     "name": "declare_war",
     "description": "Declare war on another kingdom. This is a unilateral action — no consent needed from the target.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom (king/queen).\n- The target_kingdom is the kingdom to declare war on, by Chinese or English name.\n- This takes effect immediately. All current trade agreements with the target will be terminated.\n- Use query_war_status first to evaluate whether war is advisable.\n- Do NOT declare war on your own kingdom or your allies.",
