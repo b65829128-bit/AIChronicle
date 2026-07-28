@@ -1,26 +1,13 @@
 using HarmonyLib;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Election;
-using TaleWorlds.Library;
-using Kdiplomacy = TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.Localization;
 
 namespace MyFirstMod
 {
-    [HarmonyPatch(typeof(KingdomDecision), "CanMakeDecision")]
-    public static class BanPlayerDiplomacyUIPatch
-    {
-        static void Postfix(KingdomDecision __instance, ref bool __result)
-        {
-            if (!__result) return;
-            if (MySettings.Instance?.BanVanillaDiplomacy == true
-                && __instance.ProposerClan == Clan.PlayerClan)
-            {
-                __result = false;
-            }
-        }
-    }
-
     [HarmonyPatch(typeof(KingdomDecisionProposalBehavior), "GetRandomWarDecision")]
     public static class BanWarDecisionPatch
     {
@@ -77,67 +64,61 @@ namespace MyFirstMod
         }
     }
 
-    [HarmonyPatch(typeof(Kdiplomacy.KingdomDiplomacyVM), "OnDeclareWar")]
-    public static class BanPlayerDeclareWarPatch
+    [HarmonyPatch(typeof(DeclareWarAction), "ApplyByKingdomDecision")]
+    public static class BanDeclareWarPatch
     {
-        public static bool Prefix()
+        public static bool Prefix(IFaction faction1)
         {
-            if (MySettings.Instance?.BanVanillaDiplomacy == true)
+            if (MySettings.Instance?.BanVanillaDiplomacy == true
+                && !AIChatClient.IsAgentDiplomacyInProgress
+                && faction1 == Hero.MainHero.MapFaction)
             {
-                InformationManager.DisplayMessage(new InformationMessage(
-                    "[MyFirstMod] 原版外交已禁用。作为国王，请通过 AI 聊天执行外交决策。",
-                    Colors.Yellow));
                 return false;
             }
             return true;
         }
     }
 
-    [HarmonyPatch(typeof(Kdiplomacy.KingdomDiplomacyVM), "OnDeclarePeace")]
-    public static class BanPlayerDeclarePeacePatch
+    [HarmonyPatch(typeof(MakePeaceAction), "ApplyByKingdomDecision")]
+    public static class BanMakePeacePatch
     {
-        public static bool Prefix()
+        public static bool Prefix(IFaction faction1)
         {
-            if (MySettings.Instance?.BanVanillaDiplomacy == true)
+            if (MySettings.Instance?.BanVanillaDiplomacy == true
+                && !AIChatClient.IsAgentDiplomacyInProgress
+                && faction1 == Hero.MainHero.MapFaction)
             {
-                InformationManager.DisplayMessage(new InformationMessage(
-                    "[MyFirstMod] 原版外交已禁用。作为国王，请通过 AI 聊天执行外交决策。",
-                    Colors.Yellow));
                 return false;
             }
             return true;
         }
     }
 
-    [HarmonyPatch(typeof(Kdiplomacy.KingdomDiplomacyVM), "OnStartAlliance")]
-    public static class BanPlayerStartAlliancePatch
+    [HarmonyPatch(typeof(DefaultAllianceModel), "CanMakeAlliance")]
+    public static class BanAllianceModelPatch
     {
-        public static bool Prefix()
+        public static void Postfix(Kingdom kingdom, Kingdom targetKingdom, IFaction evaluatingFaction, ref bool __result)
         {
-            if (MySettings.Instance?.BanVanillaDiplomacy == true)
+            if (__result && MySettings.Instance?.BanVanillaDiplomacy == true
+                && !AIChatClient.IsAgentDiplomacyInProgress
+                && evaluatingFaction == Hero.MainHero.Clan)
             {
-                InformationManager.DisplayMessage(new InformationMessage(
-                    "[MyFirstMod] 原版外交已禁用。作为国王，请通过 AI 聊天执行外交决策。",
-                    Colors.Yellow));
-                return false;
+                __result = false;
             }
-            return true;
         }
     }
 
-    [HarmonyPatch(typeof(Kdiplomacy.KingdomDiplomacyVM), "OnStartTradeAgreement")]
-    public static class BanPlayerStartTradeAgreementPatch
+    [HarmonyPatch(typeof(DefaultTradeAgreementModel), "CanMakeTradeAgreement")]
+    public static class BanTradeModelPatch
     {
-        public static bool Prefix()
+        public static void Postfix(Kingdom kingdom, Kingdom other, ref bool __result)
         {
-            if (MySettings.Instance?.BanVanillaDiplomacy == true)
+            if (__result && MySettings.Instance?.BanVanillaDiplomacy == true
+                && !AIChatClient.IsAgentDiplomacyInProgress
+                && kingdom == Hero.MainHero.MapFaction)
             {
-                InformationManager.DisplayMessage(new InformationMessage(
-                    "[MyFirstMod] 原版外交已禁用。作为国王，请通过 AI 聊天执行外交决策。",
-                    Colors.Yellow));
-                return false;
+                __result = false;
             }
-            return true;
         }
     }
 }
