@@ -53,6 +53,7 @@ namespace MyFirstMod
             var worldInfo = LoadWorldInfo();
             var currentTime = PromptManager.GetCurrentTimeString();
             var functionList = BuildFunctionList(agent, intent);
+            var objectiveRel = BuildObjectiveRelationship(agent.HeroRef!, target.HeroRef!);
 
             var intentRules = intent == "letter"
                 ? BuildLetterRules()
@@ -75,6 +76,7 @@ namespace MyFirstMod
                 .Replace("{world_info}", worldInfo)
                 .Replace("{current_time}", currentTime)
                 .Replace("{function_list}", functionList)
+                .Replace("{objective_relationship}", objectiveRel)
                 .Replace("{intent_rules}", intentRules)
                 .Trim();
         }
@@ -184,6 +186,82 @@ namespace MyFirstMod
                 + "- 阅读来信后，使用 query_character 查询写信人的基本信息\n"
                 + "- 然后使用 read_file 读取 knowledge/{target_id}.txt 了解你对写信人的私人认知\n"
                 + "- 当写信人透露了新信息时，调用 append_file 追加到 knowledge/{target_id}.txt";
+        }
+
+        private static string BuildObjectiveRelationship(Hero agentHero, Hero targetHero)
+        {
+            var sb = new StringBuilder();
+            var agentFaction = agentHero.MapFaction;
+            var targetFaction = targetHero.MapFaction;
+
+            if (agentHero == targetHero)
+            {
+                sb.AppendLine("对方就是你自己（自省）。");
+                return sb.ToString().TrimEnd();
+            }
+
+            if (agentFaction != null && targetFaction != null)
+            {
+                if (agentFaction == targetFaction)
+                {
+                    if (agentFaction.IsKingdomFaction)
+                    {
+                        var kingdom = agentFaction as Kingdom;
+                        if (kingdom != null && agentHero == kingdom.Leader)
+                            sb.AppendLine($"对方与你同属{agentFaction.Name}。你是该王国的君主，对方是你的封臣。");
+                        else if (kingdom != null && targetHero == kingdom.Leader)
+                            sb.AppendLine($"对方与你同属{targetFaction.Name}。对方是你的君主，你是其封臣。");
+                        else if (agentHero.Clan == targetHero.Clan)
+                            sb.AppendLine($"对方与你同属{agentHero.Clan?.Name?.ToString() ?? "同一家族"}。你们是同一家族的成员。");
+                        else
+                            sb.AppendLine($"对方与你同属{agentFaction.Name}。你们同为该王国的封臣。");
+                    }
+                    else if (agentFaction.IsMinorFaction)
+                    {
+                        sb.AppendLine($"对方与你同属{agentFaction.Name}（佣兵势力）。");
+                    }
+                    else
+                    {
+                        sb.AppendLine($"对方与你同属{agentFaction.Name}。");
+                    }
+                }
+                else
+                {
+                    if (agentFaction.IsAtWarWith(targetFaction))
+                        sb.AppendLine($"对方属于{targetFaction.Name}，与你的势力{agentFaction.Name}【处于交战状态】。你们是敌对关系。");
+                    else
+                        sb.AppendLine($"对方属于{targetFaction.Name}，与你的势力{agentFaction.Name}【当前和平】。你们是中立关系。");
+                }
+            }
+            else if (agentFaction != null && targetFaction == null)
+            {
+                sb.AppendLine("对方不属于任何势力（可能是流浪者或平民）。");
+            }
+            else if (agentFaction == null && targetFaction != null)
+            {
+                sb.AppendLine($"你目前不属于任何势力，对方属于{targetFaction.Name}。");
+            }
+
+            if (agentHero.Spouse == targetHero)
+                sb.AppendLine("对方是你的配偶。");
+            else if (agentHero.Mother == targetHero)
+                sb.AppendLine("对方是你的母亲。");
+            else if (agentHero.Father == targetHero)
+                sb.AppendLine("对方是你的父亲。");
+            else if (agentHero.Clan != null && targetHero.Clan != null
+                && agentHero.Clan == targetHero.Clan
+                && agentHero != targetHero)
+            {
+                var relation = "";
+                if (agentHero.Mother == targetHero.Mother) relation = "（同母）";
+                else if (agentHero.Father == targetHero.Father) relation = "（同父）";
+                sb.AppendLine($"对方与你是同族亲属{relation}。");
+            }
+
+            if (targetHero.IsPrisoner)
+                sb.AppendLine("注意：对方当前是俘虏。");
+
+            return sb.ToString().TrimEnd();
         }
 
         private static string LoadContextTemplate()
