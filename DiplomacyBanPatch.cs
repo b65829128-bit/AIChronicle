@@ -49,6 +49,21 @@ namespace MyFirstMod
         }
     }
 
+    [HarmonyPatch(typeof(Kingdom), "AddDecision")]
+    public static class BanAddDecisionPatch
+    {
+        public static bool Prefix(KingdomDecision decision)
+        {
+            if (MySettings.Instance?.BanVanillaDiplomacy == true
+                && !AIChatClient.IsAgentDiplomacyInProgress
+                && decision.ProposerClan == Clan.PlayerClan)
+            {
+                return false;
+            }
+            return true;
+        }
+    }
+
     [HarmonyPatch(typeof(DefaultAllianceModel), "CanMakeAlliance")]
     public static class BanAllianceModelPatch
     {
