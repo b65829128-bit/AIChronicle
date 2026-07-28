@@ -31,6 +31,7 @@ namespace MyFirstMod
         private static int _currentProcessingDepth = -1;
         private static readonly Dictionary<Kingdom, CampaignTime> _lastKingActivation = new();
         private static readonly CampaignTime KingActivationInterval = CampaignTime.Days(15f);
+        private static int _warmupFrames = 120;
 
         public static bool IsProcessing => _currentTask != null && !_currentTask.IsCompleted;
         public static int CurrentProcessingDepth => _currentProcessingDepth;
@@ -67,6 +68,12 @@ namespace MyFirstMod
         private static void CheckKingActivations()
         {
             if (Campaign.Current == null) return;
+            if (_warmupFrames > 0)
+            {
+                _warmupFrames--;
+                return;
+            }
+
             var now = CampaignTime.Now;
 
             foreach (var kingdom in Kingdom.All)
