@@ -11,6 +11,7 @@ using Newtonsoft.Json.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Election;
 using TaleWorlds.CampaignSystem.LogEntries;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
@@ -1436,6 +1437,27 @@ namespace MyFirstMod
 
         public static void Tick()
         {
+            if (MySettings.Instance?.BanVanillaDiplomacy == true && Campaign.Current != null)
+            {
+                var playerKingdom = Hero.MainHero?.MapFaction as Kingdom;
+                if (playerKingdom != null)
+                {
+                    var list = playerKingdom.UnresolvedDecisions;
+                    var toNuke = new System.Collections.Generic.List<KingdomDecision>();
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        var d = list[i];
+                        if (d is DeclareWarDecision || d is MakePeaceKingdomDecision
+                            || d is StartAllianceDecision || d is TradeAgreementDecision)
+                        {
+                            toNuke.Add(d);
+                        }
+                    }
+                    foreach (var d in toNuke)
+                        list.Remove(d);
+                }
+            }
+
             if (_pendingActions.Count == 0 || Campaign.Current == null)
                 return;
 
