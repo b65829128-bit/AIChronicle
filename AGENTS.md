@@ -264,6 +264,8 @@ Start-Process "D:\steam\steamapps\common\Mount & Blade II Bannerlord\bin\Win64_S
 # 3. 在启动器中勾选 MyFirstMod → Play
 ```
 
+> ⚠️ 定期执行 `dotnet clean -c Release && dotnet build -c Release` 做全量编译。增量编译可能掩盖文件损坏（如 IDE 后台索引/保存过程中的异常写入），clean build 才能暴露真实编译错误。
+
 ### 版本管理（Git）
 
 项目使用 Git 进行版本管理。仓库已初始化在 `C:\Users\yangui\BLMods\MyFirstMod\`。
