@@ -72,13 +72,6 @@ namespace MyFirstMod
             {
                 if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen)
                     AIChatScreen.OpenChancery();
-                else if (AIChatScreen.IsOpen)
-                    AIChatScreen.Close();
-                else if (LetterListScreen.IsOpen)
-                {
-                    LetterListScreen.Close();
-                    AIChatScreen.OpenChancery();
-                }
             }
             _prevChanceryP = mDown;
 

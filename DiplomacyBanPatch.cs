@@ -3,7 +3,6 @@ using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Election;
-using TaleWorlds.Localization;
 
 namespace MyFirstMod
 {
@@ -47,60 +46,54 @@ namespace MyFirstMod
         }
     }
 
-    [HarmonyPatch(typeof(DeclareWarAction), "ApplyByKingdomDecision")]
-    public static class BanDeclareWarPatch
+    [HarmonyPatch(typeof(DeclareWarDecision), "ApplyChosenOutcome")]
+    public static class BanDeclareWarApplyPatch
     {
-        public static bool Prefix(IFaction faction1)
+        public static bool Prefix(DeclareWarDecision __instance)
         {
             if (MySettings.Instance?.BanVanillaDiplomacy == true
                 && !AIChatClient.IsAgentDiplomacyInProgress
-                && faction1 == Hero.MainHero.MapFaction)
+                && __instance.ProposerClan == Clan.PlayerClan)
                 return false;
             return true;
         }
     }
 
-    [HarmonyPatch(typeof(MakePeaceAction), "ApplyByKingdomDecision")]
-    public static class BanMakePeacePatch
+    [HarmonyPatch(typeof(MakePeaceKingdomDecision), "ApplyChosenOutcome")]
+    public static class BanPeaceApplyPatch
     {
-        public static bool Prefix(IFaction faction1)
+        public static bool Prefix(MakePeaceKingdomDecision __instance)
         {
             if (MySettings.Instance?.BanVanillaDiplomacy == true
                 && !AIChatClient.IsAgentDiplomacyInProgress
-                && faction1 == Hero.MainHero.MapFaction)
+                && __instance.ProposerClan == Clan.PlayerClan)
                 return false;
             return true;
         }
     }
 
-    [HarmonyPatch(typeof(StartAllianceDecision), "CanMakeDecision")]
-    public static class BanAllianceCanMakeDecisionPatch
+    [HarmonyPatch(typeof(StartAllianceDecision), "ApplyChosenOutcome")]
+    public static class BanAllianceApplyPatch
     {
-        public static bool Prefix(StartAllianceDecision __instance, ref bool __result, ref TextObject reason)
+        public static bool Prefix(StartAllianceDecision __instance)
         {
             if (MySettings.Instance?.BanVanillaDiplomacy == true
+                && !AIChatClient.IsAgentDiplomacyInProgress
                 && __instance.ProposerClan == Clan.PlayerClan)
-            {
-                __result = false;
-                reason = new TextObject("{=MFM_ban}原版外交已禁用，请使用秘书处（M 键）执行外交决策。", null);
                 return false;
-            }
             return true;
         }
     }
 
-    [HarmonyPatch(typeof(TradeAgreementDecision), "CanMakeDecision")]
-    public static class BanTradeCanMakeDecisionPatch
+    [HarmonyPatch(typeof(TradeAgreementDecision), "ApplyChosenOutcome")]
+    public static class BanTradeApplyPatch
     {
-        public static bool Prefix(TradeAgreementDecision __instance, ref bool __result, ref TextObject reason)
+        public static bool Prefix(TradeAgreementDecision __instance)
         {
             if (MySettings.Instance?.BanVanillaDiplomacy == true
+                && !AIChatClient.IsAgentDiplomacyInProgress
                 && __instance.ProposerClan == Clan.PlayerClan)
-            {
-                __result = false;
-                reason = new TextObject("{=MFM_ban}原版外交已禁用，请使用秘书处（M 键）执行外交决策。", null);
                 return false;
-            }
             return true;
         }
     }
