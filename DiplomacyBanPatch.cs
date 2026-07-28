@@ -3,7 +3,6 @@ using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Election;
-using TaleWorlds.CampaignSystem.GameComponents;
 using TaleWorlds.Localization;
 
 namespace MyFirstMod
@@ -13,11 +12,7 @@ namespace MyFirstMod
     {
         public static bool Prefix(ref KingdomDecision? __result)
         {
-            if (MySettings.Instance?.BanVanillaDiplomacy == true)
-            {
-                __result = null;
-                return false;
-            }
+            if (MySettings.Instance?.BanVanillaDiplomacy == true) { __result = null; return false; }
             return true;
         }
     }
@@ -27,11 +22,7 @@ namespace MyFirstMod
     {
         public static bool Prefix(ref KingdomDecision? __result)
         {
-            if (MySettings.Instance?.BanVanillaDiplomacy == true)
-            {
-                __result = null;
-                return false;
-            }
+            if (MySettings.Instance?.BanVanillaDiplomacy == true) { __result = null; return false; }
             return true;
         }
     }
@@ -41,11 +32,7 @@ namespace MyFirstMod
     {
         public static bool Prefix(ref KingdomDecision? __result)
         {
-            if (MySettings.Instance?.BanVanillaDiplomacy == true)
-            {
-                __result = null;
-                return false;
-            }
+            if (MySettings.Instance?.BanVanillaDiplomacy == true) { __result = null; return false; }
             return true;
         }
     }
@@ -55,11 +42,7 @@ namespace MyFirstMod
     {
         public static bool Prefix(ref KingdomDecision? __result)
         {
-            if (MySettings.Instance?.BanVanillaDiplomacy == true)
-            {
-                __result = null;
-                return false;
-            }
+            if (MySettings.Instance?.BanVanillaDiplomacy == true) { __result = null; return false; }
             return true;
         }
     }
@@ -72,9 +55,7 @@ namespace MyFirstMod
             if (MySettings.Instance?.BanVanillaDiplomacy == true
                 && !AIChatClient.IsAgentDiplomacyInProgress
                 && faction1 == Hero.MainHero.MapFaction)
-            {
                 return false;
-            }
             return true;
         }
     }
@@ -87,38 +68,40 @@ namespace MyFirstMod
             if (MySettings.Instance?.BanVanillaDiplomacy == true
                 && !AIChatClient.IsAgentDiplomacyInProgress
                 && faction1 == Hero.MainHero.MapFaction)
+                return false;
+            return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(StartAllianceDecision), "CanMakeDecision")]
+    public static class BanAllianceCanMakeDecisionPatch
+    {
+        public static bool Prefix(StartAllianceDecision __instance, ref bool __result, ref TextObject reason)
+        {
+            if (MySettings.Instance?.BanVanillaDiplomacy == true
+                && __instance.ProposerClan == Clan.PlayerClan)
             {
+                __result = false;
+                reason = new TextObject("{=MFM_ban}原版外交已禁用，请使用秘书处（M 键）执行外交决策。", null);
                 return false;
             }
             return true;
         }
     }
 
-    [HarmonyPatch(typeof(DefaultAllianceModel), "CanMakeAlliance")]
-    public static class BanAllianceModelPatch
+    [HarmonyPatch(typeof(TradeAgreementDecision), "CanMakeDecision")]
+    public static class BanTradeCanMakeDecisionPatch
     {
-        public static void Postfix(Kingdom kingdom, Kingdom targetKingdom, IFaction evaluatingFaction, ref bool __result)
+        public static bool Prefix(TradeAgreementDecision __instance, ref bool __result, ref TextObject reason)
         {
-            if (__result && MySettings.Instance?.BanVanillaDiplomacy == true
-                && !AIChatClient.IsAgentDiplomacyInProgress
-                && evaluatingFaction == Hero.MainHero.Clan)
+            if (MySettings.Instance?.BanVanillaDiplomacy == true
+                && __instance.ProposerClan == Clan.PlayerClan)
             {
                 __result = false;
+                reason = new TextObject("{=MFM_ban}原版外交已禁用，请使用秘书处（M 键）执行外交决策。", null);
+                return false;
             }
-        }
-    }
-
-    [HarmonyPatch(typeof(DefaultTradeAgreementModel), "CanMakeTradeAgreement")]
-    public static class BanTradeModelPatch
-    {
-        public static void Postfix(Kingdom kingdom, Kingdom other, ref bool __result)
-        {
-            if (__result && MySettings.Instance?.BanVanillaDiplomacy == true
-                && !AIChatClient.IsAgentDiplomacyInProgress
-                && kingdom == Hero.MainHero.MapFaction)
-            {
-                __result = false;
-            }
+            return true;
         }
     }
 }

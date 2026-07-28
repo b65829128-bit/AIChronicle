@@ -67,8 +67,8 @@ namespace MyFirstMod
             }
             _prevLetterO = oDown;
 
-            var pDown = Input.IsKeyDown(InputKey.P);
-            if (pDown && !_prevChanceryP && Campaign.Current != null)
+            var mDown = Input.IsKeyDown(InputKey.M);
+            if (mDown && !_prevChanceryP && Campaign.Current != null)
             {
                 if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen)
                     AIChatScreen.OpenChancery();
@@ -80,7 +80,7 @@ namespace MyFirstMod
                     AIChatScreen.OpenChancery();
                 }
             }
-            _prevChanceryP = pDown;
+            _prevChanceryP = mDown;
 
             if (_pendingChatHero != null)
             {
