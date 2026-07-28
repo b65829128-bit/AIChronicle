@@ -10,6 +10,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.LogEntries;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Library;
@@ -195,6 +196,18 @@ namespace MyFirstMod
 
                     case "go_around_party":
                         return ExecuteGoAroundParty(args["target_entity_id"]?.ToString());
+
+                    case "query_recent_events":
+                        return ExecuteQueryRecentEvents(
+                            args["target_entity_id"]?.ToString(),
+                            args["max_events"]?.ToObject<int>() ?? 10,
+                            args["max_days_ago"]?.ToObject<int>() ?? 14);
+
+                    case "query_surroundings":
+                        return ExecuteQuerySurroundings(
+                            args["radius_km"]?.ToObject<int>() ?? 50,
+                            args["max_settlements"]?.ToObject<int>() ?? 5,
+                            args["max_parties"]?.ToObject<int>() ?? 8);
 
                     case "send_letter":
                         return ExecuteSendLetter(args["recipient_entity_id"]?.ToString() ?? "", args["content"]?.ToString() ?? "");
@@ -463,6 +476,204 @@ namespace MyFirstMod
             return "[未找到] 名为 \"" + kingdomName + "\" 的王国";
         }
 
+        private static string ExecuteQueryRecentEvents(string? targetEntityId, int maxEvents, int maxDaysAgo)
+        {
+            if (Campaign.Current == null)
+                return "[错误] 战役未加载";
+
+            var hero = ResolveTargetHero(targetEntityId);
+            if (hero == null)
+                return $"[错误] 未找到目标实体：{targetEntityId}";
+
+            if (maxEvents <= 0 || maxEvents > 30)
+                maxEvents = 10;
+            if (maxDaysAgo <= 0 || maxDaysAgo > 84)
+                maxDaysAgo = 14;
+
+            var now = CampaignTime.Now;
+            var cutoffHours = now.ToHours - (maxDaysAgo * 24);
+
+            var logs = Campaign.Current.LogEntryHistory.GameActionLogs;
+            var results = new List<string>();
+
+            for (int i = logs.Count - 1; i >= 0 && results.Count < maxEvents; i--)
+            {
+                var log = logs[i];
+                if (log.GameTime.ToHours < cutoffHours) continue;
+
+                string? text = null;
+
+                if (log is TournamentWonLogEntry twl && twl.Winner == hero)
+                    text = twl.GetEncyclopediaText().ToString();
+                else if (log is TakePrisonerLogEntry tpl)
+                {
+                    if (tpl.Prisoner == hero || tpl.CapturerHero == hero)
+                        text = tpl.GetNotificationText().ToString();
+                }
+                else if (log is EndCaptivityLogEntry ecl && ecl.Prisoner == hero)
+                    text = ecl.GetEncyclopediaText().ToString();
+                else if (log is CharacterKilledLogEntry ckl && (ckl.Victim == hero || ckl.Killer == hero))
+                    text = ckl.GetEncyclopediaText().ToString();
+                else if (log is CharacterMarriedLogEntry cml && (cml.MarriedHero == hero || cml.MarriedTo == hero))
+                    text = cml.GetEncyclopediaText().ToString();
+                else if (log is CharacterBornLogEntry cbl
+                    && (cbl.BornCharacter == hero
+                        || cbl.BornCharacter.Mother == hero
+                        || cbl.BornCharacter.Father == hero))
+                    text = cbl.GetEncyclopediaText().ToString();
+                else if (log is CharacterBecameFugitiveLogEntry cbf && cbf.Hero == hero)
+                    text = cbf.GetEncyclopediaText().ToString();
+                else if (log is KingdomDestroyedLogEntry kdl
+                    && hero.MapFaction is Kingdom k
+                    && kdl.IsVisibleInEncyclopediaPageOf(k))
+                    text = kdl.GetEncyclopediaText().ToString();
+                else if (log is ClanLeaderChangedLogEntry clc && (clc.OldLeader == hero || clc.NewLeader == hero))
+                    text = clc.GetEncyclopediaText().ToString();
+
+                if (text == null) continue;
+
+                var hoursAgo = (now.ToHours - log.GameTime.ToHours);
+                var daysAgo = (int)(hoursAgo / 24);
+                var timeLabel = hoursAgo < 24 ? "【今日】" : $"【{daysAgo}天前】";
+                results.Add($"{timeLabel} {text}");
+            }
+
+            if (results.Count == 0)
+                return $"{hero.Name} 在过去{maxDaysAgo}天内没有值得注意的事件。";
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"===== {hero.Name} 的近期事件 =====");
+            foreach (var r in results)
+                sb.AppendLine(r);
+
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string ExecuteQuerySurroundings(int radiusKm, int maxSettlements, int maxParties)
+        {
+            if (_currentHero == null)
+                return "[错误] 无当前领主";
+
+            var configRadius = MySettings.Instance?.SurroundingsScanRadius ?? 10;
+            if (radiusKm <= 0 || radiusKm > configRadius)
+                radiusKm = configRadius;
+            if (maxSettlements <= 0 || maxSettlements > 15)
+                maxSettlements = 5;
+            if (maxParties <= 0 || maxParties > 20)
+                maxParties = 8;
+
+            var hero = _currentHero;
+            var party = hero.PartyBelongedTo;
+            Vec2 myPos;
+            var locationDesc = "";
+
+            if (hero.CurrentSettlement != null)
+            {
+                myPos = hero.CurrentSettlement.GatePosition.ToVec2();
+                var s = hero.CurrentSettlement;
+                var ownerKingdom = s.OwnerClan?.Kingdom?.Name?.ToString();
+                var type = s.IsTown ? "城镇" : s.IsCastle ? "城堡" : "村庄";
+                locationDesc = $"{s.Name}（{type}" + (ownerKingdom != null ? $" · {ownerKingdom}" : "") + "）";
+            }
+            else if (party != null)
+            {
+                myPos = party.GetPosition2D;
+                locationDesc = $"野外行军（{party.Name}）";
+            }
+            else
+            {
+                return "[错误] 无法确定当前领主的位置";
+            }
+
+            float Distance(Vec2 pos)
+            {
+                var dx = myPos.X - pos.X;
+                var dy = myPos.Y - pos.Y;
+                return (float)System.Math.Sqrt(dx * dx + dy * dy);
+            }
+
+            var radiusMeters = radiusKm * 1000f;
+            var myFaction = hero.MapFaction;
+
+            string FactionRelation(MobileParty p)
+            {
+                if (p.LeaderHero == hero || p == party)
+                    return "自己";
+                if (p.IsBandit)
+                    return "敌对";
+                if (p.MapFaction == myFaction)
+                    return "友方";
+                if (myFaction != null && p.MapFaction != null && myFaction.IsAtWarWith(p.MapFaction))
+                    return "敌对";
+                return "中立";
+            }
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"===== 当前位置 =====");
+            sb.AppendLine(locationDesc);
+
+            var nearbySettlements = new List<(float dist, string desc)>();
+            foreach (var s in Settlement.All)
+            {
+                if (!s.IsTown && !s.IsCastle) continue;
+                if (s == hero.CurrentSettlement) continue;
+
+                var dist = Distance(s.GatePosition.ToVec2());
+                if (dist > radiusMeters) continue;
+
+                var km = dist / 1000f;
+                var owner = s.OwnerClan?.Name?.ToString() ?? "无主";
+                var kingdom = s.OwnerClan?.Kingdom?.Name?.ToString();
+                var type = s.IsTown ? "城镇" : "城堡";
+                nearbySettlements.Add((dist, $"{s.Name} {type} {owner}" + (kingdom != null ? $"（{kingdom}）" : "") + $" {km:F0}km"));
+            }
+            nearbySettlements.Sort((a, b) => a.dist.CompareTo(b.dist));
+
+            var nearbyParties = new List<(float dist, string desc)>();
+            foreach (var mp in MobileParty.All)
+            {
+                if (!mp.IsActive) continue;
+                if (mp == party) continue;
+                if (mp.CurrentSettlement != null) continue;
+
+                var dist = Distance(mp.GetPosition2D);
+                if (dist > radiusMeters) continue;
+
+                var km = dist / 1000f;
+                var leader = mp.LeaderHero?.Name?.ToString() ?? mp.Name?.ToString() ?? "不明";
+                var troops = mp.MemberRoster?.TotalManCount ?? 0;
+                var faction = mp.IsBandit ? "强盗" : (mp.MapFaction?.Name?.ToString() ?? "?");
+                var relation = FactionRelation(mp);
+                var relTag = relation switch
+                {
+                    "敌对" => "[敌对]",
+                    "友方" => "[友方]",
+                    "中立" => "[中立]",
+                    _ => "[自己]"
+                };
+                nearbyParties.Add((dist, $"{leader} {troops}人 {faction} {relTag} {km:F0}km"));
+            }
+            nearbyParties.Sort((a, b) => a.dist.CompareTo(b.dist));
+
+            sb.AppendLine();
+            sb.AppendLine($"===== 附近定居点（{radiusKm}km） =====");
+            if (nearbySettlements.Count == 0)
+                sb.AppendLine("（无）");
+            else
+                foreach (var (_, desc) in nearbySettlements.Take(maxSettlements))
+                    sb.AppendLine(desc);
+
+            sb.AppendLine();
+            sb.AppendLine($"===== 附近部队（{radiusKm}km） =====");
+            if (nearbyParties.Count == 0)
+                sb.AppendLine("（无）");
+            else
+                foreach (var (_, desc) in nearbyParties.Take(maxParties))
+                    sb.AppendLine(desc);
+
+            return sb.ToString().TrimEnd();
+        }
+
         private static Settlement? FindSettlement(string name)
         {
             if (string.IsNullOrEmpty(name)) return null;
@@ -569,11 +780,20 @@ namespace MyFirstMod
                 return MobileParty.MainParty;
 
             var entityId = EntityManager.ResolveEntityId(targetEntityId!);
-            if (entityId == null) return null;
+            if (entityId == null)
+            {
+                foreach (var hero in Hero.AllAliveHeroes)
+                {
+                    var heroName = hero.Name?.ToString() ?? "";
+                    if (heroName.Contains(targetEntityId!) || targetEntityId!.Contains(heroName))
+                        return hero.PartyBelongedTo;
+                }
+                return null;
+            }
 
             var entity = EntityManager.GetEntityById(entityId);
-            var hero = entity?.HeroRef;
-            return hero?.PartyBelongedTo;
+            var targetHero = entity?.HeroRef;
+            return targetHero?.PartyBelongedTo;
         }
 
         private static string ExecuteRaidSettlement(string settlementName)
@@ -1121,7 +1341,8 @@ namespace MyFirstMod
             };
             request.Headers.Add("Authorization", $"Bearer {settings.ApiKey}");
 
-            var response = await _client.SendAsync(request);
+            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
+            var response = await _client.SendAsync(request, cts.Token);
             response.EnsureSuccessStatusCode();
 
             var responseBody = await response.Content.ReadAsStringAsync();
@@ -1417,7 +1638,8 @@ namespace MyFirstMod
             };
             request.Headers.Add("Authorization", $"Bearer {settings.ApiKey}");
 
-            var response = await _client.SendAsync(request);
+            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
+            var response = await _client.SendAsync(request, cts.Token);
             response.EnsureSuccessStatusCode();
 
             var responseBody = await response.Content.ReadAsStringAsync();

@@ -336,7 +336,8 @@ namespace MyFirstMod
             };
             request.Headers.Add("Authorization", "Bearer " + settings.ApiKey);
 
-            var response = await _http.SendAsync(request);
+            var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
+            var response = await _http.SendAsync(request, cts.Token);
             response.EnsureSuccessStatusCode();
 
             var body = await response.Content.ReadAsStringAsync();

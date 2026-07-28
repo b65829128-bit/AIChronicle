@@ -366,6 +366,24 @@ namespace MyFirstMod
             }
         }
 
+        private int _surroundingsScanRadius = 20;
+
+        [SettingPropertyInteger("环境扫描半径（km）", 5, 200, Order = 8, RequireRestart = false,
+            HintText = "query_surroundings 的扫描半径硬上限。Agent 无论请求多大范围，实际都不会超过此值。")]
+        [SettingPropertyGroup("游戏设置")]
+        public int SurroundingsScanRadius
+        {
+            get => _surroundingsScanRadius;
+            set
+            {
+                if (_surroundingsScanRadius != value)
+                {
+                    _surroundingsScanRadius = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private int _maxTokens = 500;
 
         [SettingPropertyInteger("最大 Token 数", 50, 4096, Order = 5, RequireRestart = false,

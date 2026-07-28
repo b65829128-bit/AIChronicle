@@ -185,6 +185,48 @@
     ]
   },
   {
+    "name": "query_recent_events",
+    "description": "Query recent events involving a specific character — tournaments won, captures, releases, deaths, marriages, births, fugitive status, kingdom destruction, clan leadership changes.\n\nUsage:\n- Call this to learn what has recently happened to someone — have they won tournaments? been captured? escaped? died? gotten married?\n- The target_entity_id parameter is the entity ID or Chinese name of the character to query. Omit to query the current conversation partner.\n- max_events limits how many events to return (default 10, max 30).\n- max_days_ago limits how far back to look in game days (default 14, max 84).\n- Returns each event with how many days ago it happened and a description.\n- This is public knowledge — these events are recorded in the Calradia encyclopedia.",
+    "parameters": [
+      {
+        "name": "target_entity_id",
+        "type": "string",
+        "description": "Entity ID or Chinese name of the character to query recent events for. Omit to query the current conversation partner."
+      },
+      {
+        "name": "max_events",
+        "type": "integer",
+        "description": "Maximum number of events to return (1-30, default 10)."
+      },
+      {
+        "name": "max_days_ago",
+        "type": "integer",
+        "description": "Only return events within this many game days (1-84, default 14)."
+      }
+    ]
+  },
+  {
+    "name": "query_surroundings",
+    "description": "Scan your immediate surroundings — your current location, nearby settlements (towns and castles), and nearby mobile parties on the map.\n\nUsage:\n- Call this to understand WHERE you are right now and WHAT is around you — which factions control nearby territory and which armies or parties are nearby.\n- radius_km sets the scan radius in kilometers. Omit this parameter to use the game-configured default. If you provide it, it will be capped at the game's maximum.\n- max_settlements and max_parties limit how many of each type to return (default 5/8, max 15/20). Closer ones come first.\n- For each nearby party, returns: leader name, troop count, faction/bandit type, relation to you (friendly/hostile/neutral), and distance.\n- This is essential for making any travel, combat, or tactical decision — you need to know your context first.\n- Do NOT call this repeatedly without reason — it scans all settlements and parties on the map, which is wasteful if nothing has changed.",
+    "parameters": [
+      {
+        "name": "radius_km",
+        "type": "integer",
+        "description": "Scan radius in kilometers (10-200). Omit to use the default set in game settings."
+      },
+      {
+        "name": "max_settlements",
+        "type": "integer",
+        "description": "Maximum nearby settlements to list (1-15, default 5)."
+      },
+      {
+        "name": "max_parties",
+        "type": "integer",
+        "description": "Maximum nearby parties to list (1-20, default 8)."
+      }
+    ]
+  },
+  {
     "name": "cancel_action",
     "description": "Cancel your current party task and return your party to autonomous AI control.\n\nUsage:\n- Call this when you want to stop your current mission (defending, patrolling, escorting, etc.) and let your party act on its own.\n- After calling this, you can issue a new order (move_to_settlement, raid_settlement, etc.) if you want.\n- This only cancels the task you previously issued through a tool call — it does not affect the game's own AI decisions.\n- No parameters needed.",
     "parameters": []

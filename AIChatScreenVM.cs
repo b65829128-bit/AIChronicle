@@ -342,6 +342,8 @@ namespace MyFirstMod
                                     "query_kingdom_settlements" => "查询了王国领土",
                                     "query_clan_members" => "查询了家族成员",
                                     "query_kingdom_clans" => "查询了王国家族",
+                                    "query_recent_events" => "查询了近期事件",
+                                    "query_surroundings" => "扫描了周围环境",
                                     _ => $"调用了 {tc.Name}"
                                 };
                             }
