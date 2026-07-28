@@ -49,30 +49,36 @@ namespace MyFirstMod
         }
     }
 
-    [HarmonyPatch(typeof(Kingdom), "AddDecision")]
-    public static class BanAddDecisionPatch
+    public static class DiplomacyBanPatch
     {
-        public static bool Prefix(KingdomDecision decision)
+        public static bool BanAllianceCanMakeDecision(StartAllianceDecision __instance, ref bool __result, ref TextObject reason)
         {
             if (MySettings.Instance?.BanVanillaDiplomacy == true
                 && !AIChatClient.IsAgentDiplomacyInProgress
-                && decision.ProposerClan == Clan.PlayerClan)
+                && __instance.ProposerClan == Clan.PlayerClan)
             {
+                __result = false;
+                reason = new TextObject("{=MFM_diplo_ban}原版外交已禁用。请按 M 键打开秘书处，通过 AI 执行外交决策。", null);
                 return false;
             }
             return true;
         }
-    }
 
-    [HarmonyPatch(typeof(DefaultAllianceModel), "CanMakeAlliance")]
-    public static class BanAllianceModelPatch
-    {
-        public static bool Prefix(IFaction evaluatingFaction, ref bool __result, ref TextObject reason)
+        public static bool BanTradeCanMakeDecision(TradeAgreementDecision __instance, ref bool __result, ref TextObject reason)
         {
-            InformationManager.DisplayMessage(new InformationMessage(
-                $"[DEBUG] CanMakeAlliance: faction={evaluatingFaction?.Name}, ban={MySettings.Instance?.BanVanillaDiplomacy}",
-                Colors.Yellow));
+            if (MySettings.Instance?.BanVanillaDiplomacy == true
+                && !AIChatClient.IsAgentDiplomacyInProgress
+                && __instance.ProposerClan == Clan.PlayerClan)
+            {
+                __result = false;
+                reason = new TextObject("{=MFM_diplo_ban}原版外交已禁用。请按 M 键打开秘书处，通过 AI 执行外交决策。", null);
+                return false;
+            }
+            return true;
+        }
 
+        public static bool BanAllianceModel(IFaction evaluatingFaction, ref bool __result, ref TextObject reason)
+        {
             if (MySettings.Instance?.BanVanillaDiplomacy == true
                 && !AIChatClient.IsAgentDiplomacyInProgress
                 && evaluatingFaction == Clan.PlayerClan)
@@ -83,17 +89,9 @@ namespace MyFirstMod
             }
             return true;
         }
-    }
 
-    [HarmonyPatch(typeof(DefaultTradeAgreementModel), "CanMakeTradeAgreement")]
-    public static class BanTradeModelPatch
-    {
-        public static bool Prefix(Kingdom kingdom, ref bool __result, ref TextObject reason)
+        public static bool BanTradeModel(Kingdom kingdom, ref bool __result, ref TextObject reason)
         {
-            InformationManager.DisplayMessage(new InformationMessage(
-                $"[DEBUG] CanMakeTradeAgreement: kingdom={kingdom?.Name}, ban={MySettings.Instance?.BanVanillaDiplomacy}",
-                Colors.Yellow));
-
             if (MySettings.Instance?.BanVanillaDiplomacy == true
                 && !AIChatClient.IsAgentDiplomacyInProgress
                 && kingdom == Hero.MainHero.MapFaction)
@@ -102,6 +100,33 @@ namespace MyFirstMod
                 reason = new TextObject("{=MFM_diplo_ban}原版外交已禁用。请按 M 键打开秘书处，通过 AI 执行外交决策。", null);
                 return false;
             }
+            return true;
+        }
+
+        public static bool BanAddDecision(KingdomDecision decision)
+        {
+            if (MySettings.Instance?.BanVanillaDiplomacy == true
+                && !AIChatClient.IsAgentDiplomacyInProgress
+                && decision.ProposerClan == Clan.PlayerClan)
+                return false;
+            return true;
+        }
+
+        public static bool BanDeclareWar(IFaction faction1)
+        {
+            if (MySettings.Instance?.BanVanillaDiplomacy == true
+                && !AIChatClient.IsAgentDiplomacyInProgress
+                && faction1 == Hero.MainHero.MapFaction)
+                return false;
+            return true;
+        }
+
+        public static bool BanMakePeace(IFaction faction1)
+        {
+            if (MySettings.Instance?.BanVanillaDiplomacy == true
+                && !AIChatClient.IsAgentDiplomacyInProgress
+                && faction1 == Hero.MainHero.MapFaction)
+                return false;
             return true;
         }
     }
