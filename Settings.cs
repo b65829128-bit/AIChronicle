@@ -402,6 +402,24 @@ namespace MyFirstMod
             }
         }
 
+        private int _kingActivationDays = 30;
+
+        [SettingPropertyInteger("国王激活间隔（天）", 5, 120, Order = 10, RequireRestart = false,
+            HintText = "国王 Agent 的定期外交审视间隔。间隔越短 Token 消耗越大。\n推荐范围：15-60 天。")]
+        [SettingPropertyGroup("游戏设置")]
+        public int KingActivationDays
+        {
+            get => _kingActivationDays;
+            set
+            {
+                if (_kingActivationDays != value)
+                {
+                    _kingActivationDays = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private int _maxTokens = 500;
 
         [SettingPropertyInteger("最大 Token 数", 50, 4096, Order = 5, RequireRestart = false,

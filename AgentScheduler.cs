@@ -30,7 +30,6 @@ namespace MyFirstMod
         private static Task? _currentTask;
         private static int _currentProcessingDepth = -1;
         private static readonly Dictionary<Kingdom, CampaignTime> _lastKingActivation = new();
-        private static readonly CampaignTime KingActivationInterval = CampaignTime.Days(30f);
         private static int _warmupFrames = 120;
         private static int _nextKingIndex = 0;
 
@@ -94,8 +93,9 @@ namespace MyFirstMod
                     continue;
 
                 var now = CampaignTime.Now;
+                var intervalDays = MySettings.Instance?.KingActivationDays ?? 30;
                 if (_lastKingActivation.TryGetValue(kingdom, out var lastActivation)
-                    && (now - lastActivation).ToDays < KingActivationInterval.ToDays)
+                    && (now - lastActivation).ToDays < intervalDays)
                     continue;
 
                 _lastKingActivation[kingdom] = now;
