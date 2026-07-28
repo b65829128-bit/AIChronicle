@@ -207,12 +207,27 @@ namespace MyFirstMod
                     if (agentFaction.IsKingdomFaction)
                     {
                         var kingdom = agentFaction as Kingdom;
+                        var agentIsMerc = agentHero.Clan?.IsUnderMercenaryService == true;
+                        var targetIsMerc = targetHero.Clan?.IsUnderMercenaryService == true;
+
                         if (kingdom != null && agentHero == kingdom.Leader)
-                            sb.AppendLine($"对方与你同属{agentFaction.Name}。你是该王国的君主，对方是你的封臣。");
+                        {
+                            var desc = targetIsMerc ? "雇佣兵首领" : "封臣";
+                            sb.AppendLine($"对方与你同属{agentFaction.Name}。你是该王国的君主，对方是你的{desc}。");
+                        }
                         else if (kingdom != null && targetHero == kingdom.Leader)
-                            sb.AppendLine($"对方与你同属{targetFaction.Name}。对方是你的君主，你是其封臣。");
+                        {
+                            var desc = agentIsMerc ? "雇佣兵首领" : "封臣";
+                            sb.AppendLine($"对方与你同属{targetFaction.Name}。对方是你的君主，你是其{desc}。");
+                        }
                         else if (agentHero.Clan == targetHero.Clan)
                             sb.AppendLine($"对方与你同属{agentHero.Clan?.Name?.ToString() ?? "同一家族"}。你们是同一家族的成员。");
+                        else if (agentIsMerc && targetIsMerc)
+                            sb.AppendLine($"对方与你同属{agentFaction.Name}。你们都是该王国麾下的雇佣兵。");
+                        else if (agentIsMerc)
+                            sb.AppendLine($"对方与你同属{agentFaction.Name}。对方是该王国的封臣，你是雇佣兵。");
+                        else if (targetIsMerc)
+                            sb.AppendLine($"对方与你同属{agentFaction.Name}。对方是雇佣兵，你是该王国的封臣。");
                         else
                             sb.AppendLine($"对方与你同属{agentFaction.Name}。你们同为该王国的封臣。");
                     }
