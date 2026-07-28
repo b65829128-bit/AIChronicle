@@ -146,6 +146,7 @@ _Module/Prompts/
 | 最大好感变化 | Agent 单次修改好感度的上限 | `5` |
 | 信件级联深度上限 | NPC 间连环写信的最大层数 | `5` |
 | 环境扫描半径（km） | query_surroundings 扫描半径硬上限 | `20` |
+| 禁止原版外交（Agent 主导） | 禁止原版 AI 外交，所有外交由国王 Agent 决策 | 关闭 |
 | 对话字体大小 | 聊天窗口中对话内容的字号 | `24` |
 | 角色名字体大小 | 聊天窗口中角色名称的字号 | `22` |
 | 时间戳字体大小 | 聊天窗口中时间戳的字号 | `22` |
@@ -205,6 +206,7 @@ MyFirstMod/
 ├── PromptManager.cs      # 提示词管理器（文件热重载、战役目录、角色 JSON 读写）
 ├── AgentManager.cs       # Agent 管理器（NPC 文件系统、路径权限、工具执行）
 ├── AgentScheduler.cs     # 信件异步事件驱动调度器
+├── DiplomacyBanPatch.cs  # Harmony 补丁，禁止原版 AI 外交（MCM 可开关）
 ├── Entity.cs             # Entity 数据模型（统一玩家/NPC，附能力标签）
 ├── EntityManager.cs      # Entity 生命周期管理、查找与缓存
 ├── ContextBuilder.cs     # 动态上下文组装（persona + 能力 + 模板）

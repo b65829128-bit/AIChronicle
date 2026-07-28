@@ -384,6 +384,24 @@ namespace MyFirstMod
             }
         }
 
+        private bool _banVanillaDiplomacy = false;
+
+        [SettingPropertyBool("禁止原版外交（Agent 主导）", Order = 9, RequireRestart = false,
+            HintText = "开启后原版 AI 不再自动宣战/议和/结盟/贸易，所有外交行为由国王 Agent 决策。\n便于调试和体验完整的 Agent 驱动外交。")]
+        [SettingPropertyGroup("游戏设置")]
+        public bool BanVanillaDiplomacy
+        {
+            get => _banVanillaDiplomacy;
+            set
+            {
+                if (_banVanillaDiplomacy != value)
+                {
+                    _banVanillaDiplomacy = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private int _maxTokens = 500;
 
         [SettingPropertyInteger("最大 Token 数", 50, 4096, Order = 5, RequireRestart = false,

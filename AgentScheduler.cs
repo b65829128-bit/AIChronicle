@@ -81,7 +81,7 @@ namespace MyFirstMod
 
                 _lastKingActivation[kingdom] = now;
 
-                var entity = EntityManager.GetEntityByHero(ruler);
+                var entity = EntityManager.GetOrCreateEntity(ruler);
                 if (entity == null) continue;
 
                 var pendingProposals = AgentManager.ListPendingProposals(entity.Id);
