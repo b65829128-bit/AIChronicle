@@ -102,6 +102,7 @@ namespace MyFirstMod
 
                 var entity = EntityManager.GetOrCreateEntity(ruler);
                 if (entity == null) continue;
+                if (entity.Controller == EntityController.Human) continue;
 
                 var pendingProposals = AgentManager.ListPendingProposals(entity.Id);
                 var proposalLines = "";
