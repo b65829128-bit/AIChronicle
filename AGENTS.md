@@ -628,7 +628,7 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | dotnet CLI | `dotnet` | 编译、创建新项目 |
 | Rider | `C:\Program Files\JetBrains\JetBrains Rider 2026.2\bin\rider64.exe` | IDE |
 
-### 游戏工具（tools.json，17 个）
+### 游戏工具（tools.json，18 个）
 
 | 工具 | 类别 | 说明 |
 |------|------|------|
@@ -650,6 +650,7 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | `patrol_settlement` | 军事 | 巡逻定居点周边（持续性，48h 签到） |
 | `escort_party` | 军事 | 护送跟随另一支部队（持续性，24h 签到） |
 | `go_around_party` | 行军 | 绕行回避某支部队 |
+| `query_war_status` | 查询 | 查询王国战争统计（双方阵亡/攻城/劫掠数） |
 | `cancel_action` | 控制 | 取消当前任务，回归自主 AI |
 
 ### 文件工具（agent_tools.json，8 个）

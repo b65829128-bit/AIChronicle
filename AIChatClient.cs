@@ -158,6 +158,9 @@ namespace MyFirstMod
                     case "query_kingdom_clans":
                         return ExecuteQueryKingdomClans(args["kingdom_name"]?.ToString() ?? "");
 
+                    case "query_war_status":
+                        return ExecuteQueryWarStatus(args["kingdom_name"]?.ToString());
+
                     case "move_to_settlement":
                         return ExecuteMoveToSettlement(args["settlement_name"]?.ToString() ?? "");
 
@@ -670,6 +673,86 @@ namespace MyFirstMod
             else
                 foreach (var (_, desc) in nearbyParties.Take(maxParties))
                     sb.AppendLine(desc);
+
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string ExecuteQueryWarStatus(string? kingdomName)
+        {
+            if (Campaign.Current == null)
+                return "[错误] 战役未加载";
+
+            Kingdom? kingdom;
+            if (string.IsNullOrEmpty(kingdomName))
+            {
+                if (_currentHero == null)
+                    return "[错误] 无当前领主，且未指定王国名称";
+                kingdom = _currentHero.MapFaction as Kingdom;
+                if (kingdom == null)
+                    return "[错误] 当前领主不属于任何王国";
+            }
+            else
+            {
+                kingdom = null;
+                foreach (var k in Kingdom.All)
+                {
+                    var kName = k.Name?.ToString() ?? "";
+                    if (kName.Contains(kingdomName!) || kingdomName!.Contains(kName))
+                    {
+                        kingdom = k;
+                        break;
+                    }
+                }
+                if (kingdom == null)
+                    return $"[未找到] 名为 \"{kingdomName}\" 的王国";
+            }
+
+            var wars = new List<Kingdom>();
+            foreach (var other in Kingdom.All)
+            {
+                if (other == kingdom || other.IsEliminated) continue;
+                if (kingdom.IsAtWarWith(other))
+                    wars.Add(other);
+            }
+
+            if (wars.Count == 0)
+            {
+                var name = kingdom.Name?.ToString() ?? "?";
+                return $"{name} 当前处于和平状态。";
+            }
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"===== {kingdom.Name} 战争状态 =====");
+
+            foreach (var enemy in wars)
+            {
+                var stance = kingdom.GetStanceWith(enemy);
+                var warDays = (int)stance.WarStartDate.ElapsedDaysUntilNow;
+
+                var ourCasualties = stance.GetCasualties(kingdom);
+                var enemyCasualties = stance.GetCasualties(enemy);
+                var ourSieges = stance.GetSuccessfulSieges(kingdom);
+                var enemySieges = stance.GetSuccessfulSieges(enemy);
+                var ourTowns = stance.GetSuccessfulTownSieges(kingdom);
+                var enemyTowns = stance.GetSuccessfulTownSieges(enemy);
+                var ourRaids = stance.GetSuccessfulRaids(kingdom);
+                var enemyRaids = stance.GetSuccessfulRaids(enemy);
+
+                var ourCastles = ourSieges - ourTowns;
+                var enemyCastles = enemySieges - enemyTowns;
+
+                sb.AppendLine();
+                sb.AppendLine($"【对 {enemy.Name}】已持续 {warDays} 天");
+
+                if (ourCasualties > 0 || enemyCasualties > 0)
+                    sb.AppendLine($"  我方阵亡 {enemyCasualties} | 敌方阵亡 {ourCasualties}");
+                if (ourTowns > 0 || enemyTowns > 0)
+                    sb.AppendLine($"  攻下城镇 {ourTowns} 座 | 丢失城镇 {enemyTowns} 座");
+                if (ourCastles > 0 || enemyCastles > 0)
+                    sb.AppendLine($"  攻下城堡 {ourCastles} 座 | 丢失城堡 {enemyCastles} 座");
+                if (ourRaids > 0 || enemyRaids > 0)
+                    sb.AppendLine($"  劫掠村庄 {ourRaids} 次 | 被劫掠 {enemyRaids} 次");
+            }
 
             return sb.ToString().TrimEnd();
         }

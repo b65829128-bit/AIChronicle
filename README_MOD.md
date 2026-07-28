@@ -41,6 +41,7 @@
   - Agent 可以调用 `query_character` 查询任意人物的公开信息
   - Agent 可以调用 `query_recent_events` 查询任意人物的近期事件（比武夺冠、被俘、释放、婚嫁、阵亡等百科记录）
   - Agent 可以调用 `query_surroundings` 扫描周围环境：当前位置、附近城镇/城堡、附近部队及其阵营关系和距离
+  - Agent 可以调用 `query_war_status` 查询王国战争状态：双方阵亡数、攻下的城镇/城堡、劫掠村庄数
   - Agent 可以调用 `grep` 在个人文件系统中按关键词搜索，定位到具体文件和行号后再用 `read_file` 精读
 
 ### 书信系统

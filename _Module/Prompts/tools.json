@@ -254,6 +254,17 @@
     ]
   },
   {
+    "name": "query_war_status",
+    "description": "Get the war statistics between two kingdoms. Shows casualties, captured towns/castles, and raids — broken down per side.\n\nUsage:\n- Call this to understand how a war is going — who is winning, how much damage each side has suffered and inflicted.\n- The kingdom_name parameter is the kingdom to check wars for. Omit to query your own kingdom.\n- For each enemy kingdom currently at war, returns: war duration, casualties inflicted/received, towns captured/lost, castles captured/lost, raids conducted/suffered.\n- This is the same data the game uses to compute war progress and peace decisions.\n- If the kingdom is at peace, returns a peace summary instead.",
+    "parameters": [
+      {
+        "name": "kingdom_name",
+        "type": "string",
+        "description": "Name of the kingdom to query war stats for. Omit to query your own kingdom."
+      }
+    ]
+  },
+  {
     "name": "query_kingdom_clans",
     "description": "List all clans belonging to a specific kingdom.\n\nUsage:\n- Call this to understand which noble houses comprise a kingdom.\n- The kingdom_name parameter should match the Chinese or English kingdom name.\n- Returns: list of clans with their tier, leader, and whether they are the ruling clan.\n- This is public encyclopedia information.",
     "parameters": [
