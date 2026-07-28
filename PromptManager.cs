@@ -129,6 +129,7 @@ namespace MyFirstMod
             CopyPromptToCampaign("agent_system.txt");
             CopyPromptToCampaign("tool_call_prompt.txt");
             CopyPromptToCampaign("persona_generation.txt");
+            CopyPromptToCampaign("diplomacy_rules.txt");
             CopyTemplateToCampaign("context_template.txt");
         }
 

@@ -72,6 +72,7 @@ _Module/Prompts/
 ├── agent_tools.json             # Agent 文件工具定义（热重载）
 ├── tool_call_prompt.txt         # 独立工具调用的代理提示词（热重载）
 ├── persona_generation.txt       # NPC性格生成提示词（玩家可编辑，热重载）
+├── diplomacy_rules.txt          # 外交决策规则（玩家可编辑，热重载）
 ├── Templates/                   # NPC 目录模板
 │   ├── persona.txt
 │   ├── context_template.txt
@@ -87,6 +88,7 @@ _Module/Prompts/
         ├── tool_call_prompt.txt  # 本战役工具调用提示词（热重载）
         ├── persona_generation.txt # 本战役性格生成提示词（热重载）
         ├── context_template.txt  # 本战役 Context 模板（热重载）
+        ├── diplomacy_rules.txt   # 本战役外交决策规则（热重载）
         └── NPCs/                 # Agent 管理的 NPC 文件系统
             └── {entity_id}/        # 每个 Entity 独立目录
                 ├── character.json # 基础 ID 信息（只读，自动生成）

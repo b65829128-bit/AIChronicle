@@ -27,6 +27,9 @@ namespace MyFirstMod
             "give_gold", "request_gold"
         };
 
+        private static string _cachedDiplomacyRules = "";
+        private static DateTime _lastDiplomacyRulesCheck;
+
         public static string Build(string agentId, string targetId, string intent)
         {
             var agent = EntityManager.GetEntityById(agentId);
@@ -194,18 +197,30 @@ namespace MyFirstMod
 
         private static string BuildDiplomacyRules()
         {
-            return
-                "你是{name}，{title}。你是{name}所在王国的最高统治者。这不是闲聊——你必须根据实际数据做出并执行外交决策。\n\n"
-                + "你必须严格按照以下步骤行事，不得跳过：\n"
-                + "1. 先调用 query_war_status 查看你王国所有战争的实时战况\n"
-                + "2. 如果有待处理的外交提案，用 respond_to_diplomacy_proposal 逐个处理（接受或拒绝）\n"
-                + "3. 根据战况和提案结果，决定是否采取新的外交行动\n\n"
-                + "重要规则：\n"
-                + "- 不要说你会做某件事——必须调用对应的 function。例如，说「我决定议和」而不调用 propose_peace 等于什么都没做\n"
-                + "- 每次回复最多调用 3 个工具。先处理提案，再决定新的行动\n"
-                + "- 如果没有任何待处理提案且当前没有战争，可以直接表示「暂无需要处理的外交事务」并停止\n"
-                + "- 不要虚构数据——所有战争统计必须来自 query_war_status 的返回值\n"
-                + "- 你的决策是你的决策——不需要征求他人意见，你是国王";
+            var path = Path.Combine(PromptManager.CampaignDir, "diplomacy_rules.txt");
+            if (!File.Exists(path))
+                path = Path.Combine(PromptManager.PromptsBaseDir, "diplomacy_rules.txt");
+            if (!File.Exists(path))
+                return
+                    "你是{name}，{title}。你是{name}所在王国的最高统治者。这不是闲聊——你必须根据实际数据做出并执行外交决策。\n\n"
+                    + "你必须严格按照以下步骤行事，不得跳过：\n"
+                    + "1. 先调用 query_war_status 查看你王国所有战争的实时战况\n"
+                    + "2. 如果有待处理的外交提案，用 respond_to_diplomacy_proposal 逐个处理（接受或拒绝）\n"
+                    + "3. 根据战况和提案结果，决定是否采取新的外交行动\n\n"
+                    + "重要规则：\n"
+                    + "- 不要说你会做某件事——必须调用对应的 function。例如，说「我决定议和」而不调用 propose_peace 等于什么都没做\n"
+                    + "- 每次回复最多调用 3 个工具。先处理提案，再决定新的行动\n"
+                    + "- 如果没有任何待处理提案且当前没有战争，可以直接表示「暂无需要处理的外交事务」并停止\n"
+                    + "- 不要虚构数据——所有战争统计必须来自 query_war_status 的返回值\n"
+                    + "- 你的决策是你的决策——不需要征求他人意见，你是国王";
+
+            var lastWrite = File.GetLastWriteTimeUtc(path);
+            if (_cachedDiplomacyRules == "" || lastWrite > _lastDiplomacyRulesCheck)
+            {
+                _cachedDiplomacyRules = File.ReadAllText(path, Encoding.UTF8);
+                _lastDiplomacyRulesCheck = lastWrite;
+            }
+            return _cachedDiplomacyRules;
         }
 
         private static string BuildObjectiveRelationship(Hero agentHero, Hero targetHero)
