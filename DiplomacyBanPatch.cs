@@ -49,22 +49,12 @@ namespace MyFirstMod
     [HarmonyPatch(typeof(KingdomElection), "ApplyChosenOutcome")]
     public static class BanPlayerDiplomacyPatch
     {
-        public static bool Prefix(KingdomDecision ____decision)
+        public static bool Prefix()
         {
             InformationManager.DisplayMessage(new InformationMessage(
-                $"[DEBUG] KingdomElection.ApplyChosenOutcome: proposer={____decision?.ProposerClan?.Name}, ban={MySettings.Instance?.BanVanillaDiplomacy}",
+                "[DEBUG] KingdomElection.ApplyChosenOutcome FIRED!",
                 Colors.Yellow));
-
-            if (MySettings.Instance?.BanVanillaDiplomacy == true
-                && !AIChatClient.IsAgentDiplomacyInProgress
-                && ____decision?.ProposerClan == Clan.PlayerClan)
-            {
-                InformationManager.DisplayMessage(new InformationMessage(
-                    "[MyFirstMod] 拦截了一次原版外交执行。",
-                    Colors.Cyan));
-                return false;
-            }
-            return true;
+            return false;
         }
     }
 }
