@@ -30,7 +30,7 @@ namespace MyFirstMod
         private static Task? _currentTask;
         private static int _currentProcessingDepth = -1;
         private static readonly Dictionary<Kingdom, CampaignTime> _lastKingActivation = new();
-        private static readonly CampaignTime KingActivationInterval = CampaignTime.Days(15f);
+        private static readonly CampaignTime KingActivationInterval = CampaignTime.Days(30f);
         private static int _warmupFrames = 120;
 
         public static bool IsProcessing => _currentTask != null && !_currentTask.IsCompleted;
