@@ -16,6 +16,7 @@ namespace MyFirstMod
         private static Hero? _pendingLetterHero;
         private static LordChatBehavior? _chatBehavior;
         private static bool _prevLetterO;
+        private static bool _prevChanceryP;
 
         protected override void OnSubModuleLoad()
         {
@@ -65,6 +66,21 @@ namespace MyFirstMod
                     LetterListScreen.Close();
             }
             _prevLetterO = oDown;
+
+            var pDown = Input.IsKeyDown(InputKey.P);
+            if (pDown && !_prevChanceryP && Campaign.Current != null)
+            {
+                if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen)
+                    AIChatScreen.OpenChancery();
+                else if (AIChatScreen.IsOpen)
+                    AIChatScreen.Close();
+                else if (LetterListScreen.IsOpen)
+                {
+                    LetterListScreen.Close();
+                    AIChatScreen.OpenChancery();
+                }
+            }
+            _prevChanceryP = pDown;
 
             if (_pendingChatHero != null)
             {

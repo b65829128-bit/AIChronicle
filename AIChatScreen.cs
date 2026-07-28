@@ -14,6 +14,11 @@ namespace MyFirstMod
 
         public static bool IsOpen => _layer != null;
 
+        public static void Close()
+        {
+            _vm?.OnClose?.Invoke();
+        }
+
         public static void RequestOpen(Hero hero)
         {
             if (_layer != null)
@@ -38,6 +43,45 @@ namespace MyFirstMod
         public static void DoOpenLetter(Hero hero)
         {
             DoOpenWithIntent(hero, "letter");
+        }
+
+        public static void OpenChancery()
+        {
+            if (_layer != null) return;
+            var hero = Hero.MainHero;
+            if (hero == null) return;
+
+            var topScreen = ScreenManager.TopScreen;
+            if (topScreen == null) return;
+
+            _parentScreen = topScreen;
+            _vm = new AIChatScreenVM(hero, "chancery");
+
+            _vm.OnClose = () =>
+            {
+                if (_layer != null && _parentScreen != null)
+                    _parentScreen.RemoveLayer(_layer);
+                _vm?.OnFinalize();
+                _layer = null;
+                _vm = null;
+                _parentScreen = null;
+            };
+
+            try
+            {
+                _layer = new GauntletLayer("AIChatLayer", 1000);
+                _layer.LoadMovie("AIChatScreen", _vm);
+                _layer.InputRestrictions.SetInputRestrictions(true, InputUsageMask.All);
+                _layer.IsFocusLayer = true;
+                _parentScreen.AddLayer(_layer);
+            }
+            catch (Exception ex)
+            {
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"[MyFirstMod] 打开秘书处失败：{ex.Message}",
+                    Colors.Red));
+                _layer = null;
+            }
         }
 
         private static void DoOpenWithIntent(Hero hero, string intent)

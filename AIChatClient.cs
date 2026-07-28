@@ -1387,6 +1387,13 @@ namespace MyFirstMod
             if (senderEntity == null) return "[错误] 发信人实体不存在";
             var resolvedId = EntityManager.ResolveEntityId(recipientId);
             if (resolvedId == null) return $"[错误] 未找到名为 \"{recipientId}\" 的实体";
+
+            if (_currentHero == Hero.MainHero)
+            {
+                var known = SubModule.GetKnownNpcIds();
+                if (!known.Contains(resolvedId))
+                    return $"[错误] 你还没有和 {recipientId} 交谈过，无法给陌生人写信。请先与对方进行 AI 聊天。";
+            }
             AgentManager.StoreOutgoingLetter(senderEntity.Id, resolvedId, content);
             var recipientEntity = EntityManager.GetEntityById(resolvedId);
             var recipientName = recipientEntity?.Name ?? resolvedId;

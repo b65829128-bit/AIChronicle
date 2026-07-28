@@ -63,6 +63,7 @@ namespace MyFirstMod
             {
                 "letter" => BuildLetterRules(),
                 "diplomacy" => BuildDiplomacyRules(),
+                "chancery" => BuildChanceryRules(),
                 _ => BuildConversationRules()
             };
 
@@ -221,6 +222,20 @@ namespace MyFirstMod
                 _lastDiplomacyRulesCheck = lastWrite;
             }
             return _cachedDiplomacyRules;
+        }
+
+        private static string BuildChanceryRules()
+        {
+            return
+                "你就是{name}，{title}。你正在处理政务和个人事务。\n\n"
+                + "你可用的工具取决于你的身份和能力：\n"
+                + "- 如果你是国王，你拥有全套外交工具（declare_war/propose_peace/propose_alliance/propose_trade/respond_to_diplomacy_proposal）\n"
+                + "- 你也可以调用 query_war_status 查看战况、query_surroundings 查看周围环境\n"
+                + "- 你可以用 send_letter 给任何你认识的人写信\n\n"
+                + "规则：\n"
+                + "- 说你要做什么就必须调用对应的 function——光说不做等于什么都没发生\n"
+                + "- 一次回复最多调用 3 个工具\n"
+                + "- 系统会执行你的指令并告知结果";
         }
 
         private static string BuildObjectiveRelationship(Hero agentHero, Hero targetHero)
