@@ -109,7 +109,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **书信模式** | 支持书信 intent，工具按场景限制（信件中禁用 give_gold/request_gold），O 键唤起收信人列表 |
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 25 个工具定义在 `tools.json`（17 个游戏工具）和 `agent_tools.json`（8 个文件工具）中，热重载，不硬编码 |
+| **工具定义文件化** | 31 个工具定义在 `tools.json`（23 个游戏工具）和 `agent_tools.json`（8 个文件工具）中，热重载，不硬编码 |
 | **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`tool_call_prompt.txt`、`persona_generation.txt`、`context_template.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环（max N 轮或无限），模型调用工具 → 执行 → 追加结果 → 重请求 |
 | **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
@@ -628,7 +628,7 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | dotnet CLI | `dotnet` | 编译、创建新项目 |
 | Rider | `C:\Program Files\JetBrains\JetBrains Rider 2026.2\bin\rider64.exe` | IDE |
 
-### 游戏工具（tools.json，18 个）
+### 游戏工具（tools.json，23 个）
 
 | 工具 | 类别 | 说明 |
 |------|------|------|
@@ -651,6 +651,11 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | `escort_party` | 军事 | 护送跟随另一支部队（持续性，24h 签到） |
 | `go_around_party` | 行军 | 绕行回避某支部队 |
 | `query_war_status` | 查询 | 查询王国战争统计（双方阵亡/攻城/劫掠数） |
+| `declare_war` | 外交 | 向另一王国宣战（单向，国王专属） |
+| `propose_peace` | 外交 | 向另一王国提议议和（双向，附赔偿方案，国王专属） |
+| `propose_alliance` | 外交 | 向另一王国提议结盟（双向，国王专属） |
+| `propose_trade` | 外交 | 向另一王国提议贸易协定（双向，国王专属） |
+| `respond_to_diplomacy_proposal` | 外交 | 接受或拒绝收到的外交提案（国王专属） |
 | `cancel_action` | 控制 | 取消当前任务，回归自主 AI |
 
 ### 文件工具（agent_tools.json，8 个）

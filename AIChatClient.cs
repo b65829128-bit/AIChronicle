@@ -10,6 +10,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.LogEntries;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
@@ -160,6 +161,26 @@ namespace MyFirstMod
 
                     case "query_war_status":
                         return ExecuteQueryWarStatus(args["kingdom_name"]?.ToString());
+
+                    case "declare_war":
+                        return ExecuteDeclareWar(args["target_kingdom"]?.ToString() ?? "");
+
+                    case "propose_peace":
+                        return ExecuteProposePeace(
+                            args["target_kingdom"]?.ToString() ?? "",
+                            args["tribute_amount"]?.ToObject<int>() ?? 0,
+                            args["tribute_days"]?.ToObject<int>() ?? 0);
+
+                    case "propose_alliance":
+                        return ExecuteProposeAlliance(args["target_kingdom"]?.ToString() ?? "");
+
+                    case "propose_trade":
+                        return ExecuteProposeTrade(args["target_kingdom"]?.ToString() ?? "");
+
+                    case "respond_to_diplomacy_proposal":
+                        return ExecuteRespondToProposal(
+                            args["proposal_id"]?.ToString() ?? "",
+                            args["accepted"]?.ToObject<bool>() ?? false);
 
                     case "move_to_settlement":
                         return ExecuteMoveToSettlement(args["settlement_name"]?.ToString() ?? "");
@@ -755,6 +776,201 @@ namespace MyFirstMod
             }
 
             return sb.ToString().TrimEnd();
+        }
+
+        private static Kingdom? FindKingdom(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            foreach (var k in Kingdom.All)
+            {
+                var kName = k.Name?.ToString() ?? "";
+                if (kName.Contains(name) || name.Contains(kName))
+                    return k;
+            }
+            return null;
+        }
+
+        private static string ExecuteDeclareWar(string targetKingdomName)
+        {
+            if (_currentHero == null) return "[错误] 无当前领主";
+            var myKingdom = _currentHero.MapFaction as Kingdom;
+            if (myKingdom == null) return "[错误] 你当前不属于任何王国";
+            if (myKingdom.RulingClan?.Leader != _currentHero) return "[错误] 只有王国统治者才能宣战";
+            var target = FindKingdom(targetKingdomName);
+            if (target == null) return $"[错误] 未找到王国：{targetKingdomName}";
+            if (target == myKingdom) return "[错误] 不能对自己宣战";
+            if (myKingdom.IsAtWarWith(target)) return $"已经与{target.Name}处于交战状态。";
+            DeclareWarAction.ApplyByKingdomDecision(myKingdom, target);
+            return $"已向{target.Name}宣战。";
+        }
+
+        private static string ExecuteProposePeace(string targetKingdomName, int tributeAmount, int tributeDays)
+        {
+            if (_currentHero == null) return "[错误] 无当前领主";
+            var myKingdom = _currentHero.MapFaction as Kingdom;
+            if (myKingdom == null) return "[错误] 你当前不属于任何王国";
+            if (myKingdom.RulingClan?.Leader != _currentHero) return "[错误] 只有王国统治者才能提出议和";
+            var target = FindKingdom(targetKingdomName);
+            if (target == null) return $"[错误] 未找到王国：{targetKingdomName}";
+            if (!myKingdom.IsAtWarWith(target)) return $"[错误] 当前并未与{target.Name}交战";
+            var myEntity = EntityManager.GetEntityByHero(_currentHero);
+            var targetRuler = target.RulingClan?.Leader;
+            if (targetRuler == null) return $"[错误] {target.Name} 没有统治者";
+            var targetEntity = EntityManager.GetEntityByHero(targetRuler);
+            if (myEntity == null || targetEntity == null) return "[错误] 实体解析失败";
+            var tributeArg = $"{tributeAmount}_{tributeDays}";
+            AgentManager.StoreDiplomacyProposal(myEntity.Id, targetEntity.Id, "peace", tributeArg);
+            QueueKingActivation(targetEntity.Id, myEntity.Id,
+                $"来自 {myEntity.Name}（{myKingdom.Name} 统治者）的议和提案：愿意支付每日 {tributeAmount} 金币、持续 {tributeDays} 天作为赔款。你接受这个议和条件吗？请用 respond_to_diplomacy_proposal 回复。");
+            return $"议和提案已发送给{target.Name}的统治者{targetRuler.Name}，等待回复。";
+        }
+
+        private static string ExecuteProposeAlliance(string targetKingdomName)
+        {
+            if (_currentHero == null) return "[错误] 无当前领主";
+            var myKingdom = _currentHero.MapFaction as Kingdom;
+            if (myKingdom == null) return "[错误] 你当前不属于任何王国";
+            if (myKingdom.RulingClan?.Leader != _currentHero) return "[错误] 只有王国统治者才能提议结盟";
+            var target = FindKingdom(targetKingdomName);
+            if (target == null) return $"[错误] 未找到王国：{targetKingdomName}";
+            if (target == myKingdom) return "[错误] 不能和自己结盟";
+            if (myKingdom.IsAtWarWith(target)) return $"[错误] 无法与交战中的王国结盟";
+            var targetRuler = target.RulingClan?.Leader;
+            if (targetRuler == null) return $"[错误] {target.Name} 没有统治者";
+            var myEntity = EntityManager.GetEntityByHero(_currentHero);
+            var targetEntity = EntityManager.GetEntityByHero(targetRuler);
+            if (myEntity == null || targetEntity == null) return "[错误] 实体解析失败";
+            AgentManager.StoreDiplomacyProposal(myEntity.Id, targetEntity.Id, "alliance");
+            QueueKingActivation(targetEntity.Id, myEntity.Id,
+                $"来自 {myEntity.Name}（{myKingdom.Name} 统治者）的结盟提案。你接受这个结盟邀请吗？请用 respond_to_diplomacy_proposal 回复。");
+            return $"结盟提案已发送给{target.Name}的统治者{targetRuler.Name}，等待回复。";
+        }
+
+        private static string ExecuteProposeTrade(string targetKingdomName)
+        {
+            if (_currentHero == null) return "[错误] 无当前领主";
+            var myKingdom = _currentHero.MapFaction as Kingdom;
+            if (myKingdom == null) return "[错误] 你当前不属于任何王国";
+            if (myKingdom.RulingClan?.Leader != _currentHero) return "[错误] 只有王国统治者才能提议贸易协定";
+            var target = FindKingdom(targetKingdomName);
+            if (target == null) return $"[错误] 未找到王国：{targetKingdomName}";
+            if (target == myKingdom) return "[错误] 不能和自己签订贸易协定";
+            if (myKingdom.IsAtWarWith(target)) return $"[错误] 无法与交战中的王国签订贸易协定";
+            var targetRuler = target.RulingClan?.Leader;
+            if (targetRuler == null) return $"[错误] {target.Name} 没有统治者";
+            var myEntity = EntityManager.GetEntityByHero(_currentHero);
+            var targetEntity = EntityManager.GetEntityByHero(targetRuler);
+            if (myEntity == null || targetEntity == null) return "[错误] 实体解析失败";
+            AgentManager.StoreDiplomacyProposal(myEntity.Id, targetEntity.Id, "trade");
+            QueueKingActivation(targetEntity.Id, myEntity.Id,
+                $"来自 {myEntity.Name}（{myKingdom.Name} 统治者）的贸易协定提案。你接受这个贸易协定吗？请用 respond_to_diplomacy_proposal 回复。");
+            return $"贸易协定提案已发送给{target.Name}的统治者{targetRuler.Name}，等待回复。";
+        }
+
+        private static string ExecuteRespondToProposal(string proposalId, bool accepted)
+        {
+            if (_currentHero == null) return "[错误] 无当前领主";
+            var myKingdom = _currentHero.MapFaction as Kingdom;
+            if (myKingdom == null) return "[错误] 你当前不属于任何王国";
+            if (myKingdom.RulingClan?.Leader != _currentHero) return "[错误] 只有王国统治者才能处理外交提案";
+
+            var content = AgentManager.ReadDiplomacyProposal(proposalId);
+            if (content == null) return $"[错误] 未找到提案：{proposalId}";
+
+            var parts = proposalId.Split('_');
+            if (parts.Length < 3) return $"[错误] 无效的提案ID格式";
+
+            var proposerId = "";
+            var targetId = "";
+            var type = "";
+            var toIdx = -1;
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (parts[i] == "to")
+                {
+                    proposerId = string.Join("_", parts.Take(i));
+                    toIdx = i;
+                    break;
+                }
+            }
+            if (toIdx < 0) return $"[错误] 无法解析提案ID";
+            for (int i = toIdx + 1; i < parts.Length; i++)
+            {
+                if (parts[i] == "peace" || parts[i] == "alliance" || parts[i] == "trade")
+                {
+                    targetId = string.Join("_", parts.Skip(toIdx + 1).Take(i - toIdx - 1));
+                    type = parts[i];
+                    break;
+                }
+            }
+
+            var myEntity = EntityManager.GetEntityByHero(_currentHero);
+            if (myEntity == null || myEntity.Id != targetId)
+                return "[错误] 该提案不是发给你的";
+
+            var proposerEntity = EntityManager.GetOrCreateEntityById(proposerId);
+            if (proposerEntity?.HeroRef == null) return "[错误] 无法找到提案发起人";
+
+            if (!accepted)
+            {
+                AgentManager.DeleteDiplomacyProposal(proposalId);
+                return "已拒绝该提案。";
+            }
+
+            var proposerKingdom = proposerEntity.HeroRef.MapFaction as Kingdom;
+            if (proposerKingdom == null) return "[错误] 提案发起人已不属于任何王国";
+
+            switch (type)
+            {
+                case "peace":
+                {
+                    if (!myKingdom.IsAtWarWith(proposerKingdom)) return "[错误] 当前并未与该王国交战";
+                    var lines = content.Split('\n');
+                    var tribute = "0_0";
+                    foreach (var line in lines)
+                    {
+                        if (line.StartsWith("tribute="))
+                        {
+                            tribute = line.Substring(8);
+                            break;
+                        }
+                    }
+                    var tributeParts = tribute.Split('_');
+                    var tributeAmount = int.TryParse(tributeParts[0], out var a) ? a : 0;
+                    var tributeDays = int.TryParse(tributeParts[1], out var d) ? d : 0;
+                    MakePeaceAction.ApplyByKingdomDecision(proposerKingdom, myKingdom, tributeAmount, tributeDays);
+                    AgentManager.DeleteDiplomacyProposal(proposalId);
+                    return $"已接受议和，与{proposerKingdom.Name}达成和平。";
+                }
+                case "alliance":
+                {
+                    var ab = Campaign.Current.GetCampaignBehavior<IAllianceCampaignBehavior>();
+                    ab.StartAlliance(proposerKingdom, myKingdom);
+                    AgentManager.DeleteDiplomacyProposal(proposalId);
+                    return $"已接受结盟，与{proposerKingdom.Name}组成军事同盟。";
+                }
+                case "trade":
+                {
+                    var tb = Campaign.Current.GetCampaignBehavior<ITradeAgreementsCampaignBehavior>();
+                    tb.MakeTradeAgreement(proposerKingdom, myKingdom, CampaignTime.Years(1f));
+                    AgentManager.DeleteDiplomacyProposal(proposalId);
+                    return $"已接受贸易协定，与{proposerKingdom.Name}建立贸易关系。";
+                }
+                default:
+                    return $"[错误] 未知的提案类型：{type}";
+            }
+        }
+
+        private static void QueueKingActivation(string agentId, string targetId, string message)
+        {
+            AgentScheduler.QueueEvent(new ActivationEvent
+            {
+                Type = ActivationEventType.KingDiplomacy,
+                AgentId = agentId,
+                TargetId = targetId,
+                Content = message,
+                Depth = 0
+            });
         }
 
         private static Settlement? FindSettlement(string name)

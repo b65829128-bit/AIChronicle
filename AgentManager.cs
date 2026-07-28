@@ -26,7 +26,7 @@ namespace MyFirstMod
         private static readonly HashSet<string> _readableDirs = new()
         {
             "", "knowledge", "relationships", "goals", "chat_logs", "decisions",
-            "mailbox", "mailbox/inbox", "mailbox/sent"
+            "mailbox", "mailbox/inbox", "mailbox/sent", "diplomacy"
         };
 
         private static readonly HashSet<string> _writableDirs = new()
@@ -697,6 +697,52 @@ namespace MyFirstMod
             var path = Path.Combine(_baseDir, entityId, "mailbox", "inbox", SanitizeFile(fileName) + ".txt");
             if (!File.Exists(path)) return null;
             return File.ReadAllText(path, Encoding.UTF8).Trim();
+        }
+
+        public static string GetDiplomacyDir()
+        {
+            var dir = Path.Combine(_baseDir, "World", "diplomacy");
+            Directory.CreateDirectory(dir);
+            return dir;
+        }
+
+        public static void StoreDiplomacyProposal(string proposerId, string targetId, string proposalType, string? tributeArg = null)
+        {
+            var dir = GetDiplomacyDir();
+            var fileName = $"{SanitizeDir(proposerId)}_to_{SanitizeDir(targetId)}_{proposalType}.proposal";
+            var path = Path.Combine(dir, fileName);
+            var content = $"proposer={proposerId}\ntarget={targetId}\ntype={proposalType}";
+            if (tributeArg != null)
+                content += $"\ntribute={tributeArg}";
+            File.WriteAllText(path, content, Encoding.UTF8);
+        }
+
+        public static List<string> ListPendingProposals(string entityId)
+        {
+            var dir = GetDiplomacyDir();
+            var results = new List<string>();
+            if (!Directory.Exists(dir)) return results;
+            var sanitizedId = SanitizeDir(entityId);
+            foreach (var file in Directory.GetFiles(dir, $"*_to_{sanitizedId}_*.proposal"))
+            {
+                results.Add(Path.GetFileNameWithoutExtension(file));
+            }
+            return results;
+        }
+
+        public static string? ReadDiplomacyProposal(string proposalFileName)
+        {
+            var dir = GetDiplomacyDir();
+            var path = Path.Combine(dir, SanitizeFile(proposalFileName) + ".proposal");
+            if (!File.Exists(path)) return null;
+            return File.ReadAllText(path, Encoding.UTF8).Trim();
+        }
+
+        public static void DeleteDiplomacyProposal(string proposalFileName)
+        {
+            var dir = GetDiplomacyDir();
+            var path = Path.Combine(dir, SanitizeFile(proposalFileName) + ".proposal");
+            if (File.Exists(path)) File.Delete(path);
         }
 
         private static bool IsPathAllowed(string relPath, bool read, bool write = false)

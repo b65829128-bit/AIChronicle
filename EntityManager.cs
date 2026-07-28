@@ -174,6 +174,8 @@ namespace MyFirstMod
                 caps.Add(EntityCapability.MoveParty);
                 caps.Add(EntityCapability.WaitAtSettlement);
             }
+            if (hero.Clan?.Kingdom?.RulingClan?.Leader == hero)
+                caps.Add(EntityCapability.Diplomat);
             if (hero.Gold > 0)
                 caps.Add(EntityCapability.GiveGold);
             caps.Add(EntityCapability.RequestGold);

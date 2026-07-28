@@ -19,6 +19,7 @@ namespace MyFirstMod
             [EntityCapability.RequestGold] = new[] { "request_gold" },
             [EntityCapability.ChangeRelation] = new[] { "change_relation" },
             [EntityCapability.SendLetter] = new[] { "send_letter" },
+            [EntityCapability.Diplomat] = new[] { "declare_war", "propose_peace", "propose_alliance", "propose_trade", "respond_to_diplomacy_proposal" },
         };
 
         private static readonly HashSet<string> LetterDisabledTools = new()

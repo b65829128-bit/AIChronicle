@@ -345,6 +345,11 @@ namespace MyFirstMod
                                     "query_recent_events" => "查询了近期事件",
                                     "query_surroundings" => "扫描了周围环境",
                                     "query_war_status" => "查询了战争状态",
+                                    "declare_war" => "宣战了",
+                                    "propose_peace" => "提出了议和",
+                                    "propose_alliance" => "提出了结盟",
+                                    "propose_trade" => "提出了贸易协定",
+                                    "respond_to_diplomacy_proposal" => "回复了外交提案",
                                     _ => $"调用了 {tc.Name}"
                                 };
                             }

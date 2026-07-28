@@ -264,6 +264,78 @@
       }
     ]
   },
+    ]
+  },
+  {
+    "name": "declare_war",
+    "description": "Declare war on another kingdom. This is a unilateral action — no consent needed from the target.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom (king/queen).\n- The target_kingdom is the kingdom to declare war on, by Chinese or English name.\n- This takes effect immediately. All current trade agreements with the target will be terminated.\n- Use query_war_status first to evaluate whether war is advisable.\n- Do NOT declare war on your own kingdom or your allies.",
+    "parameters": [
+      {
+        "name": "target_kingdom",
+        "type": "string",
+        "description": "Name of the kingdom to declare war on, in Chinese or English."
+      }
+    ]
+  },
+  {
+    "name": "propose_peace",
+    "description": "Propose a peace treaty to end a war with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You must be at war with the target kingdom.\n- tribute_amount: daily tribute you are willing to pay to end the war (0 if none).\n- tribute_days: how many days to pay tribute for.\n- This is NOT unilateral — the other ruler decides. Be prepared for rejection.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
+    "parameters": [
+      {
+        "name": "target_kingdom",
+        "type": "string",
+        "description": "Name of the kingdom to propose peace with, in Chinese or English."
+      },
+      {
+        "name": "tribute_amount",
+        "type": "integer",
+        "description": "Daily tribute gold to offer (0 for no tribute)."
+      },
+      {
+        "name": "tribute_days",
+        "type": "integer",
+        "description": "Number of days to pay tribute for (0 for no tribute)."
+      }
+    ]
+  },
+  {
+    "name": "propose_alliance",
+    "description": "Propose a military alliance with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You cannot propose alliance if you are at war with the target.\n- Each kingdom can have at most 2 alliances (game rule).\n- An alliance lasts for a limited duration (84 days default).\n- This is NOT unilateral — the other ruler decides.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
+    "parameters": [
+      {
+        "name": "target_kingdom",
+        "type": "string",
+        "description": "Name of the kingdom to propose alliance with, in Chinese or English."
+      }
+    ]
+  },
+  {
+    "name": "propose_trade",
+    "description": "Propose a trade agreement with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You cannot propose trade if you are at war with the target.\n- Each kingdom can have at most 2 trade agreements (game rule).\n- Trade agreements generate gold when caravans visit partner towns.\n- This is NOT unilateral — the other ruler decides.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
+    "parameters": [
+      {
+        "name": "target_kingdom",
+        "type": "string",
+        "description": "Name of the kingdom to propose trade with, in Chinese or English."
+      }
+    ]
+  },
+  {
+    "name": "respond_to_diplomacy_proposal",
+    "description": "Accept or reject a pending diplomatic proposal sent to you by another kingdom's ruler.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- The proposal_id is the filename shown in your pending proposals list.\n- Set accepted=true to agree, or false to reject.\n- If accepted, the action takes effect immediately (peace treaty/alliance/trade agreement formed).\n- If rejected, the proposal is discarded.\n- You should only respond to proposals targeted at your kingdom.",
+    "parameters": [
+      {
+        "name": "proposal_id",
+        "type": "string",
+        "description": "The proposal ID as shown in the pending proposals list (e.g. \"南帝国_to_北帝国_peace\")."
+      },
+      {
+        "name": "accepted",
+        "type": "boolean",
+        "description": "Whether to accept (true) or reject (false) the proposal."
+      }
+    ]
+  },
   {
     "name": "query_kingdom_clans",
     "description": "List all clans belonging to a specific kingdom.\n\nUsage:\n- Call this to understand which noble houses comprise a kingdom.\n- The kingdom_name parameter should match the Chinese or English kingdom name.\n- Returns: list of clans with their tier, leader, and whether they are the ruling clan.\n- This is public encyclopedia information.",
