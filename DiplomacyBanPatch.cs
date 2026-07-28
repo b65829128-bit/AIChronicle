@@ -7,6 +7,20 @@ using Kdiplomacy = TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManageme
 
 namespace MyFirstMod
 {
+    [HarmonyPatch(typeof(KingdomDecision), "CanMakeDecision")]
+    public static class BanPlayerDiplomacyUIPatch
+    {
+        static void Postfix(KingdomDecision __instance, ref bool __result)
+        {
+            if (!__result) return;
+            if (MySettings.Instance?.BanVanillaDiplomacy == true
+                && __instance.ProposerClan == Clan.PlayerClan)
+            {
+                __result = false;
+            }
+        }
+    }
+
     [HarmonyPatch(typeof(KingdomDecisionProposalBehavior), "GetRandomWarDecision")]
     public static class BanWarDecisionPatch
     {
