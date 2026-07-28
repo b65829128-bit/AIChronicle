@@ -61,10 +61,20 @@ namespace MyFirstMod
         private static object BuildTools()
         {
             var activeAgent = EntityManager.ActiveAgent;
+            var activeTarget = EntityManager.ActiveTarget;
             List<ToolDef> toolDefs;
             if (activeAgent != null)
             {
                 toolDefs = ContextBuilder.GetFilteredTools(activeAgent, _currentIntent);
+                if (activeTarget?.HasCapability(EntityCapability.Diplomat) == true)
+                {
+                    var diplomatTools = ContextBuilder.GetFilteredTools(activeTarget, _currentIntent);
+                    foreach (var t in diplomatTools)
+                    {
+                        if (!toolDefs.Any(existing => existing.Name == t.Name))
+                            toolDefs.Add(t);
+                    }
+                }
             }
             else
             {
