@@ -17,7 +17,6 @@ namespace MyFirstMod
         private static LordChatBehavior? _chatBehavior;
         private static bool _prevLetterO;
         private static bool _prevChanceryP;
-        private static readonly List<string> _patchLog = new();
 
         protected override void OnSubModuleLoad()
         {
@@ -28,62 +27,6 @@ namespace MyFirstMod
 
             var harmony = new Harmony("MyFirstMod");
             harmony.PatchAll();
-
-            try
-            {
-                var m = AccessTools.Method(typeof(TaleWorlds.CampaignSystem.Election.StartAllianceDecision), "CanMakeDecision");
-                if (m != null) { harmony.Patch(m, prefix: new HarmonyMethod(typeof(DiplomacyBanPatch), nameof(DiplomacyBanPatch.BanAllianceCanMakeDecision))); _patchLog.Add("[PASS] StartAllianceDecision.CanMakeDecision"); }
-                else _patchLog.Add("[FAIL] StartAllianceDecision.CanMakeDecision not found");
-            }
-            catch (Exception ex) { _patchLog.Add($"[FAIL] StartAllianceDecision.CanMakeDecision: {ex.Message}"); }
-
-            try
-            {
-                var m = AccessTools.Method(typeof(TaleWorlds.CampaignSystem.Election.TradeAgreementDecision), "CanMakeDecision");
-                if (m != null) { harmony.Patch(m, prefix: new HarmonyMethod(typeof(DiplomacyBanPatch), nameof(DiplomacyBanPatch.BanTradeCanMakeDecision))); _patchLog.Add("[PASS] TradeAgreementDecision.CanMakeDecision"); }
-                else _patchLog.Add("[FAIL] TradeAgreementDecision.CanMakeDecision not found");
-            }
-            catch (Exception ex) { _patchLog.Add($"[FAIL] TradeAgreementDecision.CanMakeDecision: {ex.Message}"); }
-
-            try
-            {
-                var m = AccessTools.Method(typeof(TaleWorlds.CampaignSystem.GameComponents.DefaultAllianceModel), "CanMakeAlliance");
-                if (m != null) { harmony.Patch(m, prefix: new HarmonyMethod(typeof(DiplomacyBanPatch), nameof(DiplomacyBanPatch.BanAllianceModel))); _patchLog.Add("[PASS] DefaultAllianceModel.CanMakeAlliance"); }
-                else _patchLog.Add("[FAIL] DefaultAllianceModel.CanMakeAlliance not found");
-            }
-            catch (Exception ex) { _patchLog.Add($"[FAIL] DefaultAllianceModel.CanMakeAlliance: {ex.Message}"); }
-
-            try
-            {
-                var m = AccessTools.Method(typeof(TaleWorlds.CampaignSystem.GameComponents.DefaultTradeAgreementModel), "CanMakeTradeAgreement");
-                if (m != null) { harmony.Patch(m, prefix: new HarmonyMethod(typeof(DiplomacyBanPatch), nameof(DiplomacyBanPatch.BanTradeModel))); _patchLog.Add("[PASS] DefaultTradeAgreementModel.CanMakeTradeAgreement"); }
-                else _patchLog.Add("[FAIL] DefaultTradeAgreementModel.CanMakeTradeAgreement not found");
-            }
-            catch (Exception ex) { _patchLog.Add($"[FAIL] DefaultTradeAgreementModel.CanMakeTradeAgreement: {ex.Message}"); }
-
-            try
-            {
-                var m = AccessTools.Method(typeof(TaleWorlds.CampaignSystem.Kingdom), "AddDecision", new[] { typeof(TaleWorlds.CampaignSystem.Election.KingdomDecision), typeof(bool) });
-                if (m != null) { harmony.Patch(m, prefix: new HarmonyMethod(typeof(DiplomacyBanPatch), nameof(DiplomacyBanPatch.BanAddDecision))); _patchLog.Add("[PASS] Kingdom.AddDecision"); }
-                else _patchLog.Add("[FAIL] Kingdom.AddDecision not found");
-            }
-            catch (Exception ex) { _patchLog.Add($"[FAIL] Kingdom.AddDecision: {ex.Message}"); }
-
-            try
-            {
-                var m = AccessTools.Method(typeof(TaleWorlds.CampaignSystem.Actions.DeclareWarAction), "ApplyByKingdomDecision");
-                if (m != null) { harmony.Patch(m, prefix: new HarmonyMethod(typeof(DiplomacyBanPatch), nameof(DiplomacyBanPatch.BanDeclareWar))); _patchLog.Add("[PASS] DeclareWarAction.ApplyByKingdomDecision"); }
-                else _patchLog.Add("[FAIL] DeclareWarAction.ApplyByKingdomDecision not found");
-            }
-            catch (Exception ex) { _patchLog.Add($"[FAIL] DeclareWarAction.ApplyByKingdomDecision: {ex.Message}"); }
-
-            try
-            {
-                var m = AccessTools.Method(typeof(TaleWorlds.CampaignSystem.Actions.MakePeaceAction), "ApplyByKingdomDecision");
-                if (m != null) { harmony.Patch(m, prefix: new HarmonyMethod(typeof(DiplomacyBanPatch), nameof(DiplomacyBanPatch.BanMakePeace))); _patchLog.Add("[PASS] MakePeaceAction.ApplyByKingdomDecision"); }
-                else _patchLog.Add("[FAIL] MakePeaceAction.ApplyByKingdomDecision not found");
-            }
-            catch (Exception ex) { _patchLog.Add($"[FAIL] MakePeaceAction.ApplyByKingdomDecision: {ex.Message}"); }
         }
 
         protected override void OnBeforeInitialModuleScreenSetAsRoot()
@@ -93,13 +36,6 @@ namespace MyFirstMod
             InformationManager.DisplayMessage(new InformationMessage(
                 "[MyFirstMod] AI 聊天模组已加载！",
                 Colors.Green));
-
-            foreach (var log in _patchLog)
-            {
-                InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] {log}",
-                    log.StartsWith("[PASS]") ? Colors.Green : Colors.Red));
-            }
         }
 
         protected override void OnGameStart(Game game, IGameStarter gameStarter)
