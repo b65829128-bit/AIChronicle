@@ -1,8 +1,8 @@
 using HarmonyLib;
 using TaleWorlds.CampaignSystem;
-using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Election;
+using TaleWorlds.Library;
 
 namespace MyFirstMod
 {
@@ -51,9 +51,10 @@ namespace MyFirstMod
     {
         public static bool Prefix(DeclareWarDecision __instance)
         {
-            if (MySettings.Instance?.BanVanillaDiplomacy == true
-                && !AIChatClient.IsAgentDiplomacyInProgress
-                && __instance.ProposerClan == Clan.PlayerClan)
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"[MyFirstMod DEBUG] ApplyChosenOutcome hit: DeclareWar, proposer={__instance.ProposerClan?.Name}, ban={MySettings.Instance?.BanVanillaDiplomacy}",
+                Colors.Yellow));
+            if (MySettings.Instance?.BanVanillaDiplomacy == true && __instance.ProposerClan == Clan.PlayerClan)
                 return false;
             return true;
         }
@@ -64,9 +65,10 @@ namespace MyFirstMod
     {
         public static bool Prefix(MakePeaceKingdomDecision __instance)
         {
-            if (MySettings.Instance?.BanVanillaDiplomacy == true
-                && !AIChatClient.IsAgentDiplomacyInProgress
-                && __instance.ProposerClan == Clan.PlayerClan)
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"[MyFirstMod DEBUG] ApplyChosenOutcome hit: MakePeace, proposer={__instance.ProposerClan?.Name}, ban={MySettings.Instance?.BanVanillaDiplomacy}",
+                Colors.Yellow));
+            if (MySettings.Instance?.BanVanillaDiplomacy == true && __instance.ProposerClan == Clan.PlayerClan)
                 return false;
             return true;
         }
@@ -77,9 +79,10 @@ namespace MyFirstMod
     {
         public static bool Prefix(StartAllianceDecision __instance)
         {
-            if (MySettings.Instance?.BanVanillaDiplomacy == true
-                && !AIChatClient.IsAgentDiplomacyInProgress
-                && __instance.ProposerClan == Clan.PlayerClan)
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"[MyFirstMod DEBUG] ApplyChosenOutcome hit: Alliance, proposer={__instance.ProposerClan?.Name}, ban={MySettings.Instance?.BanVanillaDiplomacy}",
+                Colors.Yellow));
+            if (MySettings.Instance?.BanVanillaDiplomacy == true && __instance.ProposerClan == Clan.PlayerClan)
                 return false;
             return true;
         }
@@ -90,9 +93,10 @@ namespace MyFirstMod
     {
         public static bool Prefix(TradeAgreementDecision __instance)
         {
-            if (MySettings.Instance?.BanVanillaDiplomacy == true
-                && !AIChatClient.IsAgentDiplomacyInProgress
-                && __instance.ProposerClan == Clan.PlayerClan)
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"[MyFirstMod DEBUG] ApplyChosenOutcome hit: Trade, proposer={__instance.ProposerClan?.Name}, ban={MySettings.Instance?.BanVanillaDiplomacy}",
+                Colors.Yellow));
+            if (MySettings.Instance?.BanVanillaDiplomacy == true && __instance.ProposerClan == Clan.PlayerClan)
                 return false;
             return true;
         }
