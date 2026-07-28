@@ -50,7 +50,6 @@ namespace MyFirstMod
             if (string.IsNullOrEmpty(goals))
                 goals = "在当前地区巡逻，维持领地的治安。";
 
-            var otherRelationships = BuildOtherRelationships(targetId);
             var worldInfo = LoadWorldInfo();
             var currentTime = PromptManager.GetCurrentTimeString();
             var functionList = BuildFunctionList(agent, intent);
@@ -73,7 +72,6 @@ namespace MyFirstMod
                 .Replace("{target_knowledge}", targetKnowledge)
                 .Replace("{target_relationship}", targetRelationship)
                 .Replace("{goals}", goals)
-                .Replace("{other_relationships}", otherRelationships)
                 .Replace("{world_info}", worldInfo)
                 .Replace("{current_time}", currentTime)
                 .Replace("{function_list}", functionList)
@@ -112,26 +110,6 @@ namespace MyFirstMod
             }
             var contentEnd = nextMarker < int.MaxValue ? nextMarker : persona.Length;
             return persona.Substring(contentStart, contentEnd - contentStart).Trim();
-        }
-
-        private static string BuildOtherRelationships(string excludeTargetId)
-        {
-            var sb = new StringBuilder();
-            var ids = AgentManager.GetAllRelationshipIds();
-            foreach (var id in ids)
-            {
-                if (id == excludeTargetId) continue;
-                var rel = AgentManager.ReadRelationship(id);
-                if (string.IsNullOrEmpty(rel)) continue;
-                var entity = EntityManager.GetEntityById(id);
-                if (entity != null)
-                    sb.AppendLine(entity.Name + "（" + entity.Title + "）[ID: " + entity.Id + "]：");
-                else
-                    sb.AppendLine(id + "：");
-                sb.AppendLine(rel);
-                sb.AppendLine();
-            }
-            return sb.ToString().TrimEnd();
         }
 
         private static string BuildFunctionList(Entity agent, string intent)
