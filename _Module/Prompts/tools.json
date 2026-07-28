@@ -188,5 +188,38 @@
     "name": "cancel_action",
     "description": "Cancel your current party task and return your party to autonomous AI control.\n\nUsage:\n- Call this when you want to stop your current mission (defending, patrolling, escorting, etc.) and let your party act on its own.\n- After calling this, you can issue a new order (move_to_settlement, raid_settlement, etc.) if you want.\n- This only cancels the task you previously issued through a tool call — it does not affect the game's own AI decisions.\n- No parameters needed.",
     "parameters": []
+  },
+  {
+    "name": "query_kingdom_settlements",
+    "description": "List all settlements currently owned by a specific kingdom.\n\nUsage:\n- Call this to understand a kingdom's territorial holdings — which towns and castles they control.\n- The kingdom_name parameter should match the Chinese or English kingdom name (e.g., \"南帝国\" or \"Southern Empire\").\n- Returns: list of towns and castles with their owning clan.\n- This is public encyclopedia information.",
+    "parameters": [
+      {
+        "name": "kingdom_name",
+        "type": "string",
+        "description": "Name of the kingdom to query, in Chinese or English."
+      }
+    ]
+  },
+  {
+    "name": "query_clan_members",
+    "description": "List all heroes belonging to a specific clan.\n\nUsage:\n- Call this to find out who belongs to a clan — the leader, family members, and their roles.\n- The clan_name parameter should match the Chinese or English clan name.\n- Returns: list of members with age, gender, and family relationships.\n- This is public encyclopedia information.",
+    "parameters": [
+      {
+        "name": "clan_name",
+        "type": "string",
+        "description": "Name of the clan to query, in Chinese or English."
+      }
+    ]
+  },
+  {
+    "name": "query_kingdom_clans",
+    "description": "List all clans belonging to a specific kingdom.\n\nUsage:\n- Call this to understand which noble houses comprise a kingdom.\n- The kingdom_name parameter should match the Chinese or English kingdom name.\n- Returns: list of clans with their tier, leader, and whether they are the ruling clan.\n- This is public encyclopedia information.",
+    "parameters": [
+      {
+        "name": "kingdom_name",
+        "type": "string",
+        "description": "Name of the kingdom to query, in Chinese or English."
+      }
+    ]
   }
 ]

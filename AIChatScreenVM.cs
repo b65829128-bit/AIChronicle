@@ -339,6 +339,9 @@ namespace MyFirstMod
                                     "query_character" => "查询了人物信息",
                                     "query_settlement" => "查询了定居点信息",
                                     "query_world_state" => "获取了世界局势",
+                                    "query_kingdom_settlements" => "查询了王国领土",
+                                    "query_clan_members" => "查询了家族成员",
+                                    "query_kingdom_clans" => "查询了王国家族",
                                     _ => $"调用了 {tc.Name}"
                                 };
                             }

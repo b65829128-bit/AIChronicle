@@ -148,6 +148,15 @@ namespace MyFirstMod
                     case "query_world_state":
                         return QueryWorldState();
 
+                    case "query_kingdom_settlements":
+                        return ExecuteQueryKingdomSettlements(args["kingdom_name"]?.ToString() ?? "");
+
+                    case "query_clan_members":
+                        return ExecuteQueryClanMembers(args["clan_name"]?.ToString() ?? "");
+
+                    case "query_kingdom_clans":
+                        return ExecuteQueryKingdomClans(args["kingdom_name"]?.ToString() ?? "");
+
                     case "move_to_settlement":
                         return ExecuteMoveToSettlement(args["settlement_name"]?.ToString() ?? "");
 
@@ -328,6 +337,130 @@ namespace MyFirstMod
             }
 
             return sb.ToString().TrimEnd();
+        }
+
+        private static string ExecuteQueryKingdomSettlements(string kingdomName)
+        {
+            if (string.IsNullOrEmpty(kingdomName))
+                return "[错误] 请提供王国名称";
+
+            foreach (var kingdom in Kingdom.All)
+            {
+                var kName = kingdom.Name?.ToString() ?? "";
+                if (!kName.Contains(kingdomName) && !kingdomName.Contains(kName)) continue;
+
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("===== " + kName + " 的领土 =====");
+
+                var towns = new List<string>();
+                var castles = new List<string>();
+
+                foreach (var s in Settlement.All)
+                {
+                    if (s.OwnerClan?.Kingdom == kingdom)
+                    {
+                        var entry = s.Name + "（" + (s.OwnerClan?.Name?.ToString() ?? "?") + "）";
+                        if (s.IsTown) towns.Add(entry);
+                        else if (s.IsCastle) castles.Add(entry);
+                    }
+                }
+
+                sb.AppendLine("城镇（" + towns.Count + "座）：");
+                if (towns.Count == 0) sb.AppendLine("  （无）");
+                else foreach (var t in towns) sb.AppendLine("  " + t);
+
+                sb.AppendLine("城堡（" + castles.Count + "座）：");
+                if (castles.Count == 0) sb.AppendLine("  （无）");
+                else foreach (var c in castles) sb.AppendLine("  " + c);
+
+                return sb.ToString().TrimEnd();
+            }
+
+            return "[未找到] 名为 \"" + kingdomName + "\" 的王国";
+        }
+
+        private static string ExecuteQueryClanMembers(string clanName)
+        {
+            if (string.IsNullOrEmpty(clanName))
+                return "[错误] 请提供家族名称";
+
+            foreach (var clan in Clan.All)
+            {
+                var cName = clan.Name?.ToString() ?? "";
+                if (!cName.Contains(clanName) && !clanName.Contains(cName)) continue;
+
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("===== 家族：" + cName + " =====");
+                sb.AppendLine("等级：" + clan.Tier + "  声望：" + clan.Renown.ToString("F0"));
+                if (clan.Kingdom != null)
+                    sb.AppendLine("所属王国：" + clan.Kingdom.Name);
+
+                var leaders = new List<string>();
+                var members = new List<string>();
+
+                foreach (var hero in Hero.AllAliveHeroes)
+                {
+                    if (hero.Clan != clan) continue;
+
+                    var age = (int)hero.Age;
+                    var info = hero.Name + "（" + age + "岁，" + (hero.IsFemale ? "女" : "男") + "）";
+
+                    if (hero == clan.Leader)
+                        leaders.Add(info + " ☆族长");
+                    else
+                    {
+                        var tags = new List<string>();
+                        if (hero.Spouse != null) tags.Add("配偶：" + hero.Spouse.Name);
+                        if (hero.Mother != null) tags.Add("母：" + hero.Mother.Name);
+                        if (hero.Father != null) tags.Add("父：" + hero.Father.Name);
+                        info += tags.Count > 0 ? "（" + string.Join("，", tags) + "）" : "";
+                        members.Add(info);
+                    }
+                }
+
+                foreach (var l in leaders) sb.AppendLine("  " + l);
+                foreach (var m in members) sb.AppendLine("  " + m);
+
+                if (leaders.Count + members.Count == 0)
+                    sb.AppendLine("  （无在世成员）");
+
+                return sb.ToString().TrimEnd();
+            }
+
+            return "[未找到] 名为 \"" + clanName + "\" 的家族";
+        }
+
+        private static string ExecuteQueryKingdomClans(string kingdomName)
+        {
+            if (string.IsNullOrEmpty(kingdomName))
+                return "[错误] 请提供王国名称";
+
+            foreach (var kingdom in Kingdom.All)
+            {
+                var kName = kingdom.Name?.ToString() ?? "";
+                if (!kName.Contains(kingdomName) && !kingdomName.Contains(kName)) continue;
+
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("===== " + kName + " 的家族 =====");
+
+                var count = 0;
+                foreach (var clan in Clan.All)
+                {
+                    if (clan.Kingdom == kingdom && !clan.IsBanditFaction)
+                    {
+                        count++;
+                        var prefix = clan == kingdom.RulingClan ? "★" : " ";
+                        sb.AppendLine($"  {prefix}{clan.Name}（等级{clan.Tier}，族长：{clan.Leader?.Name?.ToString() ?? "?"}）");
+                    }
+                }
+
+                if (count == 0)
+                    sb.AppendLine("  （无）");
+
+                return sb.ToString().TrimEnd();
+            }
+
+            return "[未找到] 名为 \"" + kingdomName + "\" 的王国";
         }
 
         private static Settlement? FindSettlement(string name)
