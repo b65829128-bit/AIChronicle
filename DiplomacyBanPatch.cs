@@ -4,6 +4,7 @@ using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Election;
 using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.Library;
 using TaleWorlds.Localization;
 
 namespace MyFirstMod
@@ -53,6 +54,10 @@ namespace MyFirstMod
     {
         public static bool Prefix(IFaction evaluatingFaction, ref bool __result, ref TextObject reason)
         {
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"[DEBUG] CanMakeAlliance: faction={evaluatingFaction?.Name}, ban={MySettings.Instance?.BanVanillaDiplomacy}",
+                Colors.Yellow));
+
             if (MySettings.Instance?.BanVanillaDiplomacy == true
                 && !AIChatClient.IsAgentDiplomacyInProgress
                 && evaluatingFaction == Clan.PlayerClan)
@@ -70,6 +75,10 @@ namespace MyFirstMod
     {
         public static bool Prefix(Kingdom kingdom, ref bool __result, ref TextObject reason)
         {
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"[DEBUG] CanMakeTradeAgreement: kingdom={kingdom?.Name}, ban={MySettings.Instance?.BanVanillaDiplomacy}",
+                Colors.Yellow));
+
             if (MySettings.Instance?.BanVanillaDiplomacy == true
                 && !AIChatClient.IsAgentDiplomacyInProgress
                 && kingdom == Hero.MainHero.MapFaction)
