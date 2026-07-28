@@ -188,6 +188,12 @@ namespace MyFirstMod
 
         private static string LoadContextTemplate()
         {
+            if (!string.IsNullOrEmpty(PromptManager.CampaignDir))
+            {
+                var campaignPath = Path.Combine(PromptManager.CampaignDir, "context_template.txt");
+                if (File.Exists(campaignPath))
+                    return File.ReadAllText(campaignPath, Encoding.UTF8);
+            }
             var path = Path.Combine(PromptManager.PromptsBaseDir, "Templates", "context_template.txt");
             if (!File.Exists(path)) return GetDefaultContextTemplate();
             return File.ReadAllText(path, Encoding.UTF8);

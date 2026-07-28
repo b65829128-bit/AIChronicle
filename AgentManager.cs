@@ -210,7 +210,9 @@ namespace MyFirstMod
 
         private static string LoadPersonaGenerationPrompt()
         {
-            var path = Path.Combine(PromptManager.PromptsBaseDir, "persona_generation.txt");
+            var path = Path.Combine(PromptManager.CampaignDir, "persona_generation.txt");
+            if (!File.Exists(path))
+                path = Path.Combine(PromptManager.PromptsBaseDir, "persona_generation.txt");
             if (!File.Exists(path))
                 return
                     "你正在为游戏角色生成性格描述。根据以下信息，为名为{npc_name}的NPC生成性格。\n\n"

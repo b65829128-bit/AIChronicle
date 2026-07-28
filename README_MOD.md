@@ -76,6 +76,10 @@ _Module/Prompts/
     └── {战役名}/                 # 每个存档独立的目录
         ├── system_prompt.txt     # 本战役的系统提示词（可独立编辑，热重载）
         ├── world_info.txt        # 本战役的世界背景（可编辑，热重载）
+        ├── agent_system.txt      # 本战役 Agent 提示词（热重载）
+        ├── tool_call_prompt.txt  # 本战役工具调用提示词（热重载）
+        ├── persona_generation.txt # 本战役性格生成提示词（热重载）
+        ├── context_template.txt  # 本战役 Context 模板（热重载）
         └── NPCs/                 # Agent 管理的 NPC 文件系统
             └── {entity_id}/        # 每个 Entity 独立目录
                 ├── character.json # 基础 ID 信息（只读，自动生成）

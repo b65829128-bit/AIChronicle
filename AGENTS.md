@@ -110,7 +110,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
 | **工具定义文件化** | 23 个工具定义在 `tools.json`（15 个游戏工具）和 `agent_tools.json`（8 个文件工具）中，热重载，不硬编码 |
-| **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`tool_call_prompt.txt` 均为文件 |
+| **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`tool_call_prompt.txt`、`persona_generation.txt`、`context_template.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环（max N 轮或无限），模型调用工具 → 执行 → 追加结果 → 重请求 |
 | **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
 
@@ -221,7 +221,12 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │       │   ├── context_template.txt ← Context 模板
 │       └── Campaigns/         ← 各战役目录（运行时创建）
 │           └── {战役名}/
-│               ├── world_info.txt  ← 本战役世界背景
+│               ├── system_prompt.txt    ← 本战役系统提示词（可独立编辑，热重载）
+│               ├── world_info.txt       ← 本战役世界背景（可独立编辑，热重载）
+│               ├── agent_system.txt     ← 本战役 Agent 提示词（热重载）
+│               ├── tool_call_prompt.txt ← 本战役工具调用提示词（热重载）
+│               ├── persona_generation.txt ← 本战役性格生成提示词（热重载）
+│               ├── context_template.txt ← 本战役 Context 模板（热重载）
 │               └── NPCs/          ← Agent 管理的 NPC 文件系统
 │                   └── {entity_id}/                 ← {Name}_{StringId}（如 博泰罗_CharacterObject_1664）
 │                       ├── persona.txt   ← [MOTIVATION]/[TRAITS]/[SPEECH_STYLE]

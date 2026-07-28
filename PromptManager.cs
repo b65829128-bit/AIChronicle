@@ -86,6 +86,7 @@ namespace MyFirstMod
         private static DateTime _lastAgentPromptCheck;
 
         public static string PromptsBaseDir => _promptsBaseDir;
+        public static string CampaignDir => _campaignDir;
 
         public static bool IsInitialized => _campaignDir != "";
 
@@ -124,6 +125,29 @@ namespace MyFirstMod
             var npcBase = Path.Combine(_campaignDir, "NPCs");
             AgentManager.Initialize(npcBase);
             EntityManager.Initialize(npcBase);
+
+            CopyPromptToCampaign("agent_system.txt");
+            CopyPromptToCampaign("tool_call_prompt.txt");
+            CopyPromptToCampaign("persona_generation.txt");
+            CopyTemplateToCampaign("context_template.txt");
+        }
+
+        private static void CopyPromptToCampaign(string filename)
+        {
+            var dest = Path.Combine(_campaignDir, filename);
+            if (File.Exists(dest)) return;
+            var src = Path.Combine(_promptsBaseDir, filename);
+            if (File.Exists(src))
+                File.Copy(src, dest);
+        }
+
+        private static void CopyTemplateToCampaign(string filename)
+        {
+            var dest = Path.Combine(_campaignDir, filename);
+            if (File.Exists(dest)) return;
+            var src = Path.Combine(_promptsBaseDir, "Templates", filename);
+            if (File.Exists(src))
+                File.Copy(src, dest);
         }
 
         public static string BuildSystemPrompt(string lordName, CharacterPrompt charPrompt)
@@ -235,7 +259,9 @@ namespace MyFirstMod
 
         public static string LoadToolCallPrompt()
         {
-            var path = Path.Combine(_promptsBaseDir, "tool_call_prompt.txt");
+            var path = Path.Combine(_campaignDir, "tool_call_prompt.txt");
+            if (!File.Exists(path))
+                path = Path.Combine(_promptsBaseDir, "tool_call_prompt.txt");
             if (!File.Exists(path))
                 return "你是工具调用代理。根据以下对话，判断是否需要调用函数。如果没有新信息，不要调用。";
 
