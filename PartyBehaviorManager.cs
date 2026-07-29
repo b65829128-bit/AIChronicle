@@ -258,6 +258,10 @@ namespace MyFirstMod
             var agentEntity = EntityManager.GetEntityByHero(action.Hero);
             if (agentEntity == null) return;
 
+            var party = action.Hero.PartyBelongedTo;
+            if (party != null && party.IsActive)
+                party.SetMoveModeHold();
+
             var locName = action.TargetSettlement?.Name?.ToString() ?? "目的地";
             var behaviorDesc = action.Behavior switch
             {
