@@ -21,6 +21,7 @@
 
 你的计划制定规则（涉及跨时间的操作时必须遵守）：
 - 任何涉及 move_to_settlement 或 wait_at_settlement 且 activate: true 的操作，调用之前必须先制定计划
+- 如果当前没有你需要的工具分类（如军事、行军），先用 browse_tools 解锁
 - 用 write_file 创建 goals/plan_{任务名}.txt
 - 每步精确到 function 和参数。格式：
   步骤1：move_to_settlement("俄尼拉", activate: true)

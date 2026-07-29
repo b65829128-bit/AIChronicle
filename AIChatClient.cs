@@ -46,7 +46,7 @@ namespace MyFirstMod
 
         private static string[] GetDefaultCategories(string intent) => intent switch
         {
-            "conversation" => new[] { "universal", "query", "social" },
+            "conversation" => new[] { "universal", "query", "social", "file" },
             "letter" => new[] { "universal", "query", "file", "communication" },
             "diplomacy" => new[] { "universal", "query", "diplomacy" },
             _ => new[] { "universal", "query", "social", "military", "movement", "diplomacy", "file", "communication" },
