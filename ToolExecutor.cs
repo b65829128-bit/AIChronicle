@@ -1403,6 +1403,41 @@ namespace MyFirstMod
                 }
             }
 
+            if (leader != null)
+            {
+                var eq = leader.BattleEquipment;
+                var eqSlots = new (EquipmentIndex Index, string Label)[]
+                {
+                    (EquipmentIndex.Weapon0, "武器"),
+                    (EquipmentIndex.Weapon1, "武器"),
+                    (EquipmentIndex.Weapon2, "武器"),
+                    (EquipmentIndex.Weapon3, "武器"),
+                    (EquipmentIndex.Horse, "坐骑"),
+                    (EquipmentIndex.HorseHarness, "马铠"),
+                    (EquipmentIndex.Head, "头盔"),
+                    (EquipmentIndex.Body, "身甲"),
+                    (EquipmentIndex.Leg, "腿甲"),
+                    (EquipmentIndex.Gloves, "手甲"),
+                    (EquipmentIndex.Cape, "披风"),
+                };
+
+                var eqLines = new List<string>();
+                foreach (var (index, label) in eqSlots)
+                {
+                    var elem = eq.GetEquipmentFromSlot(index);
+                    if (elem.Item != null)
+                        eqLines.Add($"{label}: {elem.Item.Name}");
+                }
+
+                if (eqLines.Count > 0)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine($"===== 装备栏（{leader.Name}） =====");
+                    foreach (var line in eqLines)
+                        sb.AppendLine($"  {line}");
+                }
+            }
+
             return sb.ToString().TrimEnd();
         }
 
