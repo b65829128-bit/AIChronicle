@@ -519,6 +519,28 @@
     ]
   },
   {
+    "name": "request_items",
+    "category": "social",
+    "description": "Request items FROM someone else's inventory TO yours.\n\nUsage:\n- Call this when you need items from someone — they offered, you demand, or you're collecting payment in kind.\n- The target_entity_id specifies WHO to request from.\n- The item_name must match an item in THEIR inventory.\n- The count is how many to request.\n- If the target is an NPC, items transfer immediately.\n- If the target is the player, they will see a confirmation dialog.\n- Use query_party_troops(target) first to see what they have.",
+    "parameters": [
+      {
+        "name": "target_entity_id",
+        "type": "string",
+        "description": "Entity ID or Chinese name of the person to request items from."
+      },
+      {
+        "name": "item_name",
+        "type": "string",
+        "description": "Name of the item to request."
+      },
+      {
+        "name": "count",
+        "type": "integer",
+        "description": "Number of items to request (1+)."
+      }
+    ]
+  },
+  {
     "name": "query_hero_skills",
     "category": "query",
     "description": "Query a character's skill levels and attributes.\n\nUsage:\n- Call this to assess someone's capabilities: are they a good commander? a smooth talker? a sharp scout?\n- The target_entity_id specifies whose skills to query. Omit to query your own skills.\n- Returns: all 18 skill levels (OneHanded through Engineering) and 6 attribute scores (Vigor, Control, Endurance, Cunning, Social, Intelligence).\n- This is public assessment — every notable character's skills are known in Calradia.",

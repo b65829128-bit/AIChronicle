@@ -199,6 +199,12 @@ namespace MyFirstMod
                             args["item_name"]?.ToString() ?? "",
                             args["count"]?.ToObject<int>() ?? 0);
 
+                    case "request_items":
+                        return ExecuteRequestItems(
+                            args["target_entity_id"]?.ToString() ?? "",
+                            args["item_name"]?.ToString() ?? "",
+                            args["count"]?.ToObject<int>() ?? 0);
+
                     case "query_hero_skills":
                         return ExecuteQueryHeroSkills(args["target_entity_id"]?.ToString());
 
@@ -1169,6 +1175,107 @@ namespace MyFirstMod
             }
 
             return $"[未找到] 部队和装备栏中都没有 \"{itemName}\"。使用 query_party_troops 查看详情。";
+        }
+
+        private static string ExecuteRequestItems(string targetEntityId, string itemName, int count)
+        {
+            if (AIChatClient.CurrentHero == null)
+                return "[错误] 无当前领主";
+            if (string.IsNullOrEmpty(itemName) || count <= 0)
+                return "[错误] 请指定物品名称和数量";
+
+            var hero = AIChatClient.CurrentHero;
+            var myParty = hero.PartyBelongedTo;
+            if (myParty == null)
+                return $"[错误] {hero.Name} 没有带领部队";
+
+            var target = ResolveTargetHero(targetEntityId);
+            if (target == null)
+                return $"[错误] 未找到目标实体：{targetEntityId}";
+            if (target == hero)
+                return "[错误] 不能向自己要物品";
+
+            if (target != Hero.MainHero)
+            {
+                var targetParty = target.PartyBelongedTo;
+                if (targetParty == null)
+                    return $"[错误] {target.Name} 没有带领部队";
+
+                foreach (var ie in targetParty.ItemRoster)
+                {
+                    var item = ie.EquipmentElement.Item;
+                    if (item == null) continue;
+                    var name = item.Name?.ToString() ?? "";
+                    if (!name.Contains(itemName) && !itemName.Contains(name)) continue;
+                    if (ie.Amount < count)
+                        return $"[错误] {target.Name} 只有 {ie.Amount} 个 {name}";
+
+                    targetParty.ItemRoster.AddToCounts(item, -count);
+                    myParty.ItemRoster.AddToCounts(item, count);
+                    return $"{target.Name} 给出了 {count} 个 {name}。";
+                }
+                return $"[未找到] {target.Name} 身上没有 \"{itemName}\"。";
+            }
+
+            var hasItem = false;
+            foreach (var ie in myParty.ItemRoster)
+            {
+                var item = ie.EquipmentElement.Item;
+                if (item == null) continue;
+                var name = item.Name?.ToString() ?? "";
+                if (name.Contains(itemName) || itemName.Contains(name))
+                {
+                    hasItem = true;
+                    break;
+                }
+            }
+            if (!hasItem)
+            {
+                foreach (var ie in target.PartyBelongedTo?.ItemRoster ?? Enumerable.Empty<ItemRosterElement>())
+                {
+                    var item = ie.EquipmentElement.Item;
+                    if (item == null) continue;
+                    var name = item.Name?.ToString() ?? "";
+                    if (name.Contains(itemName) || itemName.Contains(name))
+                    {
+                        hasItem = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasItem)
+            {
+                var eq = target.BattleEquipment;
+                var eqSlots = new[] { EquipmentIndex.Weapon0, EquipmentIndex.Weapon1, EquipmentIndex.Weapon2, EquipmentIndex.Weapon3,
+                    EquipmentIndex.Head, EquipmentIndex.Body, EquipmentIndex.Leg, EquipmentIndex.Gloves, EquipmentIndex.Cape };
+                foreach (var slot in eqSlots)
+                {
+                    var elem = eq.GetEquipmentFromSlot(slot);
+                    if (elem.Item != null && (elem.Item.Name?.ToString() ?? "").Contains(itemName))
+                    {
+                        hasItem = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasItem)
+                return $"[错误] 你和对方都没有 \"{itemName}\"。";
+
+            using var mre = new ManualResetEventSlim(false);
+            var inquiry = new AIChatClient.PendingInquiry
+            {
+                Hero = hero,
+                ItemName = itemName,
+                ItemCount = count,
+                Event = mre,
+                Result = false
+            };
+            AIChatClient.SetPendingInquiry(inquiry);
+            mre.Wait(TimeSpan.FromSeconds(30));
+
+            if (inquiry.Result)
+                return $"对方同意了，{itemName} 已转移给你。";
+            return $"对方拒绝了交出 {itemName}。";
         }
 
         private static string ExecuteSendLetter(string recipientId, string content)

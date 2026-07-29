@@ -33,6 +33,8 @@ namespace MyFirstMod
         {
             public Hero Hero = null!;
             public int Amount;
+            public string ItemName = "";
+            public int ItemCount;
             public ManualResetEventSlim Event = new(false);
             public bool Result;
         }
@@ -124,20 +126,55 @@ namespace MyFirstMod
         {
             var inquiry = _pendingInquiry;
             if (inquiry == null) return;
-
             _pendingInquiry = null;
 
-            var hero = inquiry.Hero;
-            var amount = inquiry.Amount;
-
-            InformationManager.ShowInquiry(new InquiryData(
-                $"{hero.Name} 向你索要金币",
-                $"{hero.Name} 向你要 {amount} 金币。\n你当前拥有 {Hero.MainHero.Gold} 金币。",
-                true, true, "同意", "拒绝",
-                () => { inquiry.Result = true; inquiry.Event.Set(); },
-                () => { inquiry.Result = false; inquiry.Event.Set(); }),
-                pauseGameActiveState: true,
-                prioritize: true);
+            if (inquiry.Amount > 0)
+            {
+                var hero = inquiry.Hero;
+                var amount = inquiry.Amount;
+                InformationManager.ShowInquiry(new InquiryData(
+                    $"{hero.Name} 向你索要金币",
+                    $"{hero.Name} 向你要 {amount} 金币。\n你当前拥有 {Hero.MainHero.Gold} 金币。",
+                    true, true, "同意", "拒绝",
+                    () => { inquiry.Result = true; inquiry.Event.Set(); },
+                    () => { inquiry.Result = false; inquiry.Event.Set(); }),
+                    pauseGameActiveState: true,
+                    prioritize: true);
+            }
+            else if (!string.IsNullOrEmpty(inquiry.ItemName))
+            {
+                var hero = inquiry.Hero;
+                var itemName = inquiry.ItemName;
+                var count = inquiry.ItemCount;
+                InformationManager.ShowInquiry(new InquiryData(
+                    $"{hero.Name} 向你要物品",
+                    $"{hero.Name} 向你要 {itemName} × {count}。",
+                    true, true, "同意", "拒绝",
+                    () =>
+                    {
+                        var myParty = Hero.MainHero.PartyBelongedTo;
+                        var heroParty = hero.PartyBelongedTo;
+                        if (myParty != null && heroParty != null)
+                        {
+                            foreach (var ie in myParty.ItemRoster)
+                            {
+                                var item = ie.EquipmentElement.Item;
+                                if (item == null) continue;
+                                var name = item.Name?.ToString() ?? "";
+                                if (!name.Contains(itemName) && !itemName.Contains(name)) continue;
+                                if (ie.Amount < count) break;
+                                myParty.ItemRoster.AddToCounts(item, -count);
+                                heroParty.ItemRoster.AddToCounts(item, count);
+                                break;
+                            }
+                        }
+                        inquiry.Result = true;
+                        inquiry.Event.Set();
+                    },
+                    () => { inquiry.Result = false; inquiry.Event.Set(); }),
+                    pauseGameActiveState: true,
+                    prioritize: true);
+            }
         }
 
         public static async Task<ChatResponse> EvaluateToolCalls(CharacterPrompt charPrompt, string roleplayResponse)
