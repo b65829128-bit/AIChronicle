@@ -131,6 +131,23 @@
     ]
   },
   {
+    "name": "move_file",
+    "category": "file",
+    "description": "Move or rename a file — useful for marking completed plans by moving them to a done/archive directory.\n\nUsage:\n- The old_path and new_path are both relative to your personal directory.\n- Example: move_file(\"goals/plan_expand.txt\", \"goals/done_expand.txt\")\n- The target path must NOT already exist.\n- This is equivalent to reading the file, writing it at the new path, then deleting the old.\n- Do NOT move chat_logs, persona.txt, or character.json.",
+    "parameters": [
+      {
+        "name": "old_path",
+        "type": "string",
+        "description": "Current file path to move FROM."
+      },
+      {
+        "name": "new_path",
+        "type": "string",
+        "description": "New file path to move TO. Must not already exist."
+      }
+    ]
+  },
+  {
     "name": "send_letter",
     "category": "communication",
     "description": "Send a written letter to another entity. The letter will be delivered to their mailbox.\n\nUsage:\n- Call this when you need to communicate with someone who is not present — you are writing a letter, not speaking in person.\n- The recipient will see your letter and may reply later.\n- The content should be the full body of your letter, written in formal written style.",

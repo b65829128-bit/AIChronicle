@@ -531,6 +531,35 @@ namespace MyFirstMod
             return "已删除。";
         }
 
+        public static string ExecuteMoveFile(string oldPath, string newPath)
+        {
+            if (!IsPathAllowed(oldPath, read: true, write: true) || !IsPathAllowed(newPath, read: true, write: true))
+                return "[拒绝] 没有移动权限";
+
+            var cleanOld = oldPath.Replace('\\', '/').Trim('/');
+            var cleanNew = newPath.Replace('\\', '/').Trim('/');
+            if (cleanOld.StartsWith("chat_logs/") || cleanOld == "chat_logs"
+                || cleanNew.StartsWith("chat_logs/") || cleanNew == "chat_logs")
+                return "[拒绝] 聊天记录不可移动";
+            if (_immutableFiles.Contains(Path.GetFileName(cleanOld))
+                || _immutableFiles.Contains(Path.GetFileName(cleanNew)))
+                return "[拒绝] 此文件不可移动";
+
+            var fullOld = ResolvePath(oldPath);
+            var fullNew = ResolvePath(newPath);
+            if (fullOld == null || fullNew == null)
+                return "[错误] 路径解析失败";
+
+            if (!File.Exists(fullOld))
+                return "[不存在] " + oldPath;
+            if (File.Exists(fullNew))
+                return "[已存在] " + newPath + "，目标文件已存在，请用其他名称";
+
+            Directory.CreateDirectory(Path.GetDirectoryName(fullNew)!);
+            File.Move(fullOld, fullNew);
+            return "已移动。";
+        }
+
         public static string ExecuteWriteFile(string path, string content)
         {
             if (!IsPathAllowed(path, read: true, write: true))

@@ -59,6 +59,11 @@ namespace MyFirstMod
                         var dpath = args["path"]?.ToString() ?? "";
                         return AgentManager.ExecuteDeleteFile(dpath);
 
+                    case "move_file":
+                        var mold = args["old_path"]?.ToString() ?? "";
+                        var mnew = args["new_path"]?.ToString() ?? "";
+                        return AgentManager.ExecuteMoveFile(mold, mnew);
+
                     case "grep":
                         var gpattern = args["pattern"]?.ToString() ?? "";
                         var gpath = args["path"]?.ToString() ?? "";
