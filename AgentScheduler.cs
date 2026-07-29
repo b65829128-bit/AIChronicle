@@ -109,8 +109,12 @@ namespace MyFirstMod
 
                 var now = CampaignTime.Now;
                 var intervalDays = MySettings.Instance?.KingActivationDays ?? 30;
-                if (_lastKingActivation.TryGetValue(kingdom, out var lastActivation)
-                    && (now - lastActivation).ToDays < intervalDays)
+                if (!_lastKingActivation.TryGetValue(kingdom, out var lastActivation))
+                {
+                    _lastKingActivation[kingdom] = now;
+                    continue;
+                }
+                if ((now - lastActivation).ToDays < intervalDays)
                     continue;
 
                 _lastKingActivation[kingdom] = now;
