@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
+using TaleWorlds.CampaignSystem.Party;
 
 namespace MyFirstMod
 {
@@ -19,12 +20,17 @@ namespace MyFirstMod
             [EntityCapability.RequestGold] = new[] { "request_gold" },
             [EntityCapability.ChangeRelation] = new[] { "change_relation" },
             [EntityCapability.SendLetter] = new[] { "send_letter" },
-            [EntityCapability.Diplomat] = new[] { "declare_war", "propose_peace", "propose_alliance", "propose_trade", "respond_to_diplomacy_proposal" },
+            [EntityCapability.Diplomat] = new[] { "declare_war", "propose_peace", "propose_alliance", "propose_trade", "respond_to_diplomacy_proposal", "query_pending_proposals" },
         };
 
         private static readonly HashSet<string> LetterDisabledTools = new()
         {
             "give_gold", "request_gold"
+        };
+
+        private static readonly HashSet<string> DiplomacyDisabledTools = new()
+        {
+            "send_letter"
         };
 
         private static string _cachedDiplomacyRules = "";
@@ -39,24 +45,25 @@ namespace MyFirstMod
             if (agent == null || target == null)
                 return "系统错误：无法找到实体。";
 
-            var persona = AgentManager.LoadPersona(agent.HeroRef!);
+            var persona = AgentManager.LoadPersonaFor(agentId, agent.HeroRef!);
             var motivation = ParsePersonaSection(persona, "MOTIVATION");
             var traits = ParsePersonaSection(persona, "TRAITS");
             var speechStyle = ParsePersonaSection(persona, "SPEECH_STYLE");
 
-            var targetKnowledge = AgentManager.ReadKnowledge(targetId);
+            var targetKnowledge = AgentManager.ReadKnowledgeFor(agentId, targetId);
             if (string.IsNullOrEmpty(targetKnowledge))
                 targetKnowledge = "你第一次见到这位旅行者，对他还不太了解。";
 
-            var targetRelationship = AgentManager.ReadRelationship(targetId);
+            var targetRelationship = AgentManager.ReadRelationshipFor(agentId, targetId);
             if (string.IsNullOrEmpty(targetRelationship))
                 targetRelationship = "对此人暂无特别看法。";
 
-            var goals = AgentManager.ReadGoals();
+            var goals = AgentManager.ReadGoalsFor(agentId);
             if (string.IsNullOrEmpty(goals))
                 goals = "在当前地区巡逻，维持领地的治安。";
 
             var worldInfo = LoadWorldInfo();
+            var selfStatus = BuildSelfStatus(agent.HeroRef!);
             var currentTime = PromptManager.GetCurrentTimeString();
             var functionList = BuildFunctionList(agent, intent);
             var objectiveRel = BuildObjectiveRelationship(agent.HeroRef!, target.HeroRef!);
@@ -71,23 +78,24 @@ namespace MyFirstMod
 
             var template = LoadContextTemplate();
             return template
+                .Replace("{intent_rules}", intentRules)
                 .Replace("{entity_id}", agent.Id)
                 .Replace("{name}", agent.Name)
                 .Replace("{title}", agent.Title)
-                .Replace("{motivation}", motivation)
-                .Replace("{traits}", traits)
-                .Replace("{speech_style}", speechStyle)
                 .Replace("{target_id}", target.Id)
                 .Replace("{target_name}", target.Name)
                 .Replace("{target_title}", target.Title)
                 .Replace("{target_knowledge}", targetKnowledge)
                 .Replace("{target_relationship}", targetRelationship)
+                .Replace("{motivation}", motivation)
+                .Replace("{traits}", traits)
+                .Replace("{speech_style}", speechStyle)
                 .Replace("{goals}", goals)
                 .Replace("{world_info}", worldInfo)
                 .Replace("{current_time}", currentTime)
                 .Replace("{function_list}", functionList)
                 .Replace("{objective_relationship}", objectiveRel)
-                .Replace("{intent_rules}", intentRules)
+                .Replace("{self_status}", selfStatus)
                 .Trim();
         }
 
@@ -98,6 +106,8 @@ namespace MyFirstMod
             foreach (var tool in allTools)
             {
                 if (intent == "letter" && LetterDisabledTools.Contains(tool.Name))
+                    continue;
+                if (intent == "diplomacy" && DiplomacyDisabledTools.Contains(tool.Name))
                     continue;
                 var required = GetRequiredCapability(tool.Name);
                 if (required == null || agent.HasCapability(required.Value))
@@ -155,10 +165,15 @@ namespace MyFirstMod
             return File.ReadAllText(path, Encoding.UTF8).Trim();
         }
 
+        private static string _cachedConversationRules = "";
+        private static DateTime _lastConversationRulesCheck;
+        private static string _cachedLetterRules = "";
+        private static DateTime _lastLetterRulesCheck;
+
         private static string BuildConversationRules()
         {
-            return
-                "你就是{name}，{title}。你不是在扮演他，你就是他本人。\n\n"
+            return LoadRulesFile("conversation_rules.txt", ref _cachedConversationRules, ref _lastConversationRulesCheck)
+                ?? "你就是{name}，{title}。你不是在扮演他，你就是他本人。\n\n"
                 + "你的回复规则：\n"
                 + "- 回复保持 4 句话以内。绝不输出超过 4 句\n"
                 + "- 使用中世纪贵族的正式口吻\n"
@@ -180,8 +195,8 @@ namespace MyFirstMod
 
         private static string BuildLetterRules()
         {
-            return
-                "你是{name}，{title}。你收到了一封书信，正在撰写回信。\n\n"
+            return LoadRulesFile("letter_rules.txt", ref _cachedLetterRules, ref _lastLetterRulesCheck)
+                ?? "你是{name}，{title}。你收到了一封书信，正在撰写回信。\n\n"
                 + "书信格式要求：\n"
                 + "- 开头要有得体的称谓（如「尊敬的{target_name}阁下」或根据你的性格和关系调整）\n"
                 + "- 正文使用正式书面语，可以比口头对话稍长\n"
@@ -198,6 +213,23 @@ namespace MyFirstMod
                 + "- 当写信人透露了新信息时，调用 append_file 追加到 knowledge/{target_id}.txt";
         }
 
+        private static string? LoadRulesFile(string filename, ref string cache, ref DateTime lastCheck)
+        {
+            var path = Path.Combine(PromptManager.CampaignDir, filename);
+            if (!File.Exists(path))
+                path = Path.Combine(PromptManager.PromptsBaseDir, filename);
+            if (!File.Exists(path))
+                return null;
+
+            var lastWrite = File.GetLastWriteTimeUtc(path);
+            if (cache == "" || lastWrite > lastCheck)
+            {
+                cache = File.ReadAllText(path, Encoding.UTF8);
+                lastCheck = lastWrite;
+            }
+            return cache;
+        }
+
         private static string BuildDiplomacyRules()
         {
             var path = Path.Combine(PromptManager.CampaignDir, "diplomacy_rules.txt");
@@ -207,15 +239,16 @@ namespace MyFirstMod
                 return
                     "你是{name}，{title}。你是{name}所在王国的最高统治者。这不是闲聊——你必须根据实际数据做出并执行外交决策。\n\n"
                     + "你必须严格按照以下步骤行事，不得跳过：\n"
-                    + "1. 先调用 query_war_status 查看你王国所有战争的实时战况\n"
-                    + "2. 如果有待处理的外交提案，用 respond_to_diplomacy_proposal 逐个处理（接受或拒绝）\n"
+                    + "1. 先调用 query_pending_proposals 查看是否有待处理的外交提案，有则用 respond_to_diplomacy_proposal 逐个处理（接受或拒绝）\n"
+                    + "2. 调用 query_war_status 查看你王国所有战争的实时战况\n"
                     + "3. 根据战况和提案结果，决定是否采取新的外交行动\n\n"
                     + "重要规则：\n"
                     + "- 不要说你会做某件事——必须调用对应的 function。例如，说「我决定议和」而不调用 propose_peace 等于什么都没做\n"
                     + "- 每次回复最多调用 3 个工具。先处理提案，再决定新的行动\n"
                     + "- 如果没有任何待处理提案且当前没有战争，可以直接表示「暂无需要处理的外交事务」并停止\n"
                     + "- 不要虚构数据——所有战争统计必须来自 query_war_status 的返回值\n"
-                    + "- 你的决策是你的决策——不需要征求他人意见，你是国王";
+                    + "- 你的决策是你的决策——不需要征求他人意见，你是国王\n"
+                    + "- 绝对不要用 send_letter 处理外交事务。send_letter 只能用于私人通信。外交提案只能用 propose_peace / propose_alliance / propose_trade / declare_war / respond_to_diplomacy_proposal";
 
             var lastWrite = File.GetLastWriteTimeUtc(path);
             if (_cachedDiplomacyRules == "" || lastWrite > _lastDiplomacyRulesCheck)
@@ -250,6 +283,72 @@ namespace MyFirstMod
                 _lastChanceryRulesCheck = lastWrite;
             }
             return _cachedChanceryRules;
+        }
+        
+        private static string BuildSelfStatus(Hero hero)
+        {
+            if (hero == null) return "未知。";
+
+            if (hero.IsPrisoner)
+                return "你目前正被俘虏，但你仍是王国统治者，依然可以发布命令、行使外交权力。";
+
+            if (hero.IsFugitive)
+                return "你正在逃亡中。";
+
+            if (hero.IsDisabled)
+                return "你处于失踪/不可用状态。";
+
+            var party = hero.PartyBelongedTo;
+
+            if (party == null)
+            {
+                if (hero.CurrentSettlement != null)
+                    return $"你目前在{hero.CurrentSettlement.Name}，没有带领部队。";
+                return "你没有带领部队。";
+            }
+
+            var isLeader = party.LeaderHero == hero;
+            var manCount = party.MemberRoster.TotalManCount;
+            var behavior = party.DefaultBehavior;
+
+            if (behavior == AiBehavior.BesiegeSettlement)
+            {
+                var target = party.BesiegedSettlement?.Name?.ToString() ?? "某地";
+                return $"你正在围攻{target}，率领约{manCount}人。";
+            }
+            if (behavior == AiBehavior.RaidSettlement)
+                return $"你正在劫掠村庄，率领约{manCount}人。";
+            if (behavior == AiBehavior.EngageParty)
+                return $"你正在追击敌军，率领约{manCount}人。";
+            if (behavior == AiBehavior.DefendSettlement)
+                return $"你正在驻防中，率领约{manCount}人。";
+            if (behavior == AiBehavior.PatrolAroundPoint)
+                return $"你正在巡逻中，率领约{manCount}人。";
+            if (behavior == AiBehavior.EscortParty)
+                return $"你正在护送友军，率领约{manCount}人。";
+
+            var sb = new StringBuilder();
+
+            if (isLeader)
+                sb.Append($"你正率领约{manCount}人的部队");
+            else
+                sb.Append($"你跟随{party.LeaderHero?.Name}的部队（约{manCount}人）");
+
+            if (hero.CurrentSettlement != null)
+                sb.Append($"，现在{hero.CurrentSettlement.Name}");
+            else if (party.CurrentSettlement != null)
+                sb.Append($"，现在{party.CurrentSettlement.Name}");
+            else
+                sb.Append("，在野外");
+
+            if (party.Army != null)
+            {
+                var armyLeader = party.Army.LeaderParty?.LeaderHero?.Name?.ToString() ?? "未知";
+                sb.Append($"，身处{armyLeader}的军团中");
+            }
+
+            sb.Append(party.IsMoving ? "，正行军。" : "，已停留。");
+            return sb.ToString();
         }
 
         private static string BuildObjectiveRelationship(Hero agentHero, Hero targetHero)
@@ -342,6 +441,10 @@ namespace MyFirstMod
 
             return sb.ToString().TrimEnd();
         }
+        
+        
+        
+        
 
         private static string LoadContextTemplate()
         {
@@ -364,6 +467,7 @@ namespace MyFirstMod
                 "==============================\n" +
                 "你是 {name}，现任 {title}。\n" +
                 "你的固定编号：{entity_id}\n\n" +
+                "你的当前状态：\n{self_status}\n\n" +
                 "你的核心动机：\n{motivation}\n\n" +
                 "你的性格特质：\n{traits}\n\n" +
                 "你的表达风格：\n{speech_style}\n\n" +

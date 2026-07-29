@@ -663,6 +663,144 @@ namespace MyFirstMod
             return File.ReadAllText(path, Encoding.UTF8).Trim();
         }
 
+        private static string GetAgentDirPath(string agentId)
+        {
+            return Path.Combine(_baseDir, SanitizeDir(agentId));
+        }
+
+        public static string LoadPersonaFor(string agentId, Hero hero)
+        {
+            var agentDir = GetAgentDirPath(agentId);
+            if (string.IsNullOrEmpty(_baseDir))
+                return "名字：" + (hero.Name?.ToString() ?? "未知") + "\n性别：" + (hero.IsFemale ? "女" : "男") + "\n文化：" + (hero.Culture?.Name?.ToString() ?? "未知") + "\n说话风格：使用中世纪贵族的正式口吻。";
+
+            var path = Path.Combine(agentDir, "persona.txt");
+            if (File.Exists(path))
+                return File.ReadAllText(path, Encoding.UTF8);
+
+            if (hero == Hero.MainHero)
+                return "[MOTIVATION]\n你是一位在卡拉迪亚大陆闯荡的冒险者。\n\n[TRAITS]\n- 待探索\n\n[SPEECH_STYLE]\n自由发挥。";
+
+            return GeneratePersonaFor(agentId, hero);
+        }
+
+        public static string? ReadKnowledgeFor(string agentId, string targetEntityId)
+        {
+            if (string.IsNullOrEmpty(_baseDir)) return null;
+            var agentDir = GetAgentDirPath(agentId);
+            var path = Path.Combine(agentDir, "knowledge", SanitizeFile(targetEntityId) + ".txt");
+            if (File.Exists(path))
+                return File.ReadAllText(path, Encoding.UTF8).Trim();
+
+            var entity = EntityManager.GetEntityById(targetEntityId);
+            if (entity != null)
+            {
+                var namePath = Path.Combine(agentDir, "knowledge", SanitizeFile(entity.Name) + ".txt");
+                if (File.Exists(namePath))
+                    return File.ReadAllText(namePath, Encoding.UTF8).Trim();
+            }
+
+            return null;
+        }
+
+        public static string? ReadRelationshipFor(string agentId, string targetEntityId)
+        {
+            if (string.IsNullOrEmpty(_baseDir)) return null;
+            var agentDir = GetAgentDirPath(agentId);
+            var path = Path.Combine(agentDir, "relationships", SanitizeFile(targetEntityId) + ".txt");
+            if (!File.Exists(path)) return null;
+            return File.ReadAllText(path, Encoding.UTF8).Trim();
+        }
+
+        public static string? ReadGoalsFor(string agentId)
+        {
+            if (string.IsNullOrEmpty(_baseDir)) return null;
+            var agentDir = GetAgentDirPath(agentId);
+            var path = Path.Combine(agentDir, "goals", "current.txt");
+            if (!File.Exists(path)) return null;
+            return File.ReadAllText(path, Encoding.UTF8).Trim();
+        }
+
+        public static void AppendDecisionFor(string agentId, string entry)
+        {
+            if (string.IsNullOrEmpty(_baseDir)) return;
+            var agentDir = GetAgentDirPath(agentId);
+            var decisionsDir = Path.Combine(agentDir, "decisions");
+            Directory.CreateDirectory(decisionsDir);
+            File.AppendAllText(Path.Combine(decisionsDir, "diplomacy.txt"), entry, Encoding.UTF8);
+        }
+
+        private static string GeneratePersonaFor(string agentId, Hero hero)
+        {
+            var agentDir = GetAgentDirPath(agentId);
+            var name = hero.Name?.ToString() ?? "未知领主";
+            var culture = hero.Culture?.Name?.ToString() ?? "未知";
+            var clan = hero.Clan?.Name?.ToString() ?? "";
+            var kingdom = hero.Clan?.Kingdom?.Name?.ToString() ?? "";
+            var isFemale = hero.IsFemale ? "女" : "男";
+            var encyclopedia = hero.EncyclopediaText?.ToString() ?? "";
+
+            var basicInfo = new StringBuilder();
+            basicInfo.AppendLine($"姓名：{name}");
+            basicInfo.AppendLine($"性别：{isFemale}");
+            basicInfo.AppendLine($"文化：{culture}");
+            basicInfo.AppendLine($"家族：{clan}");
+            if (!string.IsNullOrEmpty(kingdom))
+                basicInfo.AppendLine($"所属王国：{kingdom}");
+            if (!string.IsNullOrEmpty(encyclopedia))
+                basicInfo.AppendLine($"百科描述：{encyclopedia}");
+
+            var meta = LoadOrCreatePersonaMetaFor(agentId);
+            var nativeTraits = BuildNativeTraitsText(hero);
+            var customTraits = BuildCustomTraitsText(meta);
+
+            try
+            {
+                var persona = GeneratePersonaViaLLM(basicInfo.ToString(), name, nativeTraits, customTraits).Result;
+                if (!string.IsNullOrEmpty(persona))
+                {
+                    var p = Path.Combine(agentDir, "persona.txt");
+                    Directory.CreateDirectory(agentDir);
+                    File.WriteAllText(p, persona, Encoding.UTF8);
+                    return persona;
+                }
+            }
+            catch { }
+
+            var fallback = $"[MOTIVATION]\n{basicInfo}\n[TRAITS]\n- 未知\n\n[SPEECH_STYLE]\n使用中世纪贵族的正式口吻。";
+            var fallbackPath = Path.Combine(agentDir, "persona.txt");
+            Directory.CreateDirectory(agentDir);
+            File.WriteAllText(fallbackPath, fallback, Encoding.UTF8);
+            return fallback;
+        }
+
+        private static PersonaMeta LoadOrCreatePersonaMetaFor(string agentId)
+        {
+            var agentDir = GetAgentDirPath(agentId);
+            var path = Path.Combine(agentDir, "persona_meta.json");
+            if (File.Exists(path))
+            {
+                try
+                {
+                    var json = File.ReadAllText(path, Encoding.UTF8);
+                    var meta = JsonConvert.DeserializeObject<PersonaMeta>(json);
+                    if (meta != null) return meta;
+                }
+                catch { }
+            }
+
+            var newMeta = new PersonaMeta
+            {
+                Ambition = RollWeightedTrait(skewPositive: true),
+                LoyaltyType = RollLoyaltyType(),
+                RiskTolerance = RollWeightedTrait(skewPositive: false)
+            };
+
+            Directory.CreateDirectory(agentDir);
+            File.WriteAllText(path, JsonConvert.SerializeObject(newMeta, Formatting.Indented), Encoding.UTF8);
+            return newMeta;
+        }
+
         public static void StoreOutgoingLetter(string senderId, string recipientId, string content)
         {
             var senderDir = Path.Combine(_baseDir, SanitizeDir(senderId));
@@ -706,7 +844,7 @@ namespace MyFirstMod
             return dir;
         }
 
-        public static void StoreDiplomacyProposal(string proposerId, string targetId, string proposalType, string? tributeArg = null)
+        public static void StoreDiplomacyProposal(string proposerId, string targetId, string proposalType, string? tributeArg = null, string? message = null)
         {
             var dir = GetDiplomacyDir();
             var fileName = $"{SanitizeDir(proposerId)}_to_{SanitizeDir(targetId)}_{proposalType}.proposal";
@@ -714,6 +852,8 @@ namespace MyFirstMod
             var content = $"proposer={proposerId}\ntarget={targetId}\ntype={proposalType}";
             if (tributeArg != null)
                 content += $"\ntribute={tributeArg}";
+            if (!string.IsNullOrEmpty(message))
+                content += $"\nmessage={message}";
             File.WriteAllText(path, content, Encoding.UTF8);
         }
 
@@ -743,6 +883,102 @@ namespace MyFirstMod
             var dir = GetDiplomacyDir();
             var path = Path.Combine(dir, SanitizeFile(proposalFileName) + ".proposal");
             if (File.Exists(path)) File.Delete(path);
+        }
+
+        public static string? FuzzyFindProposal(string fuzzyId, string targetEntityId)
+        {
+            var content = ReadDiplomacyProposal(fuzzyId);
+            if (content != null) return fuzzyId;
+
+            var pending = ListPendingProposals(targetEntityId);
+            if (pending.Count == 0) return null;
+
+            var lowerFuzzy = fuzzyId.ToLowerInvariant();
+
+            string? bestMatch = null;
+            int bestScore = 0;
+
+            foreach (var p in pending)
+            {
+                var pContent = ReadDiplomacyProposal(p);
+                if (pContent == null) continue;
+
+                var lowerP = p.ToLowerInvariant();
+                var score = 0;
+
+                var typeProposer = ParseProposalMeta(pContent);
+                var typeName = FuzzyTypeName(typeProposer.Type);
+
+                if (lowerFuzzy.Contains(typeName)) score += 10;
+                if (lowerFuzzy.Contains(typeProposer.Type)) score += 10;
+
+                var proposerParts = typeProposer.ProposerId.ToLowerInvariant().Split('_');
+                foreach (var part in proposerParts)
+                {
+                    if (part.Length >= 2 && lowerFuzzy.Contains(part))
+                        score += 5;
+                }
+
+                if (lowerP.Contains(lowerFuzzy)) score += 20;
+                var commonChars = lowerFuzzy.Intersect(lowerP).Count();
+                score += commonChars / 2;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestMatch = p;
+                }
+            }
+
+            return bestScore >= 10 ? bestMatch : null;
+        }
+
+        public static (string ProposerId, string TargetId, string Type) ParseProposalMeta(string content)
+        {
+            var proposerId = "";
+            var targetId = "";
+            var type = "";
+            foreach (var line in content.Split('\n'))
+            {
+                if (line.StartsWith("proposer=")) proposerId = line.Substring(9);
+                else if (line.StartsWith("target=")) targetId = line.Substring(7);
+                else if (line.StartsWith("type=")) type = line.Substring(5);
+            }
+            return (proposerId, targetId, type);
+        }
+
+        private static string FuzzyTypeName(string type) => type switch
+        {
+            "peace" => "peace",
+            "alliance" => "alliance",
+            "trade" => "trade",
+            _ => type
+        };
+
+        public static List<(string Id, string Type)> GetProposalsBetween(string entityA, string entityB)
+        {
+            var result = new List<(string Id, string Type)>();
+            var sanitizedA = SanitizeDir(entityA);
+            var sanitizedB = SanitizeDir(entityB);
+
+            AddProposalsFromTargetList("A→B");
+            AddProposalsFromTargetList("B→A");
+            return result;
+
+            void AddProposalsFromTargetList(string direction)
+            {
+                var targetId = direction == "A→B" ? entityB : entityA;
+                var proposerSanitized = direction == "A→B" ? sanitizedA : sanitizedB;
+                foreach (var p in ListPendingProposals(targetId))
+                {
+                    if (p.StartsWith(proposerSanitized + "_to_"))
+                    {
+                        var parts = p.Split('_');
+                        var type = parts.Length >= 2 ? parts[parts.Length - 1] : "?";
+                        result.Add((p, type));
+                    }
+                }
+            }
         }
 
         private static bool IsPathAllowed(string relPath, bool read, bool write = false)

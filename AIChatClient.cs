@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -160,7 +161,7 @@ namespace MyFirstMod
                         return QuerySettlement(args["name"]?.ToString() ?? "");
 
                     case "query_world_state":
-                        return QueryWorldState();
+                        return QueryWorldState(args["kingdom_name"]?.ToString());
 
                     case "query_kingdom_settlements":
                         return ExecuteQueryKingdomSettlements(args["kingdom_name"]?.ToString() ?? "");
@@ -174,20 +175,24 @@ namespace MyFirstMod
                     case "query_war_status":
                         return ExecuteQueryWarStatus(args["kingdom_name"]?.ToString());
 
+                    case "query_pending_proposals":
+                        return ExecuteQueryPendingProposals();
+
                     case "declare_war":
-                        return ExecuteDeclareWar(args["target_kingdom"]?.ToString() ?? "");
+                        return ExecuteDeclareWar(args["target_kingdom"]?.ToString() ?? "", args["message"]?.ToString());
 
                     case "propose_peace":
                         return ExecuteProposePeace(
                             args["target_kingdom"]?.ToString() ?? "",
                             args["tribute_amount"]?.ToObject<int>() ?? 0,
-                            args["tribute_days"]?.ToObject<int>() ?? 0);
+                            args["tribute_days"]?.ToObject<int>() ?? 0,
+                            args["message"]?.ToString());
 
                     case "propose_alliance":
-                        return ExecuteProposeAlliance(args["target_kingdom"]?.ToString() ?? "");
+                        return ExecuteProposeAlliance(args["target_kingdom"]?.ToString() ?? "", args["message"]?.ToString());
 
                     case "propose_trade":
-                        return ExecuteProposeTrade(args["target_kingdom"]?.ToString() ?? "");
+                        return ExecuteProposeTrade(args["target_kingdom"]?.ToString() ?? "", args["message"]?.ToString());
 
                     case "respond_to_diplomacy_proposal":
                         return ExecuteRespondToProposal(
@@ -365,11 +370,25 @@ namespace MyFirstMod
             return $"[未找到] 名称为 \"{name}\" 的定居点";
         }
 
-        private static string QueryWorldState()
+        private static string QueryWorldState(string? kingdomName)
         {
             var sb = new System.Text.StringBuilder();
+            var ab = Campaign.Current.GetCampaignBehavior<IAllianceCampaignBehavior>();
+            var tb = Campaign.Current.GetCampaignBehavior<ITradeAgreementsCampaignBehavior>();
 
-            foreach (var k in Kingdom.All)
+            IEnumerable<Kingdom> targets;
+            if (!string.IsNullOrEmpty(kingdomName))
+            {
+                var found = FindKingdom(kingdomName);
+                if (found == null) return $"[未找到] 名为 \"{kingdomName}\" 的王国";
+                targets = new[] { found };
+            }
+            else
+            {
+                targets = Kingdom.All;
+            }
+
+            foreach (var k in targets)
             {
                 var kName = k.Name?.ToString() ?? "未知";
                 var strength = k.CurrentTotalStrength.ToString("F0");
@@ -382,6 +401,15 @@ namespace MyFirstMod
                     if (enemyK == k) continue;
                     if (k.IsAtWarWith(enemyK))
                         sb.AppendLine($"  ⚔ 与 {enemyK.Name} 交战中");
+                }
+
+                foreach (var other in Kingdom.All)
+                {
+                    if (other == k) continue;
+                    if (ab?.IsAllyWithKingdom(k, other) == true)
+                        sb.AppendLine($"  🤝 与 {other.Name} 军事同盟");
+                    if (tb != null && tb.HasTradeAgreement(k, other, out _))
+                        sb.AppendLine($"  🏪 与 {other.Name} 贸易协定");
                 }
             }
 
@@ -710,6 +738,53 @@ namespace MyFirstMod
             return sb.ToString().TrimEnd();
         }
 
+        private static string ExecuteQueryPendingProposals()
+        {
+            var actingHero = GetDiplomacyHero();
+            if (actingHero == null) return "[错误] 只有王国统治者才能查看外交提案";
+            var myEntity = EntityManager.GetOrCreateEntity(actingHero);
+            if (myEntity == null) return "[错误] 无法解析当前实体";
+
+            var pending = AgentManager.ListPendingProposals(myEntity.Id);
+            if (pending.Count == 0)
+                return "你当前没有待处理的外交提案。";
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"你当前有 {pending.Count} 份待处理的外交提案：");
+            sb.AppendLine();
+
+            for (int i = 0; i < pending.Count; i++)
+            {
+                var p = pending[i];
+                var pContent = AgentManager.ReadDiplomacyProposal(p);
+                if (pContent == null) continue;
+
+                var (proposerId, _, type) = AgentManager.ParseProposalMeta(pContent);
+                var typeName = type switch
+                {
+                    "peace" => "议和",
+                    "alliance" => "结盟",
+                    "trade" => "贸易协定",
+                    _ => type
+                };
+                var proposerName = "?";
+                var pe = EntityManager.GetEntityById(proposerId);
+                if (pe != null) proposerName = pe.Name;
+
+                var msgLine = pContent.Split('\n')
+                    .FirstOrDefault(l => l.StartsWith("message="))?.Substring(8);
+
+                sb.AppendLine($"{i + 1}. [{typeName}] 来自 {proposerName}（{proposerId}）");
+                sb.AppendLine($"   ID: {p}");
+                if (!string.IsNullOrEmpty(msgLine))
+                    sb.AppendLine($"   附言：\"{msgLine}\"");
+                sb.AppendLine();
+            }
+
+            sb.AppendLine("对每个提案，用 respond_to_diplomacy_proposal(proposal_id, accepted) 逐一处理。");
+            return sb.ToString().TrimEnd();
+        }
+
         private static string ExecuteQueryWarStatus(string? kingdomName)
         {
             if (Campaign.Current == null)
@@ -726,16 +801,7 @@ namespace MyFirstMod
             }
             else
             {
-                kingdom = null;
-                foreach (var k in Kingdom.All)
-                {
-                    var kName = k.Name?.ToString() ?? "";
-                    if (kName.Contains(kingdomName!) || kingdomName!.Contains(kName))
-                    {
-                        kingdom = k;
-                        break;
-                    }
-                }
+                kingdom = FindKingdom(kingdomName!);
                 if (kingdom == null)
                     return $"[未找到] 名为 \"{kingdomName}\" 的王国";
             }
@@ -790,13 +856,35 @@ namespace MyFirstMod
             return sb.ToString().TrimEnd();
         }
 
+        private static readonly Dictionary<string, string> _kingdomNameMap = new()
+        {
+            ["battania"] = "巴旦尼亚", ["battanian"] = "巴旦尼亚",
+            ["vlandia"] = "瓦兰迪亚", ["vlandian"] = "瓦兰迪亚",
+            ["sturgia"] = "斯特吉亚", ["sturgian"] = "斯特吉亚",
+            ["western empire"] = "西帝国", ["west empire"] = "西帝国",
+            ["southern empire"] = "南帝国", ["south empire"] = "南帝国",
+            ["northern empire"] = "北帝国", ["north empire"] = "北帝国",
+            ["khuzait"] = "库赛特",
+            ["aserai"] = "阿塞莱",
+        };
+
         private static Kingdom? FindKingdom(string name)
         {
             if (string.IsNullOrEmpty(name)) return null;
+            var searchName = name.Trim();
+            var lower = searchName.ToLowerInvariant();
+            if (_kingdomNameMap.TryGetValue(lower, out var mapped))
+                searchName = mapped;
             foreach (var k in Kingdom.All)
             {
                 var kName = k.Name?.ToString() ?? "";
-                if (kName.Contains(name) || name.Contains(kName))
+                if (kName.Contains(searchName) || searchName.Contains(kName))
+                    return k;
+            }
+            foreach (var k in Kingdom.All)
+            {
+                var kName = (k.Name?.ToString() ?? "").ToLowerInvariant();
+                if (kName.Contains(lower) || lower.Contains(kName))
                     return k;
             }
             return null;
@@ -819,7 +907,7 @@ namespace MyFirstMod
             return null;
         }
 
-        private static string ExecuteDeclareWar(string targetKingdomName)
+        private static string ExecuteDeclareWar(string targetKingdomName, string? message)
         {
             var actingHero = GetDiplomacyHero();
             if (actingHero == null) return "[错误] 只有王国统治者才能宣战";
@@ -830,71 +918,100 @@ namespace MyFirstMod
             if (target == myKingdom) return "[错误] 不能对自己宣战";
             if (myKingdom.IsAtWarWith(target)) return $"已经与{target.Name}处于交战状态。";
             IsAgentDiplomacyInProgress = true;
-            try { DeclareWarAction.ApplyByKingdomDecision(myKingdom, target); }
+            try { DeclareWarAction.ApplyByDefault(myKingdom, target); }
             finally { IsAgentDiplomacyInProgress = false; }
-            return $"已向{target.Name}宣战。";
+            var msgSuffix = !string.IsNullOrEmpty(message) ? $"\n宣战声明：{message}" : "";
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"{myKingdom.Name} 向 {target.Name} 宣战！{msgSuffix}", Colors.Red));
+            return $"已向{target.Name}宣战。{msgSuffix}";
         }
 
-        private static string ExecuteProposePeace(string targetKingdomName, int tributeAmount, int tributeDays)
+        private static string ExecuteProposePeace(string targetKingdomName, int tributeAmount, int tributeDays, string? message)
         {
             var actingHero = GetDiplomacyHero();
             if (actingHero == null) return "[错误] 只有王国统治者才能提出议和";
             var myKingdom = actingHero.MapFaction as Kingdom;
             if (myKingdom == null) return "[错误] 你当前不属于任何王国";
             var target = FindKingdom(targetKingdomName);
-            if (target == null) return $"[错误] 未找到王国：{targetKingdomName}";
-            if (!myKingdom.IsAtWarWith(target)) return $"[错误] 当前并未与{target.Name}交战";
-            var myEntity = EntityManager.GetEntityByHero(actingHero);
+            if (target == null)
+            {
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"{actingHero.Name} 提议议和失败：未找到王国「{targetKingdomName}」", Colors.Red));
+                return $"[错误] 未找到王国：{targetKingdomName}";
+            }
+            if (!myKingdom.IsAtWarWith(target))
+            {
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"{actingHero.Name} 提议议和失败：并未与{target.Name}交战", Colors.Red));
+                return $"[错误] 当前并未与{target.Name}交战";
+            }
+            var myEntity = EntityManager.GetOrCreateEntity(actingHero);
             var targetRuler = target.RulingClan?.Leader;
             if (targetRuler == null) return $"[错误] {target.Name} 没有统治者";
-            var targetEntity = EntityManager.GetEntityByHero(targetRuler);
-            if (myEntity == null || targetEntity == null) return "[错误] 实体解析失败";
+            var targetEntity = EntityManager.GetOrCreateEntity(targetRuler);
             var tributeArg = $"{tributeAmount}_{tributeDays}";
-            AgentManager.StoreDiplomacyProposal(myEntity.Id, targetEntity.Id, "peace", tributeArg);
+            AgentManager.StoreDiplomacyProposal(myEntity.Id, targetEntity.Id, "peace", tributeArg, message);
+            var msgPart = !string.IsNullOrEmpty(message) ? $"\n\n附言：\"{message}\"" : "";
             QueueKingActivation(targetEntity.Id, myEntity.Id,
-                $"来自 {myEntity.Name}（{myKingdom.Name} 统治者）的议和提案：愿意支付每日 {tributeAmount} 金币、持续 {tributeDays} 天作为赔款。你接受这个议和条件吗？请用 respond_to_diplomacy_proposal 回复。");
+                $"来自 {myEntity.Name}（{myKingdom.Name} 统治者）的议和提案：愿意支付每日 {tributeAmount} 金币、持续 {tributeDays} 天作为赔款。你接受这个议和条件吗？请用 respond_to_diplomacy_proposal 回复。{msgPart}");
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"{myEntity.Name}（{myKingdom.Name}）向 {target.Name} 提议议和", Colors.Cyan));
             return $"议和提案已发送给{target.Name}的统治者{targetRuler.Name}，等待回复。";
         }
 
-        private static string ExecuteProposeAlliance(string targetKingdomName)
+        private static string ExecuteProposeAlliance(string targetKingdomName, string? message)
         {
             var actingHero = GetDiplomacyHero();
             if (actingHero == null) return "[错误] 只有王国统治者才能提议结盟";
             var myKingdom = actingHero.MapFaction as Kingdom;
             if (myKingdom == null) return "[错误] 你当前不属于任何王国";
             var target = FindKingdom(targetKingdomName);
-            if (target == null) return $"[错误] 未找到王国：{targetKingdomName}";
+            if (target == null)
+            {
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"{actingHero.Name} 提议结盟失败：未找到王国「{targetKingdomName}」", Colors.Red));
+                return $"[错误] 未找到王国：{targetKingdomName}";
+            }
             if (target == myKingdom) return "[错误] 不能和自己结盟";
             if (myKingdom.IsAtWarWith(target)) return $"[错误] 无法与交战中的王国结盟";
             var targetRuler = target.RulingClan?.Leader;
             if (targetRuler == null) return $"[错误] {target.Name} 没有统治者";
-            var myEntity = EntityManager.GetEntityByHero(actingHero);
-            var targetEntity = EntityManager.GetEntityByHero(targetRuler);
-            if (myEntity == null || targetEntity == null) return "[错误] 实体解析失败";
-            AgentManager.StoreDiplomacyProposal(myEntity.Id, targetEntity.Id, "alliance");
+            var myEntity = EntityManager.GetOrCreateEntity(actingHero);
+            var targetEntity = EntityManager.GetOrCreateEntity(targetRuler);
+            AgentManager.StoreDiplomacyProposal(myEntity.Id, targetEntity.Id, "alliance", null, message);
+            var msgPart = !string.IsNullOrEmpty(message) ? $"\n\n附言：\"{message}\"" : "";
             QueueKingActivation(targetEntity.Id, myEntity.Id,
-                $"来自 {myEntity.Name}（{myKingdom.Name} 统治者）的结盟提案。你接受这个结盟邀请吗？请用 respond_to_diplomacy_proposal 回复。");
+                $"来自 {myEntity.Name}（{myKingdom.Name} 统治者）的结盟提案。你接受这个结盟邀请吗？请用 respond_to_diplomacy_proposal 回复。{msgPart}");
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"{myEntity.Name}（{myKingdom.Name}）向 {target.Name} 提议结盟", Colors.Cyan));
             return $"结盟提案已发送给{target.Name}的统治者{targetRuler.Name}，等待回复。";
         }
 
-        private static string ExecuteProposeTrade(string targetKingdomName)
+        private static string ExecuteProposeTrade(string targetKingdomName, string? message)
         {
             var actingHero = GetDiplomacyHero();
             if (actingHero == null) return "[错误] 只有王国统治者才能提议贸易协定";
             var myKingdom = actingHero.MapFaction as Kingdom;
             if (myKingdom == null) return "[错误] 你当前不属于任何王国";
             var target = FindKingdom(targetKingdomName);
-            if (target == null) return $"[错误] 未找到王国：{targetKingdomName}";
+            if (target == null)
+            {
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"{actingHero.Name} 提议贸易协定失败：未找到王国「{targetKingdomName}」", Colors.Red));
+                return $"[错误] 未找到王国：{targetKingdomName}";
+            }
             if (target == myKingdom) return "[错误] 不能和自己签订贸易协定";
             if (myKingdom.IsAtWarWith(target)) return $"[错误] 无法与交战中的王国签订贸易协定";
             var targetRuler = target.RulingClan?.Leader;
             if (targetRuler == null) return $"[错误] {target.Name} 没有统治者";
-            var myEntity = EntityManager.GetEntityByHero(actingHero);
-            var targetEntity = EntityManager.GetEntityByHero(targetRuler);
-            if (myEntity == null || targetEntity == null) return "[错误] 实体解析失败";
-            AgentManager.StoreDiplomacyProposal(myEntity.Id, targetEntity.Id, "trade");
+            var myEntity = EntityManager.GetOrCreateEntity(actingHero);
+            var targetEntity = EntityManager.GetOrCreateEntity(targetRuler);
+            AgentManager.StoreDiplomacyProposal(myEntity.Id, targetEntity.Id, "trade", null, message);
+            var msgPart = !string.IsNullOrEmpty(message) ? $"\n\n附言：\"{message}\"" : "";
             QueueKingActivation(targetEntity.Id, myEntity.Id,
-                $"来自 {myEntity.Name}（{myKingdom.Name} 统治者）的贸易协定提案。你接受这个贸易协定吗？请用 respond_to_diplomacy_proposal 回复。");
+                $"来自 {myEntity.Name}（{myKingdom.Name} 统治者）的贸易协定提案。你接受这个贸易协定吗？请用 respond_to_diplomacy_proposal 回复。{msgPart}");
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"{myEntity.Name}（{myKingdom.Name}）向 {target.Name} 提议贸易协定", Colors.Cyan));
             return $"贸易协定提案已发送给{target.Name}的统治者{targetRuler.Name}，等待回复。";
         }
 
@@ -906,9 +1023,20 @@ namespace MyFirstMod
             if (myKingdom == null) return "[错误] 你当前不属于任何王国";
 
             var content = AgentManager.ReadDiplomacyProposal(proposalId);
+            var matchedId = proposalId;
+            if (content == null)
+            {
+                var selfEntity = EntityManager.GetEntityByHero(actingHero);
+                if (selfEntity != null)
+                {
+                    matchedId = AgentManager.FuzzyFindProposal(proposalId, selfEntity.Id);
+                    if (matchedId != null)
+                        content = AgentManager.ReadDiplomacyProposal(matchedId);
+                }
+            }
             if (content == null) return $"[错误] 未找到提案：{proposalId}";
 
-            var parts = proposalId.Split('_');
+            var parts = matchedId.Split('_');
             if (parts.Length < 3) return $"[错误] 无效的提案ID格式";
 
             var proposerId = "";
@@ -935,7 +1063,7 @@ namespace MyFirstMod
                 }
             }
 
-            var myEntity = EntityManager.GetEntityByHero(actingHero);
+            var myEntity = EntityManager.GetOrCreateEntity(actingHero);
             if (myEntity == null || myEntity.Id != targetId)
                 return "[错误] 该提案不是发给你的";
 
@@ -944,7 +1072,11 @@ namespace MyFirstMod
 
             if (!accepted)
             {
-                AgentManager.DeleteDiplomacyProposal(proposalId);
+                AgentManager.DeleteDiplomacyProposal(matchedId);
+                RecordDecision(myEntity.Id, proposerId, type, "拒绝", matchedId);
+                var rejectTypeName = type switch { "peace" => "议和", "alliance" => "结盟", "trade" => "贸易协定", _ => type };
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"{myEntity.Name} 拒绝了 {proposerEntity.Name} 的{rejectTypeName}提案", Colors.Yellow));
                 return "已拒绝该提案。";
             }
 
@@ -970,9 +1102,20 @@ namespace MyFirstMod
                     var tributeAmount = int.TryParse(tributeParts[0], out var a) ? a : 0;
                     var tributeDays = int.TryParse(tributeParts[1], out var d) ? d : 0;
                     IsAgentDiplomacyInProgress = true;
-                    try { MakePeaceAction.ApplyByKingdomDecision(proposerKingdom, myKingdom, tributeAmount, tributeDays); }
+                    try
+                    {
+                        var detailType = typeof(MakePeaceAction).GetNestedType("MakePeaceDetail",
+                            BindingFlags.Public | BindingFlags.NonPublic);
+                        var defaultDetail = Enum.ToObject(detailType!, 0);
+                        var applyInternal = typeof(MakePeaceAction).GetMethod("ApplyInternal",
+                            BindingFlags.NonPublic | BindingFlags.Static);
+                        applyInternal!.Invoke(null, new object[] { proposerKingdom, myKingdom, tributeAmount, tributeDays, defaultDetail });
+                    }
                     finally { IsAgentDiplomacyInProgress = false; }
-                    AgentManager.DeleteDiplomacyProposal(proposalId);
+                    AgentManager.DeleteDiplomacyProposal(matchedId);
+                    RecordDecision(myEntity.Id, proposerId, type, "接受", matchedId);
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"{myEntity.Name}（{myKingdom.Name}）接受了 {proposerEntity.Name} 的议和提案", Colors.Green));
                     return $"已接受议和，与{proposerKingdom.Name}达成和平。";
                 }
                 case "alliance":
@@ -981,10 +1124,14 @@ namespace MyFirstMod
                     try
                     {
                         var ab = Campaign.Current.GetCampaignBehavior<IAllianceCampaignBehavior>();
+                        if (ab == null) return "[错误] 联盟系统未初始化";
                         ab.StartAlliance(proposerKingdom, myKingdom);
                     }
                     finally { IsAgentDiplomacyInProgress = false; }
-                    AgentManager.DeleteDiplomacyProposal(proposalId);
+                    AgentManager.DeleteDiplomacyProposal(matchedId);
+                    RecordDecision(myEntity.Id, proposerId, type, "接受", matchedId);
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"{myEntity.Name}（{myKingdom.Name}）接受了 {proposerEntity.Name} 的结盟提案", Colors.Green));
                     return $"已接受结盟，与{proposerKingdom.Name}组成军事同盟。";
                 }
                 case "trade":
@@ -993,10 +1140,14 @@ namespace MyFirstMod
                     try
                     {
                         var tb = Campaign.Current.GetCampaignBehavior<ITradeAgreementsCampaignBehavior>();
+                        if (tb == null) return "[错误] 贸易系统未初始化";
                         tb.MakeTradeAgreement(proposerKingdom, myKingdom, CampaignTime.Years(1f));
                     }
                     finally { IsAgentDiplomacyInProgress = false; }
-                    AgentManager.DeleteDiplomacyProposal(proposalId);
+                    AgentManager.DeleteDiplomacyProposal(matchedId);
+                    RecordDecision(myEntity.Id, proposerId, type, "接受", matchedId);
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"{myEntity.Name}（{myKingdom.Name}）接受了 {proposerEntity.Name} 的贸易协定", Colors.Green));
                     return $"已接受贸易协定，与{proposerKingdom.Name}建立贸易关系。";
                 }
                 default:
@@ -1006,6 +1157,7 @@ namespace MyFirstMod
 
         private static void QueueKingActivation(string agentId, string targetId, string message)
         {
+            AgentScheduler.RecordProposalActivation(agentId);
             AgentScheduler.QueueEvent(new ActivationEvent
             {
                 Type = ActivationEventType.KingDiplomacy,
@@ -1014,6 +1166,20 @@ namespace MyFirstMod
                 Content = message,
                 Depth = 0
             });
+        }
+
+        private static void RecordDecision(string myId, string otherId, string proposalType, string result, string proposalId)
+        {
+            var typeName = proposalType switch
+            {
+                "peace" => "议和",
+                "alliance" => "结盟",
+                "trade" => "贸易协定",
+                _ => proposalType
+            };
+            var timestamp = PromptManager.GetCurrentTimeString();
+            var entry = $"[{timestamp}] {result}了来自 {otherId} 的{typeName}提案（{proposalId}）\n";
+            AgentManager.AppendDecisionFor(myId, entry);
         }
 
         private static Settlement? FindSettlement(string name)
@@ -1383,8 +1549,7 @@ namespace MyFirstMod
             if (string.IsNullOrEmpty(recipientId)) return "[错误] 请提供收信人实体 ID 或名称";
             if (string.IsNullOrEmpty(content)) return "[错误] 信件内容不能为空";
             if (_currentHero == null) return "[错误] 无当前领主";
-            var senderEntity = EntityManager.GetEntityByHero(_currentHero);
-            if (senderEntity == null) return "[错误] 发信人实体不存在";
+            var senderEntity = EntityManager.GetOrCreateEntity(_currentHero);
             var resolvedId = EntityManager.ResolveEntityId(recipientId);
             if (resolvedId == null) return $"[错误] 未找到名为 \"{recipientId}\" 的实体";
 
@@ -1773,21 +1938,43 @@ namespace MyFirstMod
                 {
                     if (includeTools)
                     {
-                        messageList.Add(new
+                        if (!string.IsNullOrEmpty(entry.ReasoningContent))
                         {
-                            role = entry.Role,
-                            content = entry.Content,
-                            tool_calls = entry.ToolCalls.Select(tc => new
+                            messageList.Add(new JObject
                             {
-                                id = tc.Id,
-                                type = "function",
-                                function = new
+                                ["role"] = entry.Role,
+                                ["content"] = entry.Content,
+                                ["tool_calls"] = new JArray(entry.ToolCalls.Select(tc => new JObject
                                 {
-                                    name = tc.Name,
-                                    arguments = tc.Arguments
-                                }
-                            })
-                        });
+                                    ["id"] = tc.Id,
+                                    ["type"] = "function",
+                                    ["function"] = new JObject
+                                    {
+                                        ["name"] = tc.Name,
+                                        ["arguments"] = tc.Arguments
+                                    }
+                                })),
+                                ["reasoning_content"] = entry.ReasoningContent
+                            });
+                        }
+                        else
+                        {
+                            messageList.Add(new
+                            {
+                                role = entry.Role,
+                                content = entry.Content,
+                                tool_calls = entry.ToolCalls.Select(tc => new
+                                {
+                                    id = tc.Id,
+                                    type = "function",
+                                    function = new
+                                    {
+                                        name = tc.Name,
+                                        arguments = tc.Arguments
+                                    }
+                                })
+                            });
+                        }
                     }
                     else
                     {
@@ -1851,6 +2038,7 @@ namespace MyFirstMod
 
                 var roundToolCalls = new List<JToken>();
                 var roundText = "";
+                var roundReasoning = "";
 
                 using var stream = await httpResponse.Content.ReadAsStreamAsync();
                 using var reader = new StreamReader(stream, Encoding.UTF8);
@@ -1879,6 +2067,12 @@ namespace MyFirstMod
                     {
                         roundText += deltaContent;
                         accumulatedText += deltaContent;
+                    }
+
+                    var deltaReasoning = delta["reasoning_content"]?.ToString();
+                    if (deltaReasoning != null)
+                    {
+                        roundReasoning += deltaReasoning;
                     }
 
                     var deltaToolCalls = delta["tool_calls"];
@@ -1929,7 +2123,15 @@ namespace MyFirstMod
                 }
 
                 var roundToolCallsObj = new JArray(roundToolCalls);
-                messageList.Add(new { role = "assistant", content = roundText, tool_calls = roundToolCallsObj });
+                var assistantMsg = new JObject
+                {
+                    ["role"] = "assistant",
+                    ["content"] = roundText,
+                    ["tool_calls"] = roundToolCallsObj
+                };
+                if (!string.IsNullOrEmpty(roundReasoning))
+                    assistantMsg["reasoning_content"] = roundReasoning;
+                messageList.Add(assistantMsg);
 
                 foreach (var rt in roundToolCalls)
                 {

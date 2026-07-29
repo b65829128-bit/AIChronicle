@@ -32,9 +32,15 @@ namespace MyFirstMod
         private static readonly Dictionary<Kingdom, CampaignTime> _lastKingActivation = new();
         private static int _warmupFrames = 120;
         private static int _nextKingIndex = 0;
+        private static readonly Dictionary<string, CampaignTime> _lastProposalActivation = new();
 
         public static bool IsProcessing => _currentTask != null && !_currentTask.IsCompleted;
         public static int CurrentProcessingDepth => _currentProcessingDepth;
+
+        public static void RecordProposalActivation(string entityId)
+        {
+            _lastProposalActivation[entityId] = CampaignTime.Now;
+        }
 
         public static void QueueEvent(ActivationEvent evt)
         {
@@ -89,7 +95,15 @@ namespace MyFirstMod
 
                 var kingdom = kingdoms[idx];
                 var ruler = kingdom.RulingClan?.Leader;
-                if (ruler == null || ruler.IsPrisoner || ruler.IsFugitive || !ruler.IsAlive)
+                if (ruler == null || !ruler.IsAlive)
+                    continue;
+
+                var entity = EntityManager.GetOrCreateEntity(ruler);
+                if (entity == null) continue;
+                if (entity.Controller == EntityController.Human) continue;
+
+                if (_lastProposalActivation.TryGetValue(entity.Id, out var lastProposalTime)
+                    && (CampaignTime.Now - lastProposalTime).ToDays < 10)
                     continue;
 
                 var now = CampaignTime.Now;
@@ -100,39 +114,15 @@ namespace MyFirstMod
 
                 _lastKingActivation[kingdom] = now;
 
-                var entity = EntityManager.GetOrCreateEntity(ruler);
-                if (entity == null) continue;
-                if (entity.Controller == EntityController.Human) continue;
-
                 var pendingProposals = AgentManager.ListPendingProposals(entity.Id);
-                var proposalLines = "";
-                if (pendingProposals.Count > 0)
-                {
-                    proposalLines = "\n你当前有待处理的外交提案：\n";
-                    foreach (var p in pendingProposals)
-                    {
-                        var pContent = AgentManager.ReadDiplomacyProposal(p);
-                        if (pContent != null)
-                        {
-                            var lines = pContent.Split('\n');
-                            var proposerLine = lines.FirstOrDefault(l => l.StartsWith("proposer="))?.Substring(9) ?? "?";
-                            var typeLine = lines.FirstOrDefault(l => l.StartsWith("type="))?.Substring(5) ?? "?";
-                            var typeName = typeLine switch
-                            {
-                                "peace" => "议和",
-                                "alliance" => "结盟",
-                                "trade" => "贸易协定",
-                                _ => typeLine
-                            };
-                            proposalLines += $"- {proposerLine} 提出{typeName}（ID: {p}）\n";
-                        }
-                    }
-                    proposalLines += "先处理以上提案，否则不要做其他外交动作。\n";
-                }
+                var proposalLines = pendingProposals.Count > 0
+                    ? $"\n（提示：先调用 query_pending_proposals 查看 {pendingProposals.Count} 份待处理的外交提案）\n"
+                    : "";
 
                 var activationMsg =
                     $"你是{kingdom.Name}的至高统治者。现在审视你的王国外交局势。\n\n"
-                    + $"步骤1：调用 query_war_status 查看战争状况。\n"
+                    + $"步骤1：调用 query_pending_proposals 查看是否有待处理的提案，有则用 respond_to_diplomacy_proposal 逐个处理\n"
+                    + $"步骤2：调用 query_war_status 查看战争状况\n"
                     + proposalLines
                     + $"\n然后执行外交决策：\n"
                     + "- 对于不利的战争 → propose_peace（提出议和条件）\n"
@@ -140,7 +130,8 @@ namespace MyFirstMod
                     + "- 需要盟友 → propose_alliance（只能向中立王国提议）\n"
                     + "- 发现战略良机 → declare_war（宣战）\n"
                     + "- 加强经济 → propose_trade（贸易协定）\n\n"
-                    + "你的决策必须基于 query_war_status 的实数据。不要幻想、不要虚构。";
+                    + "你的决策必须基于实数据。不要幻想、不要虚构。\n"
+                    + "不要用 send_letter 处理外交，外交方案只用上述 function 发起。";
 
                 QueueEvent(new ActivationEvent
                 {
@@ -177,20 +168,55 @@ namespace MyFirstMod
                 if (evt.Type == ActivationEventType.BehaviorCheckIn)
                 {
                     InformationManager.DisplayMessage(new InformationMessage(
-                        $"[MyFirstMod] {agentName} 正在重新评估当前任务...",
+                        $"{agentName} 正在重新评估当前任务...",
                         Colors.Cyan));
                 }
                 else if (evt.Type == ActivationEventType.KingDiplomacy)
                 {
                     InformationManager.DisplayMessage(new InformationMessage(
-                        $"[MyFirstMod] {agentName} 正在处理外交事务...",
+                        $"{agentName} 正在处理外交事务...",
                         Colors.Cyan));
                 }
                 else
                 {
                     InformationManager.DisplayMessage(new InformationMessage(
-                        $"[MyFirstMod] {targetName} 给 {agentName} 写了一封信",
+                        $"{targetName} 给 {agentName} 写了一封信",
                         Colors.Cyan));
+
+                    var proposalsBetween = AgentManager.GetProposalsBetween(evt.AgentId, evt.TargetId);
+                    if (proposalsBetween.Count > 0)
+                    {
+                        var proposalNote = "\n\n【系统提示】你们之间存在待处理的外交提案：\n";
+                        foreach (var (id, type) in proposalsBetween)
+                        {
+                            var typeName = type switch
+                            {
+                                "peace" => "议和",
+                                "alliance" => "结盟",
+                                "trade" => "贸易协定",
+                                _ => type
+                            };
+                            var pContent = AgentManager.ReadDiplomacyProposal(id);
+                            var proposerName = "?";
+                            if (pContent != null)
+                            {
+                                var lines = pContent.Split('\n');
+                                foreach (var line in lines)
+                                {
+                                    if (line.StartsWith("proposer="))
+                                    {
+                                        var pid = line.Substring(9);
+                                        var pe = EntityManager.GetEntityById(pid);
+                                        proposerName = pe?.Name ?? pid;
+                                        break;
+                                    }
+                                }
+                            }
+                            proposalNote += $"- {proposerName} 提出的{typeName}提案（ID: {id}），尚待回应\n";
+                        }
+                        proposalNote += "这封信可能是对方关于提案的回复，你处理后可以考虑是否回应提案。";
+                        evt.Content += proposalNote;
+                    }
                 }
 
                 EntityManager.ActivateInteraction(agentEntity.HeroRef, targetEntity.HeroRef);
@@ -204,10 +230,6 @@ namespace MyFirstMod
                         new() { Role = "user", Content = evt.Content }
                     }
                 };
-
-                InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] {agentName} 正在思考下一步行动...",
-                    Colors.Cyan));
 
                 var intent = evt.Type switch
                 {

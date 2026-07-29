@@ -22,6 +22,7 @@ namespace MyFirstMod
         public string Content { get; set; } = "";
         public string? ToolCallId { get; set; }
         public List<ToolCallData>? ToolCalls { get; set; }
+        public string? ReasoningContent { get; set; }
 
         public static string SerializeList(List<ChatHistoryEntry> entries)
         {
@@ -131,6 +132,8 @@ namespace MyFirstMod
             CopyPromptToCampaign("persona_generation.txt");
             CopyPromptToCampaign("diplomacy_rules.txt");
             CopyPromptToCampaign("chancery_rules.txt");
+            CopyPromptToCampaign("conversation_rules.txt");
+            CopyPromptToCampaign("letter_rules.txt");
             CopyTemplateToCampaign("context_template.txt");
         }
 
@@ -167,20 +170,16 @@ namespace MyFirstMod
 
         public static string BuildAgentSystemPrompt(Hero hero, CharacterPrompt charPrompt, string intent = "conversation")
         {
-            var agentId = AgentManager.ActiveAgentId;
-            var targetId = AgentManager.ActiveTargetId;
-            if (!string.IsNullOrEmpty(agentId) && !string.IsNullOrEmpty(targetId))
-                return ContextBuilder.Build(agentId, targetId, intent);
+            var agentEntity = EntityManager.GetOrCreateEntity(hero);
+            var agentId = agentEntity.Id;
 
-            var template = LoadAgentSystemPromptTemplate();
-            var worldInfo = MySettings.Instance?.UseWorldInfo == true ? LoadWorldInfo() : "";
-            var persona = AgentManager.LoadPersona(hero);
+            string targetId;
+            if (hero != Hero.MainHero && intent == "conversation" && Hero.MainHero != null)
+                targetId = EntityManager.GetOrCreateEntity(Hero.MainHero).Id;
+            else
+                targetId = AgentManager.ActiveTargetId ?? agentId;
 
-            return template
-                .Replace("{persona}", persona)
-                .Replace("{world_info}", worldInfo)
-                .Replace("{player_knowledge}", "")
-                .Replace("{current_time}", GetCurrentTimeString());
+            return ContextBuilder.Build(agentId, targetId, intent);
         }
 
         public static string GetCurrentTimeString()

@@ -402,7 +402,7 @@ namespace MyFirstMod
             }
         }
 
-        private int _kingActivationDays = 30;
+        private int _kingActivationDays = 60;
 
         [SettingPropertyInteger("国王激活间隔（天）", 5, 120, Order = 10, RequireRestart = false,
             HintText = "国王 Agent 的定期外交审视间隔。间隔越短 Token 消耗越大。\n推荐范围：15-60 天。")]

@@ -332,6 +332,8 @@ namespace MyFirstMod
 
 补丁在 `SubModule.OnSubModuleLoad()` 中通过 `harmony.PatchAll()` 自动激活。
 
+> **⚠️ 重要发现（v0.5）**：`harmony.PatchAll()` 在 `OnSubModuleLoad` 时执行，此时部分游戏类型（特别是 `TaleWorlds.CampaignSystem.CampaignBehaviors` 命名空间下的类，如 `KingdomDecisionProposalBehavior`）**尚未完成运行时初始化**，导致这些 `[HarmonyPatch]` 属性静默跳过——补丁既不生效也不报错。**解决方案**：对于这类补丁，在 `OnGameStart` 中用 `Type.GetType("FullName, Assembly")` 获取类型，再用 `harmony.Patch(method, prefix/postfix)` **手动注册**。之前多位 agent 尝试修复原版外交拦截失败，根因均在此。
+
 ### 常见操作：访问游戏内的游戏数据
 
 ```csharp
@@ -576,6 +578,7 @@ Usage:
 - 用 `HttpCompletionOption.ResponseHeadersRead` 获取流式响应
 - 逐行解析 `data:` 前缀的 SSE 事件
 - 文本增量（delta）累积成完整回复
+- `reasoning_content` delta 跨 chunk 累积（DeepSeek 默认思考模式开启，思维链内容需捕获并在工具调用轮次中回传）
 - tool_calls delta 跨 chunk 累积（DeepSeek 协议中 tool_call 分多次 delta 传输）
 
 ### 信件激活机制（AgentScheduler）
@@ -590,10 +593,12 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 
 - 每帧消费一个激活事件（`ConcurrentQueue`，线程安全）
 - `ActivationEvent.Depth` 控制级联深度，MCM 可调（默认 5）
-- 支持两种事件类型：`LetterReceived`（来信）和 `BehaviorCheckIn`（定时签到）
-- 玩家可见：左下角弹 `xxx 给 xxx 写了一封信` / `xxx 正在思考下一步行动...`
+- 支持三种事件类型：`LetterReceived`（来信）、`BehaviorCheckIn`（定时签到）、`KingDiplomacy`（国王外交审视）
+- 被俘/逃亡的国王统治者现在也会被激活（仅跳过已死亡和 null 的），`BuildSelfStatus` 中会提示"你仍是王国统治者"
+- 玩家可见：左下角弹 `xxx 给 xxx 写了一封信` / `xxx 正在思考下一步行动...` / `xxx 正在处理外交事务...`
 - 防递归：书信规则强调"除非必要不回信" + 深度硬上限
 - 聊天记录使用显式路径（`GetChatLogPathFor`）防线程竞态
+- 外交提案感知：`LetterReceived` 处理时自动检测双方是否有待处理的外交提案（`AgentManager.GetProposalsBetween`），如有则将提案摘要注入上下文提示 Agent
 
 ## 调试方法
 
@@ -651,6 +656,7 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | `escort_party` | 军事 | 护送跟随另一支部队（持续性，24h 签到） |
 | `go_around_party` | 行军 | 绕行回避某支部队 |
 | `query_war_status` | 查询 | 查询王国战争统计（双方阵亡/攻城/劫掠数） |
+| `query_pending_proposals` | 查询 | 列出当前王国待处理的外交提案（无需参数，自动按当前 Entity 过滤） |
 | `declare_war` | 外交 | 向另一王国宣战（单向，国王专属） |
 | `propose_peace` | 外交 | 向另一王国提议议和（双向，附赔偿方案，国王专属） |
 | `propose_alliance` | 外交 | 向另一王国提议结盟（双向，国王专属） |
@@ -712,9 +718,9 @@ Bannerlord 的模组加载有严格的初始化顺序。**在错误的阶段调�
 
 | 阶段 | 可以做什么 | 不能做什么 |
 |------|-----------|-----------|
-| `OnSubModuleLoad` | `Harmony.PatchAll()`、初始化纯数据结构 | 调用 `InformationManager`、访问 `Campaign`、任何 UI 操作 |
+| `OnSubModuleLoad` | `Harmony.PatchAll()`（仅对已完成的类型生效）、初始化纯数据结构 | 调用 `InformationManager`、访问 `Campaign`、打补丁到未初始化的类型 |
 | `OnBeforeInitialModuleScreenSetAsRoot` | 显示欢迎消息、修改主菜单 | 访问战役数据（还没进游戏） |
-| `OnGameStart` | 注册 CampaignBehavior、显示消息、访问战役数据 | - |
+| `OnGameStart` | 注册 CampaignBehavior、显示消息、访问战役数据、**用 Type.GetType + harmony.Patch 手动补丁未初始化的类型** | - |
 
 **常见崩溃码：**
 

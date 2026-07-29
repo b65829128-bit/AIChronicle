@@ -1,13 +1,13 @@
 ﻿<?xml version="1.0" encoding="UTF-8"?>
 <Module xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
         xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/BUTR/Bannerlord.XmlSchemas/master/SubModule.xsd" >
-  <Id value="$moduleid$" />
-  <Name value="$modulename$" />
-  <Version value="v$version$" />
+  <Id value="MyFirstMod" />
+  <Name value="MyFirstMod" />
+  <Version value="v0.5.0" />
   <DefaultModule value="false" />
   <ModuleCategory value="Singleplayer"/>
   <ModuleType value="Community" />
-  <Url value="$moduleurl$" />
+  <Url value="" />
   <DependedModules>
     <DependedModule Id="Bannerlord.Harmony" DependentVersion="v2.2.2" />
     <DependedModule Id="Bannerlord.ButterLib" DependentVersion="v2.10.2" />
@@ -19,8 +19,6 @@
     <DependedModule Id="StoryMode" />
     <DependedModule Id="CustomBattle" />
   </DependedModules>
-  <!-- Community Dependency Metadata -->
-  <!-- https://github.com/BUTR/Bannerlord.BLSE#community-dependency-metadata -->
   <DependedModuleMetadatas>
     <DependedModuleMetadata id="Bannerlord.Harmony" order="LoadBeforeThis" version="v2.3.3" />
     <DependedModuleMetadata id="Bannerlord.ButterLib" order="LoadBeforeThis" version="v2.10.9" />
@@ -32,12 +30,11 @@
     <DependedModuleMetadata id="StoryMode" order="LoadBeforeThis" />
     <DependedModuleMetadata id="CustomBattle" order="LoadBeforeThis" />
   </DependedModuleMetadatas>
-  <!-- Community Dependency Metadata -->
   <SubModules>
     <SubModule>
-      <Name value="$modulename$" />
-      <DLLName value="$moduleid$.dll" />
-      <SubModuleClassType value="$moduleid$.SubModule" />
+      <Name value="MyFirstMod" />
+      <DLLName value="MyFirstMod.dll" />
+      <SubModuleClassType value="MyFirstMod.SubModule" />
       <Tags />
     </SubModule>
   </SubModules>
