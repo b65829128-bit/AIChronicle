@@ -1335,7 +1335,8 @@ namespace MyFirstMod
 
             var hero = AIChatClient.CurrentHero;
             var party = hero.PartyBelongedTo;
-            var settlement = hero.CurrentSettlement ?? party?.CurrentSettlement;
+            var settlement = hero.CurrentSettlement ?? party?.CurrentSettlement
+                ?? FindNearbySettlement(party);
             if (settlement == null)
                 return "[错误] 你当前不在任何定居点内。请先移动到城镇或村庄。";
 
@@ -1661,6 +1662,22 @@ namespace MyFirstMod
             }
 
             return sb.ToString().TrimEnd();
+        }
+
+        private static Settlement? FindNearbySettlement(MobileParty? party)
+        {
+            if (party == null || !party.IsActive) return null;
+            var pos = party.GetPosition2D;
+            foreach (var s in Settlement.All)
+            {
+                if (!s.IsTown && !s.IsCastle && !s.IsVillage) continue;
+                var gate = s.GatePosition.ToVec2();
+                var dx = pos.X - gate.X;
+                var dy = pos.Y - gate.Y;
+                if ((dx * dx + dy * dy) < 25f)
+                    return s;
+            }
+            return null;
         }
 
         private static Settlement? FindSettlement(string name)

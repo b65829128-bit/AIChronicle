@@ -123,13 +123,13 @@ namespace MyFirstMod
                         {
                             if (party.CurrentSettlement == action.TargetSettlement)
                                 action.TargetReached = true;
-                            else
+                            else if (party.DefaultBehavior != AiBehavior.GoToSettlement)
                             {
                                 var myPos = party.GetPosition2D;
                                 var targetPos = action.TargetSettlement.GatePosition.ToVec2();
                                 var dx = myPos.X - targetPos.X;
                                 var dy = myPos.Y - targetPos.Y;
-                                action.TargetReached = (dx * dx + dy * dy) < 25f; // 5m^2
+                                action.TargetReached = (dx * dx + dy * dy) < 25f;
                             }
                         }
                         else
