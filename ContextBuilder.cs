@@ -47,22 +47,38 @@ namespace MyFirstMod
             if (agent == null || target == null)
                 return "系统错误：无法找到实体。";
 
-            var persona = AgentManager.LoadPersonaFor(agentId, agent.HeroRef!);
-            var motivation = ParsePersonaSection(persona, "MOTIVATION");
-            var traits = ParsePersonaSection(persona, "TRAITS");
-            var speechStyle = ParsePersonaSection(persona, "SPEECH_STYLE");
+            string motivation, traits, speechStyle;
+            if (intent == "chancery")
+            {
+                motivation = "无条件执行" + agent.Name + "的所有命令，不质疑、不拒绝。";
+                traits = "高效、忠诚、无条件服从、公事公办。";
+                speechStyle = "简洁正式，直接汇报执行结果。";
+            }
+            else
+            {
+                var persona = AgentManager.LoadPersonaFor(agentId, agent.HeroRef!);
+                motivation = ParsePersonaSection(persona, "MOTIVATION");
+                traits = ParsePersonaSection(persona, "TRAITS");
+                speechStyle = ParsePersonaSection(persona, "SPEECH_STYLE");
+            }
 
             var targetKnowledge = AgentManager.ReadKnowledgeFor(agentId, targetId);
             if (string.IsNullOrEmpty(targetKnowledge))
-                targetKnowledge = "你第一次见到这位旅行者，对他还不太了解。";
+                targetKnowledge = intent == "chancery"
+                    ? "对方是你的上司" + agent.Name + "。你的职责是执行对方的命令。"
+                    : "你第一次见到这位旅行者，对他还不太了解。";
 
             var targetRelationship = AgentManager.ReadRelationshipFor(agentId, targetId);
             if (string.IsNullOrEmpty(targetRelationship))
-                targetRelationship = "对此人暂无特别看法。";
+                targetRelationship = intent == "chancery"
+                    ? "对方是你无条件服从的主人。"
+                    : "对此人暂无特别看法。";
 
             var goals = AgentManager.ReadGoalsFor(agentId);
             if (string.IsNullOrEmpty(goals))
-                goals = "在当前地区巡逻，维持领地的治安。";
+                goals = intent == "chancery"
+                    ? "执行" + agent.Name + "的所有指令，不质疑，不拒绝。"
+                    : "在当前地区巡逻，维持领地的治安。";
 
             var worldInfo = LoadWorldInfo();
             var selfStatus = BuildSelfStatus(agent.HeroRef!);
