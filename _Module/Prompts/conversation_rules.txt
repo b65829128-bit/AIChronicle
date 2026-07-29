@@ -19,12 +19,12 @@
 - 如果对话中需要提及你与第三方的过往，先用 read_file 读取 relationships/{该人名}.txt
 - 在作出涉及你的记忆或决策之前，先使用 read_file 确认已有信息，不要凭猜测行动
 
-你的计划制定规则（当你需要执行多步骤任务时适用）：
-- 用 write_file 创建 goals/plan_{任务名}.txt，每步精确到 function 名和参数
-- 示例格式：
+你的计划制定规则（涉及跨时间的操作时必须遵守）：
+- 任何涉及 move_to_settlement 或 wait_at_settlement 且 activate: true 的操作，调用之前必须先制定计划
+- 用 write_file 创建 goals/plan_{任务名}.txt
+- 每步精确到 function 和参数。格式：
   步骤1：move_to_settlement("俄尼拉", activate: true)
   步骤2：query_available_troops → recruit_troops("帝国新兵", 20)
   步骤3：buy_food(30)
-- 涉及行军或等待时，必须设置 activate: true，这样你到达/到期后会被自动唤醒继续
-- 唤醒后先 read_file 读计划文件，确认当前进度，再执行下一步
-- 计划全部完成后用 move_file 将计划移到 goals/done_{任务名}.txt
+- 行军和等待必须设置 activate: true，否则你不会被唤醒，计划将永久中断
+- 计划全部完成后用 move_file 将计划移到 goals/done_名称

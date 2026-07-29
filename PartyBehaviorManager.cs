@@ -252,12 +252,17 @@ namespace MyFirstMod
                 _ => $"在{locName}完成等待"
             };
 
+            var content = $"你{behaviorDesc}。你现在必须：\n"
+                + "1. 用 glob(\"goals/plan_*\") 找你的活跃计划\n"
+                + "2. 用 read_file 读计划文件，查看当前进度\n"
+                + "3. 执行计划的下一步。如果计划已全部完成，用 move_file 将计划移到 goals/done_名称";
+
             AgentScheduler.QueueEvent(new ActivationEvent
             {
                 Type = ActivationEventType.PlanCheckIn,
                 AgentId = agentEntity.Id,
                 TargetId = agentEntity.Id,
-                Content = behaviorDesc,
+                Content = content,
                 Depth = 0
             });
         }
