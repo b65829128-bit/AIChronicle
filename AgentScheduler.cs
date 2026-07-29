@@ -329,29 +329,33 @@ namespace MyFirstMod
                 _ => proposalType
             };
 
-            var pContent2 = AgentManager.ReadDiplomacyProposal(proposalId);
-            var msgLine = pContent2?.Split('\n')
-                .FirstOrDefault(l => l.StartsWith("message="))?.Substring(8) ?? "";
-
-            var description = evt.Content;
-            if (!string.IsNullOrEmpty(msgLine))
-                description += $"\n\n附言：\"{msgLine}\"";
-
             InformationManager.ShowInquiry(new InquiryData(
                 $"{senderName} 提议{typeName}",
-                description,
+                evt.Content,
                 true, true, "接受", "拒绝",
                 () =>
                 {
-                    var result = DiplomacyService.ExecuteRespondToProposal(proposalId, true);
-                    InformationManager.DisplayMessage(new InformationMessage(
-                        $"[外交] {result}", Colors.Green));
+                    var savedHero = AIChatClient.CurrentHero;
+                    AIChatClient.CurrentHero = null;
+                    try
+                    {
+                        var result = DiplomacyService.ExecuteRespondToProposal(proposalId, true);
+                        InformationManager.DisplayMessage(new InformationMessage(
+                            $"[外交] {result}", Colors.Green));
+                    }
+                    finally { AIChatClient.CurrentHero = savedHero; }
                 },
                 () =>
                 {
-                    var result = DiplomacyService.ExecuteRespondToProposal(proposalId, false);
-                    InformationManager.DisplayMessage(new InformationMessage(
-                        $"[外交] {result}", Colors.Yellow));
+                    var savedHero = AIChatClient.CurrentHero;
+                    AIChatClient.CurrentHero = null;
+                    try
+                    {
+                        var result = DiplomacyService.ExecuteRespondToProposal(proposalId, false);
+                        InformationManager.DisplayMessage(new InformationMessage(
+                            $"[外交] {result}", Colors.Yellow));
+                    }
+                    finally { AIChatClient.CurrentHero = savedHero; }
                 }),
                 pauseGameActiveState: true,
                 prioritize: true);
