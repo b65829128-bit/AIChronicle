@@ -1152,7 +1152,23 @@ namespace MyFirstMod
                 return $"已将 {count} 个 {itemNameStr} 交给 {target.Name}。";
             }
 
-            return $"[未找到] 部队中没有物品 \"{itemName}\"。使用 query_party_troops 查看物品栏。";
+            var eqSlots = new[] { EquipmentIndex.Weapon0, EquipmentIndex.Weapon1, EquipmentIndex.Weapon2, EquipmentIndex.Weapon3,
+                EquipmentIndex.Head, EquipmentIndex.Body, EquipmentIndex.Leg, EquipmentIndex.Gloves, EquipmentIndex.Cape,
+                EquipmentIndex.Horse, EquipmentIndex.HorseHarness };
+            var eq = hero.BattleEquipment;
+            foreach (var slot in eqSlots)
+            {
+                var elem = eq.GetEquipmentFromSlot(slot);
+                if (elem.Item == null) continue;
+                var itemNameStr = elem.Item.Name?.ToString() ?? "";
+                if (!itemNameStr.Contains(itemName) && !itemName.Contains(itemNameStr)) continue;
+
+                eq[slot] = EquipmentElement.Invalid;
+                targetParty.ItemRoster.AddToCounts(elem.Item, 1);
+                return $"已将身上的 {itemNameStr} 交给 {target.Name}。";
+            }
+
+            return $"[未找到] 部队和装备栏中都没有 \"{itemName}\"。使用 query_party_troops 查看详情。";
         }
 
         private static string ExecuteSendLetter(string recipientId, string content)
