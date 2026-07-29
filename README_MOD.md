@@ -83,15 +83,40 @@
 | 分类 | 包含工具 | 默认激活场景 |
 |------|---------|:--|
 | universal | update_knowledge, cancel_action | 全部 |
-| query | query_character, query_settlement, query_world_state, query_recent_events, query_surroundings, query_kingdom_settlements, query_clan_members, query_kingdom_clans, query_war_status, query_pending_proposals | 全部 |
-| social | change_relation, give_gold, request_gold | conversation |
+| query | query_character, query_settlement, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills | 全部 |
+| social | change_relation, give_gold, request_gold, give_item, request_items | conversation |
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous |
-| military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party | autonomous |
+| military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops | autonomous |
 | diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal | diplomacy |
-| file | read_file, write_file, append_file, edit_file, delete_file, list_dir, glob, grep | letter, autonomous |
+| file | read_file, write_file, append_file, edit_file, delete_file, move_file, list_dir, glob, grep | letter, autonomous, conversation |
 | communication | send_letter | letter |
 
 Agent 任何时候都可以调 `browse_tools("military")` 解锁某类工具，下一轮即可使用。
+
+### 征兵与部队管理
+
+- Agent 可以调用 `query_party_troops` 查看自己或他人的部队详情：金币、日薪、兵力/伤兵/上限、各兵种数量经验升级路径、俘虏可招募性、物品栏（武器/盔甲/粮/马）、装备栏
+- Agent 可以调用 `query_available_troops` 查看当前定居点可招募兵种（需在定居点内，被劫掠/敌对村庄无法招兵）
+- Agent 可以调用 `query_settlement_villages` 查看城镇/城堡下属村庄——可用作征兵路线规划
+- Agent 可以调用 `recruit_troops(兵种名, 数量)` 招募士兵（需在该定居点，自动扣金币）
+- Agent 可以调用 `upgrade_troops(原兵种, 目标, 数量)` 升级兵种（自动检查经验、金币、所需装备和特长）
+- Agent 可以调用 `buy_food(天数)` 在定居点自动采购最便宜的粮到够吃 N 天
+- Agent 可以调用 `query_hero_skills` 查看任意人物的 18 个技能等级和 6 个属性值
+- `move_to_settlement` 现在可以移动到村庄（之前只能到城镇/城堡）
+
+### 计划系统
+
+- Agent 面对复杂任务时可制定多步骤计划（存储为 `goals/plan_*.txt`），每步精确到 function 调用
+- `move_to_settlement` 和 `wait_at_settlement` 支持 `activate: true` 参数——到达/到期后自动唤醒 Agent，继续执行计划
+- 唤醒后自动收到指令：读计划文件 → 确认进度 → 执行下一步
+- 用 `move_file` 将完成的计划移到 `goals/done_` 标记完成
+- `conversation` 意图默认包含 `file` 分类，确保 Agent 在对话中就能写计划
+
+### 物品交易
+
+- Agent 可以调用 `give_item(目标, 物品名, 数量)` 将自己物品栏或装备栏中的东西给任意人物
+- Agent 可以调用 `request_items(目标, 物品名, 数量)` 向任意人物索要物品（NPC 直接划转，玩家弹确认框）
+- 已知限制：`request_gold` 和 `request_items` 向 NPC 索要时直接划转，NPC 不经过 LLM 决策
 
 ### 提示词系统（文件化、可热重载）
 

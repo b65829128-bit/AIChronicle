@@ -106,10 +106,10 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **Entity 平等** | 玩家和所有 NPC 统一为 Entity，由 EntityController（Human/Agent）区分 |
 | **动态 Context** | ContextBuilder 根据当前交互双方动态组装系统提示词 |
 | **能力过滤** | 每个 Entity 有 EntityCapability 集合，工具列表按能力自动过滤 |
-| **书信模式** | 支持书信 intent，工具按场景限制（信件中禁用 give_gold/request_gold），O 键唤起收信人列表 |
-| **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file` 精确读写 |
+| **书信模式** | 支持书信 intent，O 键唤起收信人列表 |
+| **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 38 个工具定义在 `tools.json`（29 个游戏工具）和 `agent_tools.json`（9 个文件工具）中，热重载，不硬编码 |
+| **工具定义文件化** | 48 个工具定义在 `tools.json`（38 个游戏工具）和 `agent_tools.json`（10 个文件工具）中，热重载，不硬编码 |
 | **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁 |
 | **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`tool_call_prompt.txt`、`persona_generation.txt`、`context_template.txt`、`chancery_rules.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环（max N 轮或无限），模型调用工具 → 执行 → 追加结果 → 重请求 |
@@ -638,7 +638,7 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | dotnet CLI | `dotnet` | 编译、创建新项目 |
 | Rider | `C:\Program Files\JetBrains\JetBrains Rider 2026.2\bin\rider64.exe` | IDE |
 
-### 游戏工具（tools.json，23 个）
+### 游戏工具（tools.json，38 个）
 
 | 工具 | 类别 | 说明 |
 |------|------|------|
@@ -651,8 +651,8 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | `change_relation` | 关系 | 修改对任意人物的好感度（支持 target_entity_id） |
 | `give_gold` | 经济 | 赠予任意人物金币（支持 target_entity_id） |
 | `request_gold` | 经济 | 向任意人物索要金币（玩家需确认，NPC 自动划转） |
-| `move_to_settlement` | 行军 | 部队行军到城镇/城堡 |
-| `wait_at_settlement` | 行军 | 在定居点停留指定时长 |
+| `move_to_settlement` | 行军 | 部队行军到城镇/城堡/村庄（支持 activate:true 参数自动唤醒） |
+| `wait_at_settlement` | 行军 | 在定居点停留指定时长（支持 activate:true 参数到期自动唤醒） |
 | `raid_settlement` | 军事 | 劫掠村庄 |
 | `besiege_settlement` | 军事 | 围攻城镇/城堡 |
 | `engage_party` | 军事 | 追击并攻击另一支部队 |
@@ -668,8 +668,17 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | `propose_trade` | 外交 | 向另一王国提议贸易协定（双向，国王专属） |
 | `respond_to_diplomacy_proposal` | 外交 | 接受或拒绝收到的外交提案（国王专属） |
 | `cancel_action` | 控制 | 取消当前任务，回归自主 AI |
+| `query_party_troops` | 查询 | 查看部队详情（金币/兵力/各兵种经验升级路径/俘虏/物品栏/装备栏） |
+| `query_available_troops` | 查询 | 查看当前定居点可招募兵种（需在定居点内） |
+| `query_settlement_villages` | 查询 | 查看城镇/城堡的附属村庄列表 |
+| `query_hero_skills` | 查询 | 查询人物 18 个技能等级和 6 个属性值 |
+| `recruit_troops` | 军事 | 从当前定居点招募指定兵种（扣金币，需在定居点内） |
+| `upgrade_troops` | 军事 | 升级兵种（检查经验/金币/装备/perk） |
+| `buy_food` | 行军 | 在定居点买粮到够吃 N 天（自动挑最便宜的） |
+| `give_item` | 社交 | 将自己物品/装备交给任意人物 |
+| `request_items` | 社交 | 向任意人物索要物品（NPC 直接划转，玩家弹确认框） |
 
-### 文件工具（agent_tools.json，8 个）
+### 文件工具（agent_tools.json，10 个）
 
 | 工具 | 说明 |
 |------|------|
@@ -678,6 +687,7 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | `append_file` | 追加内容到文件末尾 |
 | `edit_file` | 精确替换文件中的文本（必须唯一匹配） |
 | `delete_file` | 删除文件 |
+| `move_file` | 移动/重命名文件（如标记计划完成） |
 | `list_dir` | 列出目录内容 |
 | `glob` | 按文件名模式匹配（如 `knowledge/*.txt`） |
 | `grep` | 按关键词搜索文件内容 |
