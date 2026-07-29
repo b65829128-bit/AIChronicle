@@ -1252,18 +1252,17 @@ namespace MyFirstMod
                     sb.Append($"  {troop.Name} (T{tier}) × {elem.Number}");
                     if (elem.WoundedNumber > 0)
                         sb.Append($" (伤 {elem.WoundedNumber})");
-                    if (hasXp)
+                    var upgrades = troop.UpgradeTargets;
+                    if (upgrades != null && upgrades.Length > 0)
                     {
-                        var xpRequired = troop.UpgradeTargets.Length > 0
-                            ? upgradeModel.GetXpCostForUpgrade(party.Party, troop, troop.UpgradeTargets[0])
-                            : 0;
+                        var xpRequired = upgradeModel.GetXpCostForUpgrade(party.Party, troop, upgrades[0]);
                         sb.Append($" [经验 {elem.Xp}/{xpRequired}]");
                     }
                     sb.AppendLine();
 
-                    if (upgradeModel.IsTroopUpgradeable(party.Party, troop))
+                    if (upgrades != null && upgradeModel.IsTroopUpgradeable(party.Party, troop))
                     {
-                        foreach (var target in troop.UpgradeTargets)
+                        foreach (var target in upgrades)
                         {
                             if (target == null) continue;
                             if (!upgradeModel.CanPartyUpgradeTroopToTarget(party.Party, troop, target))
@@ -1469,9 +1468,12 @@ namespace MyFirstMod
                     return $"[错误] {tName} 没有可升级的路径。";
 
                 CharacterObject? target = null;
+                var upgrades = troop.UpgradeTargets;
+                if (upgrades == null || upgrades.Length == 0)
+                    return $"[错误] {tName} 没有可升级的路径。";
                 if (!string.IsNullOrEmpty(targetTroopName))
                 {
-                    foreach (var t in troop.UpgradeTargets)
+                    foreach (var t in upgrades)
                     {
                         if (t == null) continue;
                         var ttName = t.Name?.ToString() ?? "";
@@ -1486,7 +1488,7 @@ namespace MyFirstMod
                 }
                 else
                 {
-                    target = troop.UpgradeTargets.FirstOrDefault(t => t != null);
+                    target = upgrades.FirstOrDefault(t => t != null);
                     if (target == null)
                         return $"[错误] {tName} 没有可用的升级目标。";
                 }
