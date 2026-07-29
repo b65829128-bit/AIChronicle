@@ -404,5 +404,86 @@
         "description": "Name of the kingdom to query, in Chinese or English."
       }
     ]
+  },
+  {
+    "name": "query_party_troops",
+    "category": "query",
+    "description": "Inspect a party's troop roster, prisoners, inventory, and finances.\n\nUsage:\n- Call this to learn about your own party or another party's composition.\n- The target_entity_id specifies whose party to inspect. Omit to inspect your own party.\n- Returns: gold, daily wages, troop count/wounded/max, each troop type with count/Xp/upgrade paths, prisoners (with recruitability), food supply, horses, warhorses.\n- This is your primary tool for military self-assessment before making recruitment or upgrade decisions.\n- To see what troops are available for recruitment at a settlement, use query_available_troops.",
+    "parameters": [
+      {
+        "name": "target_entity_id",
+        "type": "string",
+        "description": "Entity ID or Chinese name of the party leader to inspect. Omit to inspect your own party."
+      }
+    ]
+  },
+  {
+    "name": "query_available_troops",
+    "category": "query",
+    "description": "View all troops available for recruitment at your current settlement.\n\nUsage:\n- Call this ONLY when you are inside a settlement (town, castle, or village).\n- No parameters — automatically scans the settlement's notables.\n- Returns: each notable's name and list of available troops with tier and gold cost per unit.\n- Then use recruit_troops(troop_name, count) to actually recruit.\n- If you are not at a settlement, you must call move_to_settlement first.",
+    "parameters": []
+  },
+  {
+    "name": "recruit_troops",
+    "category": "military",
+    "description": "Recruit troops from a notable at your current settlement.\n\nUsage:\n- Call this ONLY when you are inside a settlement.\n- First use query_available_troops to see what is available and their costs.\n- The troop_name must match a troop shown in query_available_troops output.\n- The count is how many to recruit. You must have enough gold.\n- This costs gold per recruit (varies by troop tier).\n- If the result says the troop was not found, call query_available_troops again to refresh.",
+    "parameters": [
+      {
+        "name": "troop_name",
+        "type": "string",
+        "description": "Name of the troop type to recruit, exactly as shown in query_available_troops."
+      },
+      {
+        "name": "count",
+        "type": "integer",
+        "description": "Number of troops to recruit (1+)."
+      }
+    ]
+  },
+  {
+    "name": "upgrade_troops",
+    "category": "military",
+    "description": "Upgrade existing troops in your party to a higher tier.\n\nUsage:\n- Call this when you have troops with enough experience to upgrade.\n- Use query_party_troops first to see which troops are upgradeable and their costs.\n- The troop_name is the CURRENT troop type to upgrade FROM (e.g., \"帝国新兵\").\n- The target_troop_name specifies WHICH upgrade path to take. If the troop has only one path, you can omit this.\n- The count is how many to upgrade. You must have enough gold, XP, and required items (horses, etc.).\n- Upgrading costs gold per troop and consumes XP. Required items like warhorses must be in your inventory.",
+    "parameters": [
+      {
+        "name": "troop_name",
+        "type": "string",
+        "description": "Name of the troop type to upgrade FROM."
+      },
+      {
+        "name": "target_troop_name",
+        "type": "string",
+        "description": "Name of the target troop type to upgrade TO. Omit to use the first available upgrade path."
+      },
+      {
+        "name": "count",
+        "type": "integer",
+        "description": "Number of troops to upgrade (1+)."
+      }
+    ]
+  },
+  {
+    "name": "buy_food",
+    "category": "movement",
+    "description": "Purchase food from your current settlement's market.\n\nUsage:\n- Call this ONLY when you are inside a settlement.\n- The days parameter specifies how many days of food to stock. The system automatically buys the cheapest available grain, meat, etc.\n- You must have enough gold. The actual gold spent will be reported.\n- If the settlement runs out of food or your gold runs out, the purchase stops early.\n- This is essential before long marches — always check food with query_party_troops before traveling.",
+    "parameters": [
+      {
+        "name": "days",
+        "type": "integer",
+        "description": "Number of days of food to stock (1+)."
+      }
+    ]
+  },
+  {
+    "name": "query_hero_skills",
+    "category": "query",
+    "description": "Query a character's skill levels and attributes.\n\nUsage:\n- Call this to assess someone's capabilities: are they a good commander? a smooth talker? a sharp scout?\n- The target_entity_id specifies whose skills to query. Omit to query your own skills.\n- Returns: all 18 skill levels (OneHanded through Engineering) and 6 attribute scores (Vigor, Control, Endurance, Cunning, Social, Intelligence).\n- This is public assessment — every notable character's skills are known in Calradia.",
+    "parameters": [
+      {
+        "name": "target_entity_id",
+        "type": "string",
+        "description": "Entity ID or Chinese name of the character to query. Omit to query yourself."
+      }
+    ]
   }
 ]

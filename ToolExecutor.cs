@@ -7,9 +7,12 @@ using Newtonsoft.Json.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.LogEntries;
 using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
 using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
 using TaleWorlds.Library;
 
 namespace MyFirstMod
@@ -160,6 +163,29 @@ namespace MyFirstMod
                             args["radius_km"]?.ToObject<int>() ?? 50,
                             args["max_settlements"]?.ToObject<int>() ?? 5,
                             args["max_parties"]?.ToObject<int>() ?? 8);
+
+                    case "query_party_troops":
+                        return ExecuteQueryPartyTroops(args["target_entity_id"]?.ToString());
+
+                    case "query_available_troops":
+                        return ExecuteQueryAvailableTroops();
+
+                    case "recruit_troops":
+                        return ExecuteRecruitTroops(
+                            args["troop_name"]?.ToString() ?? "",
+                            args["count"]?.ToObject<int>() ?? 0);
+
+                    case "upgrade_troops":
+                        return ExecuteUpgradeTroops(
+                            args["troop_name"]?.ToString() ?? "",
+                            args["target_troop_name"]?.ToString() ?? "",
+                            args["count"]?.ToObject<int>() ?? 0);
+
+                    case "buy_food":
+                        return ExecuteBuyFood(args["days"]?.ToObject<int>() ?? 0);
+
+                    case "query_hero_skills":
+                        return ExecuteQueryHeroSkills(args["target_entity_id"]?.ToString());
 
                     case "send_letter":
                         return ExecuteSendLetter(args["recipient_entity_id"]?.ToString() ?? "", args["content"]?.ToString() ?? "");
@@ -1135,6 +1161,426 @@ namespace MyFirstMod
                 sb.AppendLine();
             }
             return sb.ToString().TrimEnd();
+        }
+
+        private static string ExecuteQueryHeroSkills(string? targetEntityId)
+        {
+            var hero = ResolveTargetHero(targetEntityId);
+            if (hero == null) return $"[错误] 未找到目标实体：{targetEntityId}";
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"===== {hero.Name} 的技能与属性 =====");
+            sb.AppendLine();
+
+            var skills = new (string Name, SkillObject Skill)[]
+            {
+                ("单手", DefaultSkills.OneHanded),
+                ("双手", DefaultSkills.TwoHanded),
+                ("长杆", DefaultSkills.Polearm),
+                ("弓", DefaultSkills.Bow),
+                ("弩", DefaultSkills.Crossbow),
+                ("投掷", DefaultSkills.Throwing),
+                ("骑术", DefaultSkills.Riding),
+                ("跑动", DefaultSkills.Athletics),
+                ("锻造", DefaultSkills.Crafting),
+                ("侦查", DefaultSkills.Scouting),
+                ("战术", DefaultSkills.Tactics),
+                ("流氓", DefaultSkills.Roguery),
+                ("魅力", DefaultSkills.Charm),
+                ("统御", DefaultSkills.Leadership),
+                ("交易", DefaultSkills.Trade),
+                ("管理", DefaultSkills.Steward),
+                ("医术", DefaultSkills.Medicine),
+                ("工程", DefaultSkills.Engineering),
+            };
+
+            sb.AppendLine("技能：");
+            foreach (var (name, skill) in skills)
+                sb.AppendLine($"  {name}: {hero.GetSkillValue(skill)}");
+
+            sb.AppendLine();
+            sb.AppendLine("属性：");
+            sb.AppendLine($"  活力: {hero.CharacterAttributes.GetPropertyValue(DefaultCharacterAttributes.Vigor)}");
+            sb.AppendLine($"  控制: {hero.CharacterAttributes.GetPropertyValue(DefaultCharacterAttributes.Control)}");
+            sb.AppendLine($"  耐力: {hero.CharacterAttributes.GetPropertyValue(DefaultCharacterAttributes.Endurance)}");
+            sb.AppendLine($"  狡诈: {hero.CharacterAttributes.GetPropertyValue(DefaultCharacterAttributes.Cunning)}");
+            sb.AppendLine($"  社交: {hero.CharacterAttributes.GetPropertyValue(DefaultCharacterAttributes.Social)}");
+            sb.AppendLine($"  智力: {hero.CharacterAttributes.GetPropertyValue(DefaultCharacterAttributes.Intelligence)}");
+
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string ExecuteQueryPartyTroops(string? targetEntityId)
+        {
+            var party = FindPartyByEntityId(targetEntityId);
+            if (party == null)
+                return $"[错误] 未找到目标部队：{targetEntityId}";
+
+            var leader = party.LeaderHero;
+            var gold = leader?.Gold ?? 0;
+            var wage = party.TotalWage;
+            var memberRoster = party.MemberRoster;
+            var elements = memberRoster.GetTroopRoster();
+            var totalMen = elements.Sum(e => e.Number);
+            var totalWounded = elements.Sum(e => e.WoundedNumber);
+            var maxSize = party.Party.PartySizeLimit;
+            var foodDays = party.GetNumDaysForFoodToLast();
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"===== {(leader != null ? $"{leader.Name}的部队" : party.Name?.ToString() ?? "部队")} =====");
+            sb.AppendLine($"金币: {gold}  |  日薪: {wage}");
+            sb.AppendLine($"兵力 {totalMen} 人, 伤 {totalWounded} 人, 上限 {maxSize}");
+            sb.AppendLine($"粮食: {party.TotalFoodAtInventory} (约 {foodDays:F1} 天)");
+            sb.AppendLine();
+
+            if (elements.Count == 0)
+            {
+                sb.AppendLine("（无士兵）");
+                sb.AppendLine();
+            }
+            else
+            {
+                var upgradeModel = Campaign.Current.Models.PartyTroopUpgradeModel;
+                foreach (var elem in elements.Where(e => e.Character != null && !e.Character.IsHero))
+                {
+                    var troop = elem.Character;
+                    var tier = troop.GetBattleTier();
+                    var hasXp = elem.Xp > 0;
+                    sb.Append($"  {troop.Name} (T{tier}) × {elem.Number}");
+                    if (elem.WoundedNumber > 0)
+                        sb.Append($" (伤 {elem.WoundedNumber})");
+                    if (hasXp)
+                    {
+                        var xpRequired = troop.UpgradeTargets.Length > 0
+                            ? upgradeModel.GetXpCostForUpgrade(party.Party, troop, troop.UpgradeTargets[0])
+                            : 0;
+                        sb.Append($" [经验 {elem.Xp}/{xpRequired}]");
+                    }
+                    sb.AppendLine();
+
+                    if (upgradeModel.IsTroopUpgradeable(party.Party, troop))
+                    {
+                        foreach (var target in troop.UpgradeTargets)
+                        {
+                            if (target == null) continue;
+                            if (!upgradeModel.CanPartyUpgradeTroopToTarget(party.Party, troop, target))
+                                continue;
+                            var xpCost = upgradeModel.GetXpCostForUpgrade(party.Party, troop, target);
+                            var goldCost = (int)upgradeModel.GetGoldCostForUpgrade(party.Party, troop, target).ResultNumber;
+                            sb.AppendLine($"    → {target.Name} [需 {xpCost} XP, {goldCost} 金]");
+                        }
+                    }
+                }
+            }
+
+            var prisoners = party.PrisonRoster.GetTroopRoster();
+            var prisonerCount = prisoners.Sum(p => p.Number);
+            if (prisonerCount > 0)
+            {
+                sb.AppendLine("===== 俘虏 =====");
+                foreach (var p in prisoners.Where(p => p.Character != null && !p.Character.IsHero))
+                {
+                    var tier = p.Character.GetBattleTier();
+                    var recruitStatus = "";
+                    try
+                    {
+                        if (Campaign.Current.Models.PrisonerRecruitmentCalculationModel
+                            .IsPrisonerRecruitable(party.Party, p.Character, out var _))
+                            recruitStatus = " — 可招募";
+                    }
+                    catch { }
+                    sb.AppendLine($"  {p.Character.Name} (T{tier}) × {p.Number}{recruitStatus}");
+                }
+                sb.AppendLine();
+            }
+
+            var items = party.ItemRoster;
+            var horses = new List<string>();
+            var warhorses = new List<string>();
+            foreach (var item in items.Select(ie => ie.EquipmentElement.Item).Where(i => i != null && i.HasHorseComponent))
+            {
+                var isWarHorse = item!.ItemCategory == DefaultItemCategories.WarHorse;
+                if (isWarHorse)
+                    warhorses.Add(item.Name?.ToString() ?? "战马");
+                else
+                    horses.Add(item.Name?.ToString() ?? "马");
+            }
+            if (horses.Count > 0 || warhorses.Count > 0)
+            {
+                sb.AppendLine("===== 马匹 =====");
+                if (horses.Count > 0)
+                    sb.AppendLine($"  马: {horses.Count} 匹 ({string.Join(", ", horses)})");
+                if (warhorses.Count > 0)
+                    sb.AppendLine($"  战马: {warhorses.Count} 匹 ({string.Join(", ", warhorses)})");
+                sb.AppendLine();
+            }
+
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string ExecuteQueryAvailableTroops()
+        {
+            if (AIChatClient.CurrentHero == null)
+                return "[错误] 无当前领主";
+
+            var hero = AIChatClient.CurrentHero;
+            var party = hero.PartyBelongedTo;
+            var settlement = hero.CurrentSettlement ?? party?.CurrentSettlement;
+            if (settlement == null)
+                return "[错误] 你当前不在任何定居点内。请先移动到城镇或村庄。";
+
+            if (hero == party?.LeaderHero && party != null)
+            { }
+            else if (hero != party?.LeaderHero)
+                return "[错误] 你不是部队指挥官，无法征兵。";
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"===== {settlement.Name} 可招募兵种 =====");
+
+            var recruiter = party?.LeaderHero ?? hero;
+            var hasAny = false;
+
+            foreach (var notable in settlement.Notables)
+            {
+                if (notable == null || !notable.IsAlive) continue;
+                var volunteers = new List<CharacterObject>();
+                for (int j = 0; j < 6; j++)
+                    volunteers.Add(notable.VolunteerTypes[j]);
+                var hasTroops = volunteers.Any(v => v != null);
+                if (!hasTroops) continue;
+
+                var maxIndex = Campaign.Current.Models.VolunteerModel
+                    .MaximumIndexHeroCanRecruitFromHero(recruiter, notable);
+
+                var troopLines = new List<string>();
+                for (int i = 0; i <= maxIndex && i < volunteers.Count; i++)
+                {
+                    var troop = volunteers[i];
+                    if (troop == null) continue;
+                    var cost = (int)Campaign.Current.Models.PartyWageModel
+                        .GetTroopRecruitmentCost(troop, recruiter, false).ResultNumber;
+                    troopLines.Add($"    {troop.Name} (T{troop.GetBattleTier()}) — {cost} 金/人");
+                }
+
+                if (troopLines.Count > 0)
+                {
+                    hasAny = true;
+                    sb.AppendLine($"  {notable.Name}：");
+                    foreach (var line in troopLines)
+                        sb.AppendLine(line);
+                }
+            }
+
+            if (!hasAny)
+                sb.AppendLine("  （无可用兵种）");
+
+            sb.AppendLine();
+            sb.AppendLine("使用 recruit_troops(兵种名, 数量) 招募。");
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string ExecuteRecruitTroops(string troopName, int count)
+        {
+            if (AIChatClient.CurrentHero == null)
+                return "[错误] 无当前领主";
+            if (string.IsNullOrEmpty(troopName))
+                return "[错误] 请指定要招募的兵种名称";
+            if (count <= 0)
+                return "[错误] 招募数量必须大于 0";
+
+            var hero = AIChatClient.CurrentHero;
+            var party = hero.PartyBelongedTo;
+            if (party == null)
+                return $"[错误] {hero.Name} 没有带领部队";
+
+            var settlement = hero.CurrentSettlement ?? party.CurrentSettlement;
+            if (settlement == null)
+                return "[错误] 当前不在任何定居点内";
+
+            var recruiter = party.LeaderHero;
+            if (recruiter == null)
+                return "[错误] 无法确定招募者";
+
+            foreach (var notable in settlement.Notables)
+            {
+                if (notable == null || !notable.IsAlive) continue;
+                var volunteers = new List<CharacterObject>();
+                for (int j = 0; j < 6; j++)
+                    volunteers.Add(notable.VolunteerTypes[j]);
+                var maxIndex = Campaign.Current.Models.VolunteerModel
+                    .MaximumIndexHeroCanRecruitFromHero(recruiter, notable);
+
+                for (int i = 0; i <= maxIndex && i < volunteers.Count; i++)
+                {
+                    var troop = volunteers[i];
+                    if (troop == null) continue;
+                    var tName = troop.Name?.ToString() ?? "";
+                    if (!tName.Contains(troopName) && !troopName.Contains(tName)) continue;
+
+                    var costPer = (int)Campaign.Current.Models.PartyWageModel
+                        .GetTroopRecruitmentCost(troop, recruiter, false).ResultNumber;
+                    var totalCost = costPer * count;
+
+                    if (recruiter.Gold < totalCost)
+                        return $"[错误] 金币不足。需要 {totalCost} 金，当前只有 {recruiter.Gold} 金。";
+
+                    party.AddElementToMemberRoster(troop, count);
+                    recruiter.ChangeHeroGold(-totalCost);
+                    notable.VolunteerTypes[i] = null;
+
+                    return $"已从 {notable.Name} 处招募 {count} 名 {tName}，花费 {totalCost} 金币。";
+                }
+            }
+
+            return $"[未找到] 当前定居点无可招募的 \"{troopName}\"。使用 query_available_troops 查看可招兵种。";
+        }
+
+        private static string ExecuteUpgradeTroops(string troopName, string targetTroopName, int count)
+        {
+            if (AIChatClient.CurrentHero == null)
+                return "[错误] 无当前领主";
+            if (string.IsNullOrEmpty(troopName) || count <= 0)
+                return "[错误] 请指定要升级的兵种名称和数量";
+
+            var hero = AIChatClient.CurrentHero;
+            var party = hero.PartyBelongedTo;
+            if (party == null)
+                return $"[错误] {hero.Name} 没有带领部队";
+
+            var roster = party.MemberRoster;
+            var elements = roster.GetTroopRoster();
+            var upgradeModel = Campaign.Current.Models.PartyTroopUpgradeModel;
+
+            foreach (var elem in elements)
+            {
+                if (elem.Character == null || elem.Character.IsHero) continue;
+                var tName = elem.Character.Name?.ToString() ?? "";
+                if (!tName.Contains(troopName) && !troopName.Contains(tName)) continue;
+
+                var troop = elem.Character;
+                var available = elem.Number - elem.WoundedNumber;
+                if (available < count)
+                    return $"[错误] {tName} 只有 {available} 名可升级（另有 {elem.WoundedNumber} 名受伤），无法升级 {count} 名。";
+
+                if (!upgradeModel.IsTroopUpgradeable(party.Party, troop))
+                    return $"[错误] {tName} 没有可升级的路径。";
+
+                CharacterObject? target = null;
+                if (!string.IsNullOrEmpty(targetTroopName))
+                {
+                    foreach (var t in troop.UpgradeTargets)
+                    {
+                        if (t == null) continue;
+                        var ttName = t.Name?.ToString() ?? "";
+                        if (ttName.Contains(targetTroopName) || targetTroopName.Contains(ttName))
+                        {
+                            target = t;
+                            break;
+                        }
+                    }
+                    if (target == null)
+                        return $"[错误] {tName} 不能升级为 \"{targetTroopName}\"。可用升级路径见 query_party_troops。";
+                }
+                else
+                {
+                    target = troop.UpgradeTargets.FirstOrDefault(t => t != null);
+                    if (target == null)
+                        return $"[错误] {tName} 没有可用的升级目标。";
+                }
+
+                if (!upgradeModel.CanPartyUpgradeTroopToTarget(party.Party, troop, target))
+                {
+                    if (!upgradeModel.DoesPartyHaveRequiredItemsForUpgrade(party.Party, target))
+                        return $"[错误] 缺少升级所需的装备（战马等）。";
+                    if (!upgradeModel.DoesPartyHaveRequiredPerksForUpgrade(party.Party, troop, target, out var perk))
+                        return $"[错误] 需要 {perk?.Name} 特长才能升级。";
+                }
+
+                var xpCost = upgradeModel.GetXpCostForUpgrade(party.Party, troop, target);
+                var goldCost = (int)upgradeModel.GetGoldCostForUpgrade(party.Party, troop, target).ResultNumber;
+                var totalGold = goldCost * count;
+
+                if (elem.Xp < xpCost * count)
+                    return $"[错误] 经验不足。{tName} 总经验为 {elem.Xp}，升级 {count} 名共需 {xpCost * count} XP。";
+
+                if (hero.Gold < totalGold)
+                    return $"[错误] 金币不足。需要 {totalGold} 金，当前只有 {hero.Gold} 金。";
+
+                var oldXp = elem.Xp;
+                roster.AddToCounts(troop, -count, false, 0, -(xpCost * count));
+                roster.AddToCounts(target, count, false, 0, 0);
+                hero.ChangeHeroGold(-totalGold);
+
+                return $"已将 {count} 名 {tName} 升级为 {target.Name}，花费 {totalGold} 金币。";
+            }
+
+            return $"[未找到] 部队中没有兵种 \"{troopName}\"。使用 query_party_troops 查看部队详情。";
+        }
+
+        private static string ExecuteBuyFood(int days)
+        {
+            if (AIChatClient.CurrentHero == null)
+                return "[错误] 无当前领主";
+            if (days <= 0)
+                return "[错误] 天数必须大于 0";
+
+            var hero = AIChatClient.CurrentHero;
+            var party = hero.PartyBelongedTo;
+            if (party == null)
+                return $"[错误] {hero.Name} 没有带领部队";
+
+            var settlement = hero.CurrentSettlement ?? party.CurrentSettlement;
+            if (settlement == null)
+                return "[错误] 当前不在任何定居点内";
+
+            if (settlement.ItemRoster.TotalFood <= 0)
+                return $"[错误] {settlement.Name} 没有粮食可购买。";
+
+            var foodModel = Campaign.Current.Models.PartyFoodBuyingModel;
+            var currentFood = party.TotalFoodAtInventory;
+            var dailyConsumption = Math.Abs(party.FoodChange);
+            if (dailyConsumption <= 0)
+                dailyConsumption = (float)party.MemberRoster.TotalManCount / 20f;
+
+            var targetFood = currentFood + (int)(dailyConsumption * days);
+            var bought = 0;
+            var spent = 0;
+            var items = new List<string>();
+
+            var maxAttempts = 20;
+            for (int i = 0; i < maxAttempts && party.TotalFoodAtInventory < targetFood; i++)
+            {
+                try
+                {
+                    foodModel.FindItemToBuy(party, settlement, out var itemElement, out var price);
+                    if (itemElement.EquipmentElement.Item == null) break;
+
+                    var toBuy = Math.Min(10, (int)((targetFood - party.TotalFoodAtInventory) / Math.Max(1, itemElement.EquipmentElement.Item.Value)) + 1);
+                    if (toBuy <= 0) toBuy = 1;
+
+                    var cost = (int)(price * toBuy);
+                    if (hero.Gold < cost) break;
+
+                    SellItemsAction.Apply(settlement.Party, party.Party, itemElement, toBuy, settlement);
+                    hero.ChangeHeroGold(-cost);
+                    bought += toBuy;
+                    spent += cost;
+                    items.Add(itemElement.EquipmentElement.Item.Name?.ToString() ?? "粮食");
+                }
+                catch
+                {
+                    break;
+                }
+            }
+
+            if (bought == 0)
+            {
+                if (hero.Gold <= 0)
+                    return $"[错误] 金币不足，无法购买粮食。";
+                return $"[错误] {settlement.Name} 粮食已售罄或价格过高。";
+            }
+
+            return $"购买了 {bought} 份粮食（{string.Join("、", items.Distinct())}），花费 {spent} 金币。当前粮食可供约 {party.GetNumDaysForFoodToLast():F0} 天。";
         }
 
         private static Settlement? FindSettlement(string name)
