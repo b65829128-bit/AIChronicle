@@ -497,6 +497,28 @@
     ]
   },
   {
+    "name": "give_item",
+    "category": "social",
+    "description": "Give items from your party's inventory to another party.\n\nUsage:\n- Use query_party_troops first to see what items you have.\n- The target_entity_id specifies WHO to give items to.\n- The item_name must match an item in your inventory (Chinese name, e.g. \"弯刀\").\n- The count is how many to transfer.\n- Both you and the recipient must be leading parties.\n- This transfers the item immediately, no confirmation needed for NPCs.",
+    "parameters": [
+      {
+        "name": "target_entity_id",
+        "type": "string",
+        "description": "Entity ID or Chinese name of the recipient."
+      },
+      {
+        "name": "item_name",
+        "type": "string",
+        "description": "Name of the item to give, as shown in your inventory."
+      },
+      {
+        "name": "count",
+        "type": "integer",
+        "description": "Number of items to give (1+)."
+      }
+    ]
+  },
+  {
     "name": "query_hero_skills",
     "category": "query",
     "description": "Query a character's skill levels and attributes.\n\nUsage:\n- Call this to assess someone's capabilities: are they a good commander? a smooth talker? a sharp scout?\n- The target_entity_id specifies whose skills to query. Omit to query your own skills.\n- Returns: all 18 skill levels (OneHanded through Engineering) and 6 attribute scores (Vigor, Control, Endurance, Cunning, Social, Intelligence).\n- This is public assessment — every notable character's skills are known in Calradia.",

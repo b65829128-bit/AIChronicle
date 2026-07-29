@@ -193,6 +193,12 @@ namespace MyFirstMod
                     case "buy_food":
                         return ExecuteBuyFood(args["days"]?.ToObject<int>() ?? 0);
 
+                    case "give_item":
+                        return ExecuteGiveItem(
+                            args["target_entity_id"]?.ToString() ?? "",
+                            args["item_name"]?.ToString() ?? "",
+                            args["count"]?.ToObject<int>() ?? 0);
+
                     case "query_hero_skills":
                         return ExecuteQueryHeroSkills(args["target_entity_id"]?.ToString());
 
@@ -1108,6 +1114,47 @@ namespace MyFirstMod
             return $"对方拒绝了支付 {amount} 金币的请求。";
         }
 
+        private static string ExecuteGiveItem(string targetEntityId, string itemName, int count)
+        {
+            if (AIChatClient.CurrentHero == null)
+                return "[错误] 无当前领主";
+            if (string.IsNullOrEmpty(itemName) || count <= 0)
+                return "[错误] 请指定物品名称和数量";
+
+            var hero = AIChatClient.CurrentHero;
+            var myParty = hero.PartyBelongedTo;
+            if (myParty == null)
+                return $"[错误] {hero.Name} 没有带领部队，无法转移物品";
+
+            var target = ResolveTargetHero(targetEntityId);
+            if (target == null)
+                return $"[错误] 未找到目标实体：{targetEntityId}";
+            if (target == hero)
+                return "[错误] 不能把物品给自己";
+
+            var targetParty = target.PartyBelongedTo;
+            if (targetParty == null)
+                return $"[错误] {target.Name} 没有带领部队，无法接收物品";
+
+            foreach (var ie in myParty.ItemRoster)
+            {
+                var item = ie.EquipmentElement.Item;
+                if (item == null) continue;
+                var itemNameStr = item.Name?.ToString() ?? "";
+                if (!itemNameStr.Contains(itemName) && !itemName.Contains(itemNameStr)) continue;
+
+                var available = ie.Amount;
+                if (available < count)
+                    return $"[错误] {itemNameStr} 只有 {available} 个，无法给出 {count} 个。";
+
+                myParty.ItemRoster.AddToCounts(item, -count);
+                targetParty.ItemRoster.AddToCounts(item, count);
+                return $"已将 {count} 个 {itemNameStr} 交给 {target.Name}。";
+            }
+
+            return $"[未找到] 部队中没有物品 \"{itemName}\"。使用 query_party_troops 查看物品栏。";
+        }
+
         private static string ExecuteSendLetter(string recipientId, string content)
         {
             if (string.IsNullOrEmpty(recipientId)) return "[错误] 请提供收信人实体 ID 或名称";
@@ -1304,25 +1351,56 @@ namespace MyFirstMod
                 sb.AppendLine();
             }
 
-            var items = party.ItemRoster;
-            var horses = new List<string>();
-            var warhorses = new List<string>();
-            foreach (var item in items.Select(ie => ie.EquipmentElement.Item).Where(i => i != null && i.HasHorseComponent))
+            var itemRoster = party.ItemRoster;
+            var itemGroups = new Dictionary<string, List<(string name, int count)>>();
+            foreach (var ie in itemRoster)
             {
-                var isWarHorse = item!.ItemCategory == DefaultItemCategories.WarHorse;
-                if (isWarHorse)
-                    warhorses.Add(item.Name?.ToString() ?? "战马");
-                else
-                    horses.Add(item.Name?.ToString() ?? "马");
+                var item = ie.EquipmentElement.Item;
+                if (item == null) continue;
+                var count = ie.Amount;
+                var name = item.Name?.ToString() ?? "?";
+
+                var category = item.ItemType switch
+                {
+                    ItemObject.ItemTypeEnum.Horse => item.ItemCategory == DefaultItemCategories.WarHorse ? "战马" : "马",
+                    ItemObject.ItemTypeEnum.OneHandedWeapon => "武器",
+                    ItemObject.ItemTypeEnum.TwoHandedWeapon => "武器",
+                    ItemObject.ItemTypeEnum.Polearm => "武器",
+                    ItemObject.ItemTypeEnum.Bow => "武器",
+                    ItemObject.ItemTypeEnum.Crossbow => "武器",
+                    ItemObject.ItemTypeEnum.Thrown => "武器",
+                    ItemObject.ItemTypeEnum.Arrows => "弹药",
+                    ItemObject.ItemTypeEnum.Bolts => "弹药",
+                    ItemObject.ItemTypeEnum.Shield => "武器",
+                    ItemObject.ItemTypeEnum.Sling => "武器",
+                    ItemObject.ItemTypeEnum.SlingStones => "弹药",
+                    ItemObject.ItemTypeEnum.HeadArmor => "盔甲",
+                    ItemObject.ItemTypeEnum.BodyArmor => "盔甲",
+                    ItemObject.ItemTypeEnum.LegArmor => "盔甲",
+                    ItemObject.ItemTypeEnum.HandArmor => "盔甲",
+                    ItemObject.ItemTypeEnum.Cape => "盔甲",
+                    ItemObject.ItemTypeEnum.ChestArmor => "盔甲",
+                    ItemObject.ItemTypeEnum.HorseHarness => "马铠",
+                    ItemObject.ItemTypeEnum.Banner => "旗帜",
+                    ItemObject.ItemTypeEnum.Book => "书籍",
+                    _ => item.IsFood ? "粮食" : "货物"
+                };
+                if (!itemGroups.ContainsKey(category))
+                    itemGroups[category] = new List<(string, int)>();
+                itemGroups[category].Add((name, count));
             }
-            if (horses.Count > 0 || warhorses.Count > 0)
+
+            if (itemGroups.Count > 0)
             {
-                sb.AppendLine("===== 马匹 =====");
-                if (horses.Count > 0)
-                    sb.AppendLine($"  马: {horses.Count} 匹 ({string.Join(", ", horses)})");
-                if (warhorses.Count > 0)
-                    sb.AppendLine($"  战马: {warhorses.Count} 匹 ({string.Join(", ", warhorses)})");
-                sb.AppendLine();
+                sb.AppendLine("===== 物品 =====");
+                foreach (var kv in itemGroups.OrderBy(k => k.Key))
+                {
+                    var grouped = kv.Value.GroupBy(x => x.name)
+                        .Select(g => (name: g.Key, total: g.Sum(x => x.count)))
+                        .ToList();
+                    foreach (var g in grouped)
+                        sb.AppendLine($"  [{kv.Key}] {g.name} × {g.total}");
+                }
             }
 
             return sb.ToString().TrimEnd();
