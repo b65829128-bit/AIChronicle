@@ -37,7 +37,10 @@
   - 持续性任务（驻防/巡逻/护送）到达目标后启动定时签到：到时 Agent 自动激活，可自行决定是否继续、转去做别的事、或向阵营领袖汇报
   - Agent 可以调用 `change_relation` 修改对任意人物的好感度（单次上限在 MCM 中设置，默认 +-5），可指定目标实体
   - Agent 可以调用 `give_gold` 赠予任意人物金币（直接转账），可指定目标实体
-  - Agent 可以调用 `request_gold` 向任意人物索要金币（向玩家索要时弹出确认对话框，向 NPC 索要时自动划转）
+  - Agent 可以调用 `request_gold` 向任意人物索要金币（向玩家索要时弹出确认框）
+  - Agent 可以调用 `give_item` 将自己物品/装备交给任意人物（直接转账）
+  - Agent 可以调用 `request_items` 向任意人物索要物品（向玩家索要时弹出确认框）
+  - **已知限制：** `request_gold` 和 `request_items` 向 NPC 索要时直接划转，NPC 不会经过 LLM 决策——未来应改为异步事件，让 NPC Agent 自行判断是否给
   - Agent 可以调用 `query_character` 查询任意人物的公开信息
   - Agent 可以调用 `query_recent_events` 查询任意人物的近期事件（比武夺冠、被俘、释放、婚嫁、阵亡等百科记录）
   - Agent 可以调用 `query_surroundings` 扫描周围环境：当前位置、附近城镇/城堡、附近部队及其阵营关系和距离
