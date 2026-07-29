@@ -119,6 +119,19 @@ namespace MyFirstMod
                             || action.Behavior == AiBehavior.PatrolAroundPoint)
                             action.TargetReached = party.DefaultBehavior == action.Behavior
                                 && party.TargetSettlement == action.TargetSettlement;
+                        else if (action.Behavior == AiBehavior.GoToSettlement)
+                        {
+                            if (party.CurrentSettlement == action.TargetSettlement)
+                                action.TargetReached = true;
+                            else
+                            {
+                                var myPos = party.GetPosition2D;
+                                var targetPos = action.TargetSettlement.GatePosition.ToVec2();
+                                var dx = myPos.X - targetPos.X;
+                                var dy = myPos.Y - targetPos.Y;
+                                action.TargetReached = (dx * dx + dy * dy) < 25f; // 5m^2
+                            }
+                        }
                         else
                             action.TargetReached = party.CurrentSettlement == action.TargetSettlement;
 
