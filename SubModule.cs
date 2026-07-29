@@ -94,7 +94,7 @@ namespace MyFirstMod
         {
             base.OnApplicationTick(dt);
 
-            AIChatClient.Tick();
+            PartyBehaviorManager.Tick();
             AIChatClient.CheckPendingInquiry();
             AgentScheduler.Tick();
 
