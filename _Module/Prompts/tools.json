@@ -406,6 +406,18 @@
     ]
   },
   {
+    "name": "query_settlement_villages",
+    "category": "query",
+    "description": "List all villages bound to a town or castle.\n\nUsage:\n- Call this to see which villages belong to a settlement — essential for planning where to recruit troops.\n- The settlement_name must be a town or castle (not a village).\n- Returns: each village's name, primary production (grain, grapes, iron, etc.), hearth count, and trade-bound settlement.\n- Recruitment happens at villages (and town centers) — use this to find the best recruitment spots.",
+    "parameters": [
+      {
+        "name": "settlement_name",
+        "type": "string",
+        "description": "Name of the town or castle to query villages for, in Chinese or English."
+      }
+    ]
+  },
+  {
     "name": "query_party_troops",
     "category": "query",
     "description": "Inspect a party's troop roster, prisoners, inventory, and finances.\n\nUsage:\n- Call this to learn about your own party or another party's composition.\n- The target_entity_id specifies whose party to inspect. Omit to inspect your own party.\n- Returns: gold, daily wages, troop count/wounded/max, each troop type with count/Xp/upgrade paths, prisoners (with recruitability), food supply, horses, warhorses.\n- This is your primary tool for military self-assessment before making recruitment or upgrade decisions.\n- To see what troops are available for recruitment at a settlement, use query_available_troops.",

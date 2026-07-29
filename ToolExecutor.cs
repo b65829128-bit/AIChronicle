@@ -187,6 +187,9 @@ namespace MyFirstMod
                     case "query_hero_skills":
                         return ExecuteQueryHeroSkills(args["target_entity_id"]?.ToString());
 
+                    case "query_settlement_villages":
+                        return ExecuteQuerySettlementVillages(args["settlement_name"]?.ToString() ?? "");
+
                     case "send_letter":
                         return ExecuteSendLetter(args["recipient_entity_id"]?.ToString() ?? "", args["content"]?.ToString() ?? "");
 
@@ -1581,6 +1584,40 @@ namespace MyFirstMod
             }
 
             return $"购买了 {bought} 份粮食（{string.Join("、", items.Distinct())}），花费 {spent} 金币。当前粮食可供约 {party.GetNumDaysForFoodToLast():F0} 天。";
+        }
+
+        private static string ExecuteQuerySettlementVillages(string settlementName)
+        {
+            if (string.IsNullOrEmpty(settlementName))
+                return "[错误] 请提供定居点名称";
+
+            var settlement = FindSettlement(settlementName);
+            if (settlement == null)
+                return $"[未找到] 名称为 \"{settlementName}\" 的定居点";
+
+            if (!settlement.IsTown && !settlement.IsCastle)
+                return $"[错误] {settlement.Name} 是村庄，没有附属村庄。请查询城镇或城堡。";
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"===== {settlement.Name} 的附属村庄 =====");
+
+            var villages = settlement.BoundVillages;
+            if (villages == null || villages.Count == 0)
+            {
+                sb.AppendLine("（无附属村庄）");
+            }
+            else
+            {
+                foreach (var v in villages)
+                {
+                    var vSettlement = v.Settlement;
+                    var vName = vSettlement?.Name?.ToString() ?? "?";
+                    var hearths = v.Hearth.ToString("F0");
+                    sb.AppendLine($"  {vName} — 户数: {hearths}");
+                }
+            }
+
+            return sb.ToString().TrimEnd();
         }
 
         private static Settlement? FindSettlement(string name)
