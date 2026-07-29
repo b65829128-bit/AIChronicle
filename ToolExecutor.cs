@@ -805,9 +805,6 @@ namespace MyFirstMod
             if (target == null)
                 return $"[错误] 未找到名为 \"{settlementName}\" 的定居点";
 
-            if (!target.IsTown && !target.IsCastle)
-                return $"[错误] {target.Name} 是村庄，只能移动到城镇或城堡";
-
             var party = AIChatClient.CurrentHero.PartyBelongedTo;
             if (party == null)
                 return $"[错误] {AIChatClient.CurrentHero.Name} 没有带领部队（可能在城中担任总督、被俘虏或编入军团）";
