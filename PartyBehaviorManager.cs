@@ -19,6 +19,7 @@ namespace MyFirstMod
         public CampaignTime? ArrivedAt;
         public bool TargetReached;
         public bool CheckInQueued;
+        public bool ActivateOnComplete;
     }
 
     public static class PartyBehaviorManager
@@ -97,6 +98,7 @@ namespace MyFirstMod
                                     $"[MyFirstMod] {hero.Name} 结束了在{action.TargetSettlement.Name}的停留。",
                                     Colors.Cyan));
                             }
+                            QueuePlanCheckIn(action);
                             continue;
                         }
                         continue;
@@ -235,6 +237,29 @@ namespace MyFirstMod
 
             foreach (var key in keysToRemove)
                 _pendingActions.Remove(key);
+        }
+
+        private static void QueuePlanCheckIn(PendingAction action)
+        {
+            if (!action.ActivateOnComplete) return;
+            var agentEntity = EntityManager.GetEntityByHero(action.Hero);
+            if (agentEntity == null) return;
+
+            var locName = action.TargetSettlement?.Name?.ToString() ?? "目的地";
+            var behaviorDesc = action.Behavior switch
+            {
+                AiBehavior.GoToSettlement => $"到达{locName}",
+                _ => $"在{locName}完成等待"
+            };
+
+            AgentScheduler.QueueEvent(new ActivationEvent
+            {
+                Type = ActivationEventType.PlanCheckIn,
+                AgentId = agentEntity.Id,
+                TargetId = agentEntity.Id,
+                Content = behaviorDesc,
+                Depth = 0
+            });
         }
     }
 }

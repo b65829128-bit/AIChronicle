@@ -12,7 +12,8 @@ namespace MyFirstMod
     {
         LetterReceived,
         BehaviorCheckIn,
-        KingDiplomacy
+        KingDiplomacy,
+        PlanCheckIn
     }
 
     public class ActivationEvent
@@ -186,6 +187,12 @@ namespace MyFirstMod
                         $"{agentName} 正在处理外交事务...",
                         Colors.Cyan));
                 }
+                else if (evt.Type == ActivationEventType.PlanCheckIn)
+                {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"{agentName} {evt.Content}，正在继续执行计划...",
+                        Colors.Cyan));
+                }
                 else
                 {
                     InformationManager.DisplayMessage(new InformationMessage(
@@ -244,6 +251,7 @@ namespace MyFirstMod
                 {
                     ActivationEventType.BehaviorCheckIn => "chat",
                     ActivationEventType.KingDiplomacy => "diplomacy",
+                    ActivationEventType.PlanCheckIn => "chat",
                     _ => "letter"
                 };
                 var response = await AIChatClient.SendMessage(

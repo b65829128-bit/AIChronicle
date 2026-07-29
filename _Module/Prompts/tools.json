@@ -50,24 +50,34 @@
   {
     "name": "move_to_settlement",
     "category": "movement",
-    "description": "Order your party to travel to a specific settlement on the Calradia map.\n\nUsage:\n- Call this when you DECIDE to go somewhere (visit a city, attend a tournament, meet someone, go to a feast).\n- The settlement_name must be a valid town or castle name in Chinese or English.\n- Your party will physically travel across the map and enter the settlement upon arrival.\n- This only works if you are leading a party (not a governor, prisoner, or in an army).\n- Do NOT call this if you are already at the target settlement.\n- After calling this, you should call wait_at_settlement to specify how long to stay.",
+    "description": "Order your party to travel to a specific settlement on the Calradia map.\n\nUsage:\n- Call this when you DECIDE to go somewhere (visit a city, attend a tournament, meet someone, recruit troops).\n- The settlement_name can be a town, castle, or village name in Chinese or English.\n- Your party will physically travel across the map and enter the settlement upon arrival.\n- This only works if you are leading a party (not a governor, prisoner, or in an army).\n- Set activate=true if you want to wake up automatically upon arrival (useful when executing a multi-step plan). Default is false.\n- Do NOT call this if you are already at the target settlement.\n- After calling this, you should call wait_at_settlement to specify how long to stay.",
     "parameters": [
       {
         "name": "settlement_name",
         "type": "string",
-        "description": "Name of the target settlement (town or castle), in Chinese or English."
+        "description": "Name of the target settlement (town, castle, or village), in Chinese or English."
+      },
+      {
+        "name": "activate",
+        "type": "boolean",
+        "description": "Whether to automatically wake up upon arrival. Set true when following a plan, false for casual travel."
       }
     ]
   },
   {
     "name": "wait_at_settlement",
     "category": "movement",
-    "description": "Wait at your current settlement for a specified duration before you can move again.\n\nUsage:\n- Call this after moving to or being at a settlement to declare how long you will stay.\n- The hours parameter is the number of in-game hours to stay. 24 hours = 1 day.\n- Common durations: 12 (half day), 24 (one day), 72 (three days), 168 (one week).\n- Maximum: 720 hours (30 days).\n- Do NOT call this if you are not currently at a settlement.\n- Do NOT call this with absurdly high values (e.g., 10000 hours) — use a reasonable stay duration.",
+    "description": "Wait at your current settlement for a specified duration.\n\nUsage:\n- Call this after moving to or being at a settlement to declare how long you will stay.\n- The hours parameter is the number of in-game hours to stay. 24 hours = 1 day.\n- Common durations: 12 (half day), 24 (one day), 72 (three days), 168 (one week).\n- Maximum: 720 hours (30 days).\n- Set activate=true to wake up automatically when the wait is over (useful in plans). Default is false.\n- Do NOT call this with absurdly high values.\n- If you set activate=true, you will be re-activated immediately upon the wait ending — no need to schedule yourself separately.",
     "parameters": [
       {
         "name": "hours",
         "type": "integer",
         "description": "Number of in-game hours to stay at the settlement (1-720)."
+      },
+      {
+        "name": "activate",
+        "type": "boolean",
+        "description": "Whether to wake up automatically when the wait expires. Default false."
       }
     ]
   },

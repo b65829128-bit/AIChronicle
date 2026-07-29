@@ -114,10 +114,14 @@ namespace MyFirstMod
                             args["accepted"]?.ToObject<bool>() ?? false);
 
                     case "move_to_settlement":
-                        return ExecuteMoveToSettlement(args["settlement_name"]?.ToString() ?? "");
+                        return ExecuteMoveToSettlement(
+                            args["settlement_name"]?.ToString() ?? "",
+                            args["activate"]?.ToObject<bool>() ?? false);
 
                     case "wait_at_settlement":
-                        return ExecuteWaitAtSettlement(args["hours"]?.ToObject<int>() ?? 0);
+                        return ExecuteWaitAtSettlement(
+                            args["hours"]?.ToObject<int>() ?? 0,
+                            args["activate"]?.ToObject<bool>() ?? false);
 
                     case "change_relation":
                         return ExecuteChangeRelation(args["delta"]?.ToObject<int>() ?? 0, args["target_entity_id"]?.ToString());
@@ -796,7 +800,7 @@ namespace MyFirstMod
             return sb.ToString().TrimEnd();
         }
 
-        private static string ExecuteMoveToSettlement(string settlementName)
+        private static string ExecuteMoveToSettlement(string settlementName, bool activate)
         {
             if (AIChatClient.CurrentHero == null)
                 return "[错误] 无当前领主";
@@ -817,6 +821,7 @@ namespace MyFirstMod
                 var action = PartyBehaviorManager.GetOrCreateAction(AIChatClient.CurrentHero);
                 action.Behavior = AiBehavior.GoToSettlement;
                 action.TargetSettlement = target;
+                action.ActivateOnComplete = activate;
                 return $"已经在{target.Name}了。";
             }
 
@@ -834,11 +839,12 @@ namespace MyFirstMod
             var action2 = PartyBehaviorManager.GetOrCreateAction(AIChatClient.CurrentHero);
             action2.Behavior = AiBehavior.GoToSettlement;
             action2.TargetSettlement = target;
+            action2.ActivateOnComplete = activate;
 
-            return $"部队已出发前往{target.Name}。";
+            return $"部队已出发前往{target.Name}。" + (activate ? " 到达后将自动唤醒。" : "");
         }
 
-        private static string ExecuteWaitAtSettlement(int hours)
+        private static string ExecuteWaitAtSettlement(int hours, bool activate)
         {
             if (AIChatClient.CurrentHero == null)
                 return "[错误] 无当前领主";
@@ -857,13 +863,13 @@ namespace MyFirstMod
 
             var action = PartyBehaviorManager.GetOrCreateAction(AIChatClient.CurrentHero);
             action.TargetSettlement = currentSettlement;
-
             action.WaitHours = hours;
+            action.ActivateOnComplete = activate;
 
             if (action.ArrivedAt == null)
                 action.ArrivedAt = CampaignTime.Now;
 
-            return $"将在{currentSettlement.Name}停留{hours}小时（约{hours / 24}天）。";
+            return $"将在{currentSettlement.Name}停留{hours}小时（约{hours / 24}天）。" + (activate ? " 等待完毕后将自动唤醒。" : "");
         }
 
         private static string ExecuteRaidSettlement(string settlementName)
