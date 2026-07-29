@@ -23,6 +23,9 @@ namespace MyFirstMod
                 var args = JObject.Parse(arguments);
                 switch (name)
                 {
+                    case "browse_tools":
+                        return ExecuteBrowseTools(args["category"]?.ToString() ?? "");
+
                     case "read_file":
                         var path = args["path"]?.ToString() ?? "";
                         var lineStart = args["line_start"]?.ToObject<int?>();
@@ -1101,6 +1104,37 @@ namespace MyFirstMod
             });
 
             return $"信件已发送给 {recipientName}。";
+        }
+
+        private static string ExecuteBrowseTools(string category)
+        {
+            if (string.IsNullOrEmpty(category))
+                return "[错误] 请提供要浏览的工具分类。可选：military, movement, diplomacy, file, social, query, communication";
+
+            var validCategories = new HashSet<string> { "military", "movement", "diplomacy", "file", "social", "query", "communication" };
+            if (!validCategories.Contains(category))
+                return $"[错误] 未知分类 \"{category}\"。可选：{string.Join(", ", validCategories)}";
+
+            var allTools = PromptManager.LoadAllTools();
+            var categoryTools = allTools.Where(t => t.Category == category).ToList();
+            if (categoryTools.Count == 0)
+                return $"分类 \"{category}\" 下没有可用工具。";
+
+            AIChatClient.ActivateCategory(category);
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"已解锁【{category}】分类的 {categoryTools.Count} 个工具。你现在可以在回复中使用它们：");
+            sb.AppendLine();
+            foreach (var tool in categoryTools)
+            {
+                var paramList = tool.Parameters.Count > 0
+                    ? string.Join(", ", tool.Parameters.Select(p => p.Name))
+                    : "无参数";
+                sb.AppendLine($"  {tool.Name}({paramList})");
+                sb.AppendLine($"  {tool.Description.Replace("\n", "\n  ")}");
+                sb.AppendLine();
+            }
+            return sb.ToString().TrimEnd();
         }
 
         private static Settlement? FindSettlement(string name)

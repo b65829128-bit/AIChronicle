@@ -23,14 +23,16 @@ namespace MyFirstMod
             [EntityCapability.Diplomat] = new[] { "declare_war", "propose_peace", "propose_alliance", "propose_trade", "respond_to_diplomacy_proposal", "query_pending_proposals" },
         };
 
-        private static readonly HashSet<string> LetterDisabledTools = new()
+        private static readonly Dictionary<string, string> CategoryNames = new()
         {
-            "give_gold", "request_gold"
-        };
-
-        private static readonly HashSet<string> DiplomacyDisabledTools = new()
-        {
-            "send_letter"
+            ["universal"] = "通用",
+            ["query"] = "查询",
+            ["social"] = "社交",
+            ["movement"] = "行军",
+            ["military"] = "军事",
+            ["diplomacy"] = "外交",
+            ["file"] = "文件",
+            ["communication"] = "通信",
         };
 
         private static string _cachedDiplomacyRules = "";
@@ -99,16 +101,12 @@ namespace MyFirstMod
                 .Trim();
         }
 
-        public static List<ToolDef> GetFilteredTools(Entity agent, string intent = "conversation")
+        public static List<ToolDef> GetFilteredTools(Entity agent)
         {
             var allTools = PromptManager.LoadAllTools();
             var filtered = new List<ToolDef>();
             foreach (var tool in allTools)
             {
-                if (intent == "letter" && LetterDisabledTools.Contains(tool.Name))
-                    continue;
-                if (intent == "diplomacy" && DiplomacyDisabledTools.Contains(tool.Name))
-                    continue;
                 var required = GetRequiredCapability(tool.Name);
                 if (required == null || agent.HasCapability(required.Value))
                     filtered.Add(tool);
@@ -136,17 +134,46 @@ namespace MyFirstMod
 
         private static string BuildFunctionList(Entity agent, string intent)
         {
-            var tools = GetFilteredTools(agent, intent);
+            var allTools = PromptManager.LoadAllTools();
+            var capabilityTools = allTools.Where(t =>
+                GetRequiredCapability(t.Name) == null || agent.HasCapability(GetRequiredCapability(t.Name)!.Value)
+            ).ToList();
+
+            var activatedSet = AIChatClient.ActivatedCategories;
+            var activeTools = capabilityTools.Where(t => activatedSet.Contains(t.Category)).ToList();
+            var inactiveCategories = capabilityTools
+                .Where(t => !activatedSet.Contains(t.Category))
+                .Select(t => t.Category)
+                .Distinct()
+                .OrderBy(c => c)
+                .ToList();
+
             var sb = new StringBuilder();
-            foreach (var tool in tools)
+            foreach (var group in activeTools.GroupBy(t => t.Category).OrderBy(g => g.Key))
             {
-                var paramList = tool.Parameters.Count > 0
-                    ? string.Join(", ", tool.Parameters.Select(p => p.Name))
-                    : "无参数";
-                sb.AppendLine("- " + tool.Name + "(" + paramList + ")");
-                sb.AppendLine("  " + tool.Description.Replace("\n", "\n  "));
+                var catName = CategoryNames.TryGetValue(group.Key, out var cn) ? cn : group.Key;
+                sb.AppendLine($"【{catName}】");
+                foreach (var tool in group)
+                {
+                    var paramList = tool.Parameters.Count > 0
+                        ? string.Join(", ", tool.Parameters.Select(p => p.Name))
+                        : "无参数";
+                    sb.AppendLine($"  {tool.Name}({paramList})");
+                }
                 sb.AppendLine();
             }
+
+            if (inactiveCategories.Count > 0)
+            {
+                sb.AppendLine("【其他可用工具分类 — 需要时先调 browse_tools 查看】");
+                foreach (var cat in inactiveCategories)
+                {
+                    var catName = CategoryNames.TryGetValue(cat, out var cn) ? cn : cat;
+                    var count = capabilityTools.Count(t => t.Category == cat);
+                    sb.AppendLine($"  {catName}（{count}个工具）— browse_tools(\"{cat}\")");
+                }
+            }
+
             return sb.ToString().TrimEnd();
         }
 

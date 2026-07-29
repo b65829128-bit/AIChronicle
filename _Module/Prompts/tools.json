@@ -1,6 +1,7 @@
 [
   {
     "name": "update_knowledge",
+    "category": "universal",
     "description": "Record new information learned about the other person (the person you are speaking to) in this conversation turn.\n\nUsage:\n- Call this function whenever the other person reveals or claims information about themselves: their identity, background, intentions, position, experiences, or opinions.\n- The knowledge must be about the other person — do NOT record information about yourself or your own background.\n- Record what the other person claimed even if you are uncertain or skeptical.\n- The knowledge parameter must be a single concise sentence summarizing the new information.\n- Do NOT call this function if the other person did not reveal any new information in this turn.\n- This function is for system use only; the other person does not see its output.",
     "parameters": [
       {
@@ -12,6 +13,7 @@
   },
   {
     "name": "query_character",
+    "category": "query",
     "description": "Query authoritative system-level public information about a character on the Calradia map. This data is canonical and overrides any stale knowledge you may have.\n\nUsage:\n- Call this at the beginning of EVERY conversation to get the other person's current identity, allegiance, and status.\n- The name parameter should match the Chinese or English character name (e.g., \"拉盖娅\" or \"Rhagaea\").\n- If the returned info conflicts with your knowledge files, the system data is ALWAYS correct — update your knowledge with append_file to stay current.\n- Returns: name, gender, culture, status (king/vassal/mercenary), clan, kingdom, encyclopedia description, clan tier & renown, current state (in settlement/on campaign/imprisoned), party info with rough troop count, current location.",
     "parameters": [
       {
@@ -23,6 +25,7 @@
   },
   {
     "name": "query_settlement",
+    "category": "query",
     "description": "Query real-time information about a settlement on the Calradia map.\n\nUsage:\n- Call this when you need to know who currently owns a settlement, its prosperity, or its type.\n- The name parameter should match the Chinese or English settlement name (e.g., \"俄尼拉\" or \"Onica\").\n- Returns: name, type (town/castle/village), owner clan, owner kingdom, prosperity level.",
     "parameters": [
       {
@@ -34,6 +37,7 @@
   },
   {
     "name": "query_world_state",
+    "category": "query",
     "description": "Get a summary of the world situation — wars, alliances, trade agreements, and strength for all kingdoms. You can also query a specific kingdom.\n\nUsage:\n- Call this to understand the diplomatic and military landscape of Calradia.\n- If kingdom_name is omitted, returns data for ALL kingdoms.\n- If kingdom_name is provided, returns data for that specific kingdom only.\n- Returns for each kingdom: ruler, total strength, current wars, alliances, and trade agreements.\n- Kingdom names support both Chinese and English.",
     "parameters": [
       {
@@ -45,6 +49,7 @@
   },
   {
     "name": "move_to_settlement",
+    "category": "movement",
     "description": "Order your party to travel to a specific settlement on the Calradia map.\n\nUsage:\n- Call this when you DECIDE to go somewhere (visit a city, attend a tournament, meet someone, go to a feast).\n- The settlement_name must be a valid town or castle name in Chinese or English.\n- Your party will physically travel across the map and enter the settlement upon arrival.\n- This only works if you are leading a party (not a governor, prisoner, or in an army).\n- Do NOT call this if you are already at the target settlement.\n- After calling this, you should call wait_at_settlement to specify how long to stay.",
     "parameters": [
       {
@@ -56,6 +61,7 @@
   },
   {
     "name": "wait_at_settlement",
+    "category": "movement",
     "description": "Wait at your current settlement for a specified duration before you can move again.\n\nUsage:\n- Call this after moving to or being at a settlement to declare how long you will stay.\n- The hours parameter is the number of in-game hours to stay. 24 hours = 1 day.\n- Common durations: 12 (half day), 24 (one day), 72 (three days), 168 (one week).\n- Maximum: 720 hours (30 days).\n- Do NOT call this if you are not currently at a settlement.\n- Do NOT call this with absurdly high values (e.g., 10000 hours) — use a reasonable stay duration.",
     "parameters": [
       {
@@ -67,6 +73,7 @@
   },
   {
     "name": "change_relation",
+    "category": "social",
     "description": "Change your relationship points toward someone. Positive means more friendly, negative means more hostile.\n\nUsage:\n- Call this when your attitude toward someone has meaningfully changed — for example, they insulted you, helped you, threatened you, or showed great respect.\n- The target_entity_id specifies WHOSE relationship to change, using their entity ID or Chinese name. Omit to target the current conversation partner.\n- The delta parameter should reflect the magnitude and direction of the change. Small things = 1-2 points. Significant events = 3-5 points.\n- Positive delta = your opinion of them improves. Negative delta = it worsens.\n- The absolute value of delta is capped by the game setting (default 5).\n- Do NOT call this for trivial things or for every conversation turn.\n- This function has no visible output to the target.",
     "parameters": [
       {
@@ -83,6 +90,7 @@
   },
   {
     "name": "give_gold",
+    "category": "social",
     "description": "Give gold to someone from your personal wealth.\n\nUsage:\n- Call this when you decide to give someone gold (as a reward, gift, payment, bribe, etc.).\n- The target_entity_id specifies WHO to give gold to, using their entity ID or Chinese name. Omit to target the current conversation partner.\n- The amount must not exceed your current gold.\n- This is a direct transfer — the gold is immediately deducted from you and given to the target.\n- Do NOT call this with zero or negative amounts.\n- Do NOT call this if you are just talking about giving gold without actually deciding to do it.",
     "parameters": [
       {
@@ -99,6 +107,7 @@
   },
   {
     "name": "request_gold",
+    "category": "social",
     "description": "Receive gold FROM someone. This will ask them to confirm, and you will be told whether they accepted or refused.\n\nUsage:\n- Call this ANY TIME money should flow FROM someone TO you — regardless of who initiated the transaction.\n- The target_entity_id specifies WHO to request gold from, using their entity ID or Chinese name. Omit to target the current conversation partner.\n- Typical scenarios include (but are not limited to):\n  - Someone offers you a reward, payment, gift, or bribe.\n  - You demand payment, tribute, compensation, or a toll from someone.\n  - Someone agrees to pay you for a service, job, or favor you performed.\n  - Someone promises you money for any reason.\n- The key rule: whenever someone says or implies they will give you gold, call this function immediately to collect it. Do NOT just say \"thank you\" and move on.\n- The result will tell you whether they ACCEPTED (gold was transferred) or REFUSED (they backed out). Respond accordingly.\n- They CANNOT lie — the gold is transferred immediately if they accept.\n- Do NOT call this with zero or negative amounts.",
     "parameters": [
       {
@@ -115,6 +124,7 @@
   },
   {
     "name": "raid_settlement",
+    "category": "military",
     "description": "Send your party to raid a village — force it to give supplies, volunteers, or loot it.\n\nUsage:\n- Call this when you decide to raid/harass a village (as punishment, for resources, or as an act of war).\n- The settlement_name must be a village name in Chinese or English.\n- Your party will march there and begin raiding.\n- This is a hostile action that will anger the village's owner.\n- Do NOT call this if your party is not mobile or if you are a governor/prisoner.\n- Only works if you are leading a party.",
     "parameters": [
       {
@@ -126,6 +136,7 @@
   },
   {
     "name": "besiege_settlement",
+    "category": "military",
     "description": "Send your party to besiege a town or castle — begin a siege assault.\n\nUsage:\n- Call this when you decide to lay siege to a fortified settlement.\n- The settlement_name must be a town or castle name in Chinese or English.\n- Your party will march there and begin constructing siege engines.\n- This is a major military operation that may trigger or escalate war.\n- Do NOT call this for villages (use raid_settlement for villages).\n- Only works if you are leading a party.",
     "parameters": [
       {
@@ -137,6 +148,7 @@
   },
   {
     "name": "engage_party",
+    "category": "military",
     "description": "Send your party to chase and attack another mobile party on the map.\n\nUsage:\n- Call this when you decide to attack a specific party (enemy raiders, a rival lord's army, etc.).\n- The target_entity_id specifies WHOSE party to attack, using their entity ID or Chinese name.\n- Your party will pursue and engage them in battle.\n- This is a hostile action that may trigger or escalate war.\n- Do NOT call this to attack your own faction members.\n- Only works if you are leading a party.",
     "parameters": [
       {
@@ -148,6 +160,7 @@
   },
   {
     "name": "defend_settlement",
+    "category": "military",
     "description": "Send your party to defend a settlement — stand guard and protect it from attackers.\n\nUsage:\n- Call this when you decide to defend a settlement (your fief, an ally's town, a threatened village).\n- The settlement_name must be a valid settlement name in Chinese or English.\n- Your party will march there and take a defensive stance.\n- This is a protective action, not hostile.\n- Only works if you are leading a party.",
     "parameters": [
       {
@@ -159,6 +172,7 @@
   },
   {
     "name": "patrol_settlement",
+    "category": "military",
     "description": "Send your party to patrol around a settlement — circle the area to deter enemies.\n\nUsage:\n- Call this when you decide to patrol around a settlement (keeping the peace, hunting bandits, guarding borders).\n- The settlement_name must be a valid settlement name in Chinese or English.\n- Your party will march there and patrol the surrounding area.\n- This is a non-aggressive protective action.\n- Only works if you are leading a party.",
     "parameters": [
       {
@@ -170,6 +184,7 @@
   },
   {
     "name": "escort_party",
+    "category": "military",
     "description": "Send your party to escort another party — follow and protect them as they travel.\n\nUsage:\n- Call this when you decide to escort someone (protecting a caravan, accompanying an ally, guarding a VIP).\n- The target_entity_id specifies WHOSE party to escort, using their entity ID or Chinese name.\n- Your party will follow and stay close to the target party.\n- This is a protective action that shows trust and alliance.\n- Only works if you are leading a party.",
     "parameters": [
       {
@@ -181,6 +196,7 @@
   },
   {
     "name": "go_around_party",
+    "category": "movement",
     "description": "Send your party to navigate around another party — avoid them by going around.\n\nUsage:\n- Call this when you decide to avoid a party (dodging a stronger enemy, bypassing a neutral force).\n- The target_entity_id specifies WHOSE party to avoid, using their entity ID or Chinese name. Omit to target the current conversation partner's party.\n- Your party will find a path around them without engaging.\n- This is a defensive/evasive action.\n- Only works if you are leading a party.",
     "parameters": [
       {
@@ -192,6 +208,7 @@
   },
   {
     "name": "query_recent_events",
+    "category": "query",
     "description": "Query recent events involving a specific character — tournaments won, captures, releases, deaths, marriages, births, fugitive status, kingdom destruction, clan leadership changes.\n\nUsage:\n- Call this to learn what has recently happened to someone — have they won tournaments? been captured? escaped? died? gotten married?\n- The target_entity_id parameter is the entity ID or Chinese name of the character to query. Omit to query the current conversation partner.\n- max_events limits how many events to return (default 10, max 30).\n- max_days_ago limits how far back to look in game days (default 14, max 84).\n- Returns each event with how many days ago it happened and a description.\n- This is public knowledge — these events are recorded in the Calradia encyclopedia.",
     "parameters": [
       {
@@ -213,6 +230,7 @@
   },
   {
     "name": "query_surroundings",
+    "category": "query",
     "description": "Scan your immediate surroundings — your current location, nearby settlements (towns and castles), and nearby mobile parties on the map.\n\nUsage:\n- Call this to understand WHERE you are right now and WHAT is around you — which factions control nearby territory and which armies or parties are nearby.\n- radius_km sets the scan radius in kilometers. Omit this parameter to use the game-configured default. If you provide it, it will be capped at the game's maximum.\n- max_settlements and max_parties limit how many of each type to return (default 5/8, max 15/20). Closer ones come first.\n- For each nearby party, returns: leader name, troop count, faction/bandit type, relation to you (friendly/hostile/neutral), and distance.\n- This is essential for making any travel, combat, or tactical decision — you need to know your context first.\n- Do NOT call this repeatedly without reason — it scans all settlements and parties on the map, which is wasteful if nothing has changed.",
     "parameters": [
       {
@@ -234,11 +252,13 @@
   },
   {
     "name": "cancel_action",
+    "category": "universal",
     "description": "Cancel your current party task and return your party to autonomous AI control.\n\nUsage:\n- Call this when you want to stop your current mission (defending, patrolling, escorting, etc.) and let your party act on its own.\n- After calling this, you can issue a new order (move_to_settlement, raid_settlement, etc.) if you want.\n- This only cancels the task you previously issued through a tool call — it does not affect the game's own AI decisions.\n- No parameters needed.",
     "parameters": []
   },
   {
     "name": "query_kingdom_settlements",
+    "category": "query",
     "description": "List all settlements currently owned by a specific kingdom.\n\nUsage:\n- Call this to understand a kingdom's territorial holdings — which towns and castles they control.\n- The kingdom_name parameter should match the Chinese or English kingdom name (e.g., \"南帝国\" or \"Southern Empire\").\n- Returns: list of towns and castles with their owning clan.\n- This is public encyclopedia information.",
     "parameters": [
       {
@@ -250,6 +270,7 @@
   },
   {
     "name": "query_clan_members",
+    "category": "query",
     "description": "List all heroes belonging to a specific clan.\n\nUsage:\n- Call this to find out who belongs to a clan — the leader, family members, and their roles.\n- The clan_name parameter should match the Chinese or English clan name.\n- Returns: list of members with age, gender, and family relationships.\n- This is public encyclopedia information.",
     "parameters": [
       {
@@ -261,6 +282,7 @@
   },
   {
     "name": "query_war_status",
+    "category": "query",
     "description": "Get the war statistics between two kingdoms. Shows casualties, captured towns/castles, and raids — broken down per side.\n\nUsage:\n- Call this to understand how a war is going — who is winning, how much damage each side has suffered and inflicted.\n- The kingdom_name parameter is the kingdom to check wars for. Omit to query your own kingdom.\n- For each enemy kingdom currently at war, returns: war duration, casualties inflicted/received, towns captured/lost, castles captured/lost, raids conducted/suffered.\n- This is the same data the game uses to compute war progress and peace decisions.\n- If the kingdom is at peace, returns a peace summary instead.",
     "parameters": [
       {
@@ -272,6 +294,7 @@
   },
   {
     "name": "declare_war",
+    "category": "diplomacy",
     "description": "Declare war on another kingdom. This is a unilateral action — no consent needed from the target.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom (king/queen).\n- The target_kingdom is the kingdom to declare war on, by Chinese or English name.\n- message: a declaration statement explaining your reasons. This will be publicly known.\n- This takes effect immediately. All current trade agreements with the target will be terminated.\n- Use query_war_status first to evaluate whether war is advisable.\n- Do NOT declare war on your own kingdom or your allies.",
     "parameters": [
       {
@@ -288,6 +311,7 @@
   },
   {
     "name": "propose_peace",
+    "category": "diplomacy",
     "description": "Propose a peace treaty to end a war with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You must be at war with the target kingdom.\n- tribute_amount: daily tribute you are willing to pay to end the war (0 if none).\n- tribute_days: how many days to pay tribute for.\n- message: a personal statement to the other ruler. Explain why you want peace, any terms, etc.\n- This is NOT unilateral — the other ruler decides. Be prepared for rejection.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
     "parameters": [
       {
@@ -314,6 +338,7 @@
   },
   {
     "name": "propose_alliance",
+    "category": "diplomacy",
     "description": "Propose a military alliance with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You cannot propose alliance if you are at war with the target.\n- Each kingdom can have at most 2 alliances (game rule).\n- An alliance lasts for a limited duration (84 days default).\n- message: a personal statement to the other ruler explaining why you seek this alliance.\n- This is NOT unilateral — the other ruler decides.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
     "parameters": [
       {
@@ -330,6 +355,7 @@
   },
   {
     "name": "propose_trade",
+    "category": "diplomacy",
     "description": "Propose a trade agreement with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You cannot propose trade if you are at war with the target.\n- Each kingdom can have at most 2 trade agreements (game rule).\n- Trade agreements generate gold when caravans visit partner towns.\n- message: a personal statement to the other ruler explaining why you seek this trade agreement.\n- This is NOT unilateral — the other ruler decides.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
     "parameters": [
       {
@@ -346,11 +372,13 @@
   },
   {
     "name": "query_pending_proposals",
+    "category": "diplomacy",
     "description": "List all pending diplomatic proposals addressed to YOUR kingdom. This is how you discover what other rulers are asking of you.\n\nUsage:\n- Call this FIRST when making diplomatic decisions, before query_war_status.\n- No parameters needed — automatically returns only proposals where YOUR kingdom is the recipient.\n- Returns: proposal ID, type (peace/alliance/trade), proposer's name, and any attached message.\n- If the list is empty, there are no pending proposals to respond to.\n- You can then respond to each proposal individually with respond_to_diplomacy_proposal.",
     "parameters": []
   },
   {
     "name": "respond_to_diplomacy_proposal",
+    "category": "diplomacy",
     "description": "Accept or reject a pending diplomatic proposal sent to you by another kingdom's ruler.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- The proposal_id is the EXACT filename shown in your pending proposals list — copy it directly, do NOT modify or guess. For example: \"拉盖娅_lord_1_14_to_卡拉多格_lord_5_1_alliance\"\n- Set accepted=true to agree, or false to reject.\n- If accepted, the action takes effect immediately (peace treaty/alliance/trade agreement formed).\n- If rejected, the proposal is discarded.\n- You should only respond to proposals targeted at your kingdom.",
     "parameters": [
       {
@@ -367,6 +395,7 @@
   },
   {
     "name": "query_kingdom_clans",
+    "category": "query",
     "description": "List all clans belonging to a specific kingdom.\n\nUsage:\n- Call this to understand which noble houses comprise a kingdom.\n- The kingdom_name parameter should match the Chinese or English kingdom name.\n- Returns: list of clans with their tier, leader, and whether they are the ruling clan.\n- This is public encyclopedia information.",
     "parameters": [
       {

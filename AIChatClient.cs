@@ -27,6 +27,7 @@ namespace MyFirstMod
 
         internal static Hero? CurrentHero;
         internal static string CurrentIntent = "conversation";
+        internal static HashSet<string> ActivatedCategories = new();
 
         internal sealed class PendingInquiry
         {
@@ -43,28 +44,57 @@ namespace MyFirstMod
             _pendingInquiry = inquiry;
         }
 
+        private static string[] GetDefaultCategories(string intent) => intent switch
+        {
+            "conversation" => new[] { "universal", "query", "social" },
+            "letter" => new[] { "universal", "query", "file", "communication" },
+            "diplomacy" => new[] { "universal", "query", "diplomacy" },
+            _ => new[] { "universal", "query", "social", "military", "movement", "diplomacy", "file", "communication" },
+        };
+
+        internal static void ActivateCategory(string category)
+        {
+            ActivatedCategories.Add(category);
+        }
+
+        private static ToolDef BrowseToolsDef => new()
+        {
+            Name = "browse_tools",
+            Category = "meta",
+            Description = "Browse available tools in a category to unlock them for use.\n\nUsage:\n- Call this to see detailed descriptions and unlock tools in a specific category.\n- The category parameter must be one of: military, movement, diplomacy, file, social, query, communication.\n- After calling, the tools in that category become available in your next response.\n- You do NOT need to call this for categories already shown in your current function list.\n- Only call this when the situation requires tools from a category you cannot currently access.",
+            Parameters = new List<ToolParamDef>
+            {
+                new() { Name = "category", Type = "string", Description = "Category to browse and unlock: military, movement, diplomacy, file, social, query, communication." }
+            }
+        };
+
         private static object BuildTools()
         {
+            if (ActivatedCategories.Count == 0)
+                ActivatedCategories = new HashSet<string>(GetDefaultCategories("conversation"));
+
             var activeAgent = EntityManager.ActiveAgent;
             var activeTarget = EntityManager.ActiveTarget;
             List<ToolDef> toolDefs;
             if (activeAgent != null)
             {
-                toolDefs = ContextBuilder.GetFilteredTools(activeAgent, CurrentIntent);
+                var capabilityTools = ContextBuilder.GetFilteredTools(activeAgent);
+                toolDefs = capabilityTools.Where(t => ActivatedCategories.Contains(t.Category)).ToList();
                 if (activeTarget?.HasCapability(EntityCapability.Diplomat) == true)
                 {
-                    var diplomatTools = ContextBuilder.GetFilteredTools(activeTarget, CurrentIntent);
-                    foreach (var t in diplomatTools)
+                    var targetTools = ContextBuilder.GetFilteredTools(activeTarget);
+                    foreach (var t in targetTools)
                     {
-                        if (!toolDefs.Any(existing => existing.Name == t.Name))
+                        if (!toolDefs.Any(existing => existing.Name == t.Name) && ActivatedCategories.Contains(t.Category))
                             toolDefs.Add(t);
                     }
                 }
             }
             else
             {
-                toolDefs = PromptManager.LoadAllTools();
+                toolDefs = PromptManager.LoadAllTools().Where(t => ActivatedCategories.Contains(t.Category)).ToList();
             }
+            toolDefs.Add(BrowseToolsDef);
             return BuildTools(toolDefs);
         }
 
@@ -221,6 +251,7 @@ namespace MyFirstMod
         {
             CurrentHero = hero;
             CurrentIntent = intent;
+            ActivatedCategories = new HashSet<string>(GetDefaultCategories(intent));
             var settings = MySettings.Instance!;
             var systemPrompt = hero != null
                 ? PromptManager.BuildAgentSystemPrompt(hero, charPrompt, intent)
