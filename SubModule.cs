@@ -97,6 +97,7 @@ namespace MyFirstMod
             PartyBehaviorManager.Tick();
             AIChatClient.CheckPendingInquiry();
             AgentScheduler.Tick();
+            AgentScheduler.CheckPlayerProposal();
 
             var oDown = Input.IsKeyDown(InputKey.O);
             if (oDown && !_prevLetterO && Campaign.Current != null)

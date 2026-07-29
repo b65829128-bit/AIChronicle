@@ -33,6 +33,7 @@ namespace MyFirstMod
         private static int _warmupFrames = 120;
         private static int _nextKingIndex = 0;
         private static readonly Dictionary<string, CampaignTime> _lastProposalActivation = new();
+        private static ActivationEvent? _pendingPlayerProposal;
 
         public static bool IsProcessing => _currentTask != null && !_currentTask.IsCompleted;
         public static int CurrentProcessingDepth => _currentProcessingDepth;
@@ -160,7 +161,11 @@ namespace MyFirstMod
                     return;
 
                 if (agentEntity.Controller != EntityController.Agent)
+                {
+                    if (agentEntity.Controller == EntityController.Human)
+                        HandlePlayerEvent(evt, agentEntity, targetEntity);
                     return;
+                }
 
                 var agentName = agentEntity.Name;
                 var targetName = targetEntity.Name;
@@ -260,6 +265,96 @@ namespace MyFirstMod
                         EntityManager.ActivateInteraction(prevAgent.HeroRef, prevTarget.HeroRef);
                 }
             }
+        }
+
+        private static void HandlePlayerEvent(ActivationEvent evt, Entity playerEntity, Entity senderEntity)
+        {
+            if (evt.Type == ActivationEventType.KingDiplomacy)
+            {
+                _pendingPlayerProposal = evt;
+                return;
+            }
+
+            if (evt.Type == ActivationEventType.LetterReceived)
+            {
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"你收到了来自 {senderEntity.Name} 的一封信。按 O 键打开信箱查看。",
+                    Colors.Cyan));
+                return;
+            }
+        }
+
+        public static void CheckPlayerProposal()
+        {
+            var evt = _pendingPlayerProposal;
+            if (evt == null) return;
+            _pendingPlayerProposal = null;
+
+            var playerEntity = EntityManager.GetOrCreateEntityById(evt.AgentId);
+            if (playerEntity?.HeroRef == null) return;
+
+            var pending = AgentManager.ListPendingProposals(playerEntity.Id);
+            var senderEntity = EntityManager.GetOrCreateEntityById(evt.TargetId);
+            var senderName = senderEntity?.Name ?? evt.TargetId;
+
+            var relevantProposals = new List<string>();
+            var relevantTypes = new List<string>();
+            foreach (var p in pending)
+            {
+                var pContent = AgentManager.ReadDiplomacyProposal(p);
+                if (pContent == null) continue;
+                var (proposerId, _, type) = AgentManager.ParseProposalMeta(pContent);
+                if (proposerId == evt.TargetId)
+                {
+                    relevantProposals.Add(p);
+                    relevantTypes.Add(type);
+                }
+            }
+
+            if (relevantProposals.Count == 0)
+            {
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"{senderName} 向你发送了外交提案，但提案文件已丢失。",
+                    Colors.Yellow));
+                return;
+            }
+
+            var proposalId = relevantProposals[0];
+            var proposalType = relevantTypes[0];
+            var typeName = proposalType switch
+            {
+                "peace" => "议和",
+                "alliance" => "结盟",
+                "trade" => "贸易协定",
+                _ => proposalType
+            };
+
+            var pContent2 = AgentManager.ReadDiplomacyProposal(proposalId);
+            var msgLine = pContent2?.Split('\n')
+                .FirstOrDefault(l => l.StartsWith("message="))?.Substring(8) ?? "";
+
+            var description = evt.Content;
+            if (!string.IsNullOrEmpty(msgLine))
+                description += $"\n\n附言：\"{msgLine}\"";
+
+            InformationManager.ShowInquiry(new InquiryData(
+                $"{senderName} 提议{typeName}",
+                description,
+                true, true, "接受", "拒绝",
+                () =>
+                {
+                    var result = DiplomacyService.ExecuteRespondToProposal(proposalId, true);
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"[外交] {result}", Colors.Green));
+                },
+                () =>
+                {
+                    var result = DiplomacyService.ExecuteRespondToProposal(proposalId, false);
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"[外交] {result}", Colors.Yellow));
+                }),
+                pauseGameActiveState: true,
+                prioritize: true);
         }
     }
 }
