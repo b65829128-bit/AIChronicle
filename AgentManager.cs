@@ -325,7 +325,7 @@ namespace MyFirstMod
             {
                 model = settings.Model,
                 messages = new[] { new { role = "user", content = prompt } },
-                max_tokens = 600,
+                max_tokens = 1200,
                 temperature = 0.7f
             };
 
