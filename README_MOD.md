@@ -56,16 +56,39 @@
 - 战役地图上按 **O 键**打开书信面板（收件箱 + 已知领主列表）
 - **收件箱**：以 `[来信] 发信人` 格式显示收到的信件，点击可阅读全文并一键回复
 - **写信**：选择一位对话过的领主，进入写信界面
-- 战役地图上按 **P 键**打开秘书处（玩家自我政务界面）
-  - 秘书处是玩家以自己身份使用 AI 工具的面板
+- 战役地图上按 **M 键**打开秘书处（玩家的个人行政助手）
+  - 秘书处是玩家的**个人行政办公室**，不是玩家本人——固定 persona（无条件服从），不会拒绝玩家的命令
+  - 无论玩家是国王、封臣还是平民，秘书处都可以使用（只是可用工具随身份变化）
   - 工具列表根据玩家身份动态过滤：国王获得外交工具，封臣只能写信等
-  - 可用于批量写信，但只能写给聊过天的已知 NPC
-- 书信模式下金币转移类工具禁用（`give_gold`、`request_gold`），行军/军事和关系类工具正常
 - Agent 可调用 `send_letter` 给任意人物写信（支持中文名或 entity ID）
 - 收信端由 `AgentScheduler` 异步激活处理（每帧一个事件，最多 N 层级联）
 - 级联深度在 MCM 中可调（默认 5，超出的只存档不处理）
 - 所有信件的收发对玩家可见（左下角提示）
 - 当书信双方之间存在待处理的外交提案时，收信 Agent 的上下文会自动注入提案摘要（提示 Agent 此信可能是对方对提案的回复）
+
+### AI 外交系统
+
+- AI 国王可以向他国发起外交提案（议和/结盟/贸易协定），对方国王的 Agent 会定期审视并处理
+- AI 国王也可以直接宣战（单向立即生效）
+- 当 AI 国王向**玩家**发起外交提案时，玩家会**弹出按钮对话框**（接受/拒绝），不会由 AI 自动处理
+- **玩家**的外交主动行为应在秘书处（M 键）执行
+
+### 工具分类系统
+
+所有工具按 8 个分类组织，Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁：
+
+| 分类 | 包含工具 | 默认激活场景 |
+|------|---------|:--|
+| universal | update_knowledge, cancel_action | 全部 |
+| query | query_character, query_settlement, query_world_state, query_recent_events, query_surroundings, query_kingdom_settlements, query_clan_members, query_kingdom_clans, query_war_status, query_pending_proposals | 全部 |
+| social | change_relation, give_gold, request_gold | conversation |
+| movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous |
+| military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party | autonomous |
+| diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal | diplomacy |
+| file | read_file, write_file, append_file, edit_file, delete_file, list_dir, glob, grep | letter, autonomous |
+| communication | send_letter | letter |
+
+Agent 任何时候都可以调 `browse_tools("military")` 解锁某类工具，下一轮即可使用。
 
 ### 提示词系统（文件化、可热重载）
 
@@ -80,6 +103,9 @@ _Module/Prompts/
 ├── agent_tools.json             # Agent 文件工具定义（热重载）
 ├── tool_call_prompt.txt         # 独立工具调用的代理提示词（热重载）
 ├── persona_generation.txt       # NPC性格生成提示词（玩家可编辑，热重载）
+├── chancery_rules.txt           # 秘书处行为规则（热重载）
+├── conversation_rules.txt       # 对话规则
+├── letter_rules.txt             # 书信规则
 ├── diplomacy_rules.txt          # 外交决策规则（玩家可编辑，热重载）
 ├── Templates/                   # NPC 目录模板
 │   ├── persona.txt
@@ -209,8 +235,11 @@ _Module/Prompts/
 MyFirstMod/
 ├── SubModule.cs          # 模组入口，Harmony 激活，初始化 PromptManager
 ├── Settings.cs           # MCM 设置类（URL、APIKey、测试按钮、双倍声望开关）
-├── AIChatClient.cs       # HTTP 客户端，调用 LLM API（使用 PromptManager 构建提示词）
-├── AIChatScreen.cs       # 聊天屏幕管理器（静态类，GauntletLayer 挂载）
+├── AIChatClient.cs       # HTTP 客户端，SSE 流式请求，多轮工具调度
+├── ToolExecutor.cs       # 工具执行器，所有游戏工具的 switch 分发
+├── DiplomacyService.cs   # 外交服务（宣战/议和/结盟/贸易/回复提案）
+├── PartyBehaviorManager.cs # 部队行为状态机（PendingAction + Tick）
+├── AIChatScreen.cs       # 聊天屏幕管理器（GauntletLayer 挂载）
 ├── AIChatScreenVM.cs     # 聊天 ViewModel（消息列表、输入绑定、function calling 处理）
 ├── LordChatBehavior.cs   # CampaignBehavior：对话中插入聊天选项，管理战役 ID
 ├── LetterListScreen.cs   # 书信系统屏幕管理器（战役地图 O 键入口）

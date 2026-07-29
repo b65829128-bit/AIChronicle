@@ -109,9 +109,11 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **书信模式** | 支持书信 intent，工具按场景限制（信件中禁用 give_gold/request_gold），O 键唤起收信人列表 |
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 31 个工具定义在 `tools.json`（23 个游戏工具）和 `agent_tools.json`（8 个文件工具）中，热重载，不硬编码 |
-| **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`tool_call_prompt.txt`、`persona_generation.txt`、`context_template.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
+| **工具定义文件化** | 38 个工具定义在 `tools.json`（29 个游戏工具）和 `agent_tools.json`（9 个文件工具）中，热重载，不硬编码 |
+| **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁 |
+| **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`tool_call_prompt.txt`、`persona_generation.txt`、`context_template.txt`、`chancery_rules.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环（max N 轮或无限），模型调用工具 → 执行 → 追加结果 → 重请求 |
+| **秘书处** | M 键打开，玩家的个人行政助手。固定 persona（无条件服从），不读玩家 persona。国王/封臣/平民均可使用，可用工具取决于玩家当前身份 |
 | **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
 
 ### 两个模型
@@ -141,16 +143,16 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 新工具需要以下步骤：
 
-1. `tools.json` 或 `agent_tools.json` 中加一条工具定义（遵循 opencode 风格的 `description` 格式）
-2. `AIChatClient.ExecuteToolCall` 的 `switch` 中加一个 `case`
+1. `tools.json` 或 `agent_tools.json` 中加一条工具定义，**必须指定 `category`**（遵循 opencode 风格的 `description` 格式）
+2. `ToolExecutor.ExecuteToolCall` 的 `switch` 中加一个 `case`
 3. 如果工具涉及部队行为（移动、劫掠、围攻等），还需：
-   - 在 `Execute*` 方法中注册 `PendingAction`（通过 `GetOrCreateAction` 设置 `Behavior` 和目标）
-   - 在 `AIChatClient.Tick()` 的 switch 中添加对应行为的恢复/清理逻辑
+   - 在 `Execute*` 方法中注册 `PendingAction`（通过 `PartyBehaviorManager.GetOrCreateAction` 设置 `Behavior` 和目标）
+   - 在 `PartyBehaviorManager.Tick()` 的 switch 中添加对应行为的恢复/清理逻辑
    - 对于持续性行为（驻防、巡逻、护送），设置 `CheckInHours` 以启用定时签到
 4. `AIChatScreenVM` 的 toolCall 显示 switch 中加对应描述
 5. `ContextBuilder.CapabilityToolMap` 中按能力映射（若需能力过滤）
 
-`SubModule.OnApplicationTick` 已配置为每帧调用 `Tick()`。
+`SubModule.OnApplicationTick` 已配置为每帧调用 `PartyBehaviorManager.Tick()`。
 
 #### 新增 Entity 类型
 
@@ -192,7 +194,10 @@ C:\Users\yangui\BLMods\MyFirstMod\
 ├── SubModule.cs              ← 模组入口，生命周期回调
 ├── MyFirstMod.csproj          ← 项目配置（引用、框架、部署）
 ├── Settings.cs                ← MCM 设置（API URL、Model、Key、双倍声望开关）
-├── AIChatClient.cs            ← LLM API 客户端（使用 PromptManager 构建提示词）
+├── AIChatClient.cs            ← LLM API 客户端（HTTP 流式请求、SSE 解析、多轮循环），工具调用委托给 ToolExecutor
+├── ToolExecutor.cs            ← 工具执行器（30+ 个游戏工具的具体实现 + browse_tools 元工具）
+├── DiplomacyService.cs        ← 外交服务（宣战/议和/结盟/贸易协定/回复提案 + FindKingdom）
+├── PartyBehaviorManager.cs    ← 部队行为管理器（PendingAction 状态机、Tick()、定时签到）
 ├── AIChatScreen.cs            ← 聊天屏幕管理器（静态类，GauntletLayer 挂载）
 ├── AIChatScreenVM.cs          ← 聊天 ViewModel（消息列表、输入绑定、function calling 处理）
 ├── LordChatBehavior.cs        ← 对话中插入聊天选项，战役 ID 管理
