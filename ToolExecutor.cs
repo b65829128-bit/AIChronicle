@@ -1347,6 +1347,36 @@ namespace MyFirstMod
             var sb = new StringBuilder();
             sb.AppendLine($"===== {settlement.Name} 可招募兵种 =====");
 
+            if (settlement.IsCastle)
+            {
+                sb.AppendLine("  （城堡通常没有可招募的平民兵源，请前往下属村庄征兵。）");
+                sb.AppendLine();
+                sb.AppendLine("使用 query_settlement_villages 查看该城堡的附属村庄。");
+                return sb.ToString().TrimEnd();
+            }
+
+            if (settlement.IsVillage && settlement.Village.VillageState != Village.VillageStates.Normal)
+            {
+                var stateDesc = settlement.Village.VillageState switch
+                {
+                    Village.VillageStates.Looted => "已被劫掠",
+                    Village.VillageStates.BeingRaided => "正在被劫掠",
+                    Village.VillageStates.ForcedForSupplies => "已被强制征粮",
+                    Village.VillageStates.ForcedForVolunteers => "已被强制征兵",
+                    _ => "状态异常"
+                };
+                sb.AppendLine($"  （该村庄{stateDesc}，暂时无法征兵。等待村庄恢复正常后再来。）");
+                return sb.ToString().TrimEnd();
+            }
+
+            var myFaction = hero.MapFaction;
+            var ownerClan = settlement.OwnerClan;
+            if (ownerClan != null && myFaction != null && myFaction.IsAtWarWith(ownerClan))
+            {
+                sb.AppendLine("  （该定居点属于敌对阵营，无法和平征兵。可用 raid_settlement 强制征兵或抢粮。）");
+                return sb.ToString().TrimEnd();
+            }
+
             var recruiter = party?.LeaderHero ?? hero;
             var hasAny = false;
 
@@ -1623,7 +1653,10 @@ namespace MyFirstMod
                     var vSettlement = v.Settlement;
                     var vName = vSettlement?.Name?.ToString() ?? "?";
                     var hearths = v.Hearth.ToString("F0");
-                    sb.AppendLine($"  {vName} — 户数: {hearths}");
+                    var stateTag = v.VillageState != Village.VillageStates.Normal
+                        ? $" [{v.VillageState}]" : "";
+                    var ownerTag = vSettlement?.OwnerClan?.Name?.ToString();
+                    sb.AppendLine($"  {vName} — 户数: {hearths}{stateTag}（{ownerTag}）");
                 }
             }
 
