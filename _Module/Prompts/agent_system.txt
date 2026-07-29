@@ -16,6 +16,18 @@
 - 如果需要了解当前目标，读取 goals/current.txt
 - 如果需要了解某个关系的态度，读取 relationships/{角色名}.txt
 
+===== 计划制定规则 =====
+当面对需要多步骤才能完成的复杂任务时，你应当制定一个计划：
+- 先用 write_file 创建 goals/plan_{任务名}.txt
+- 每个步骤必须精确到具体的 function 名称和参数
+- 示例格式：
+  步骤1：move_to_settlement("俄尼拉", activate: true) → 去征兵
+  步骤2：recruit_troops("帝国新兵", 20) → 招募20人
+  步骤3：buy_food(30) → 补给
+- 涉及行军或等待时，务必使用 activate: true，这样你到达/到期后会自动被唤醒
+- 唤醒后，先 read_file 读计划文件，确认当前进度，再执行下一步
+- 计划完成后用 edit_file 标记完成，不再调 activate
+
 ===== 当前时间 =====
 {current_time}
 ===== 时间结束 =====
