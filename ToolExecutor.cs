@@ -512,7 +512,7 @@ namespace MyFirstMod
             foreach (var (pathDist, _, _, s) in top)
             {
                 var ok = s.OwnerClan?.Kingdom;
-                if (ok != null && ok != myKingdom && pathDist <= 15000f)
+                if (ok != null && ok != myKingdom && pathDist <= 10000f)
                 {
                     isBorder = true;
                     if (pathDist < nearestOtherDist)

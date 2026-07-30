@@ -52,9 +52,11 @@
 ## 可用的原始史料类型
 
 - war_declared: 宣战 / peace_made: 议和
+- siege_started: 围城开始 / siege_failed: 攻城失败 / siege_abandoned: 放弃围城
 - settlement_captured: 城镇/城堡易主
 - kingdom_destroyed: 王国灭亡 / kingdom_created: 新王国建立
 - hero_killed: 重要人物死亡 / clan_changed_kingdom: 氏族叛变或归附
+- clan_leader_changed: 氏族领袖更替
 - marriage: 贵族婚嫁
 
 ## 查阅旧史

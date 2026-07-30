@@ -36,6 +36,7 @@ namespace MyFirstMod
         private static Task? _currentTask;
         private static int _currentProcessingDepth = -1;
         private static readonly Dictionary<Kingdom, CampaignTime> _lastKingActivation = new();
+        private static readonly Dictionary<Kingdom, CampaignTime> _lastKingDailyCheck = new();
         private static int _warmupFrames = 120;
         private static int _nextKingIndex = 0;
         private static readonly Dictionary<string, CampaignTime> _lastProposalActivation = new();
@@ -43,6 +44,7 @@ namespace MyFirstMod
         private static int _lastChronicleYear;
         private static bool _historianInitialized;
         private static int _warmupFramesHistorian = 60;
+        private static readonly Random _rng = new();
 
         public static bool IsProcessing => _currentTask != null && !_currentTask.IsCompleted;
         public static int CurrentProcessingDepth => _currentProcessingDepth;
@@ -55,6 +57,7 @@ namespace MyFirstMod
         public static void ForceDiplomacyRound()
         {
             _lastKingActivation.Clear();
+            _lastKingDailyCheck.Clear();
             _lastProposalActivation.Clear();
             foreach (var k in Kingdom.All)
             {
@@ -158,13 +161,22 @@ namespace MyFirstMod
                     continue;
 
                 var now = CampaignTime.Now;
-                var intervalDays = MySettings.Instance?.KingActivationDays ?? 30;
-                if (!_lastKingActivation.TryGetValue(kingdom, out var lastActivation))
+                var cooldownDays = MySettings.Instance?.KingCooldownDays ?? 3;
+                if (_lastKingActivation.TryGetValue(kingdom, out var lastActivation)
+                    && (now - lastActivation).ToDays < cooldownDays)
+                    continue;
+
+                if (!_lastKingDailyCheck.TryGetValue(kingdom, out var lastCheck))
                 {
-                    _lastKingActivation[kingdom] = now;
+                    _lastKingDailyCheck[kingdom] = now;
                     continue;
                 }
-                if ((now - lastActivation).ToDays < intervalDays)
+                if ((now - lastCheck).ToDays < 1)
+                    continue;
+                _lastKingDailyCheck[kingdom] = now;
+
+                var chance = MySettings.Instance?.DiplomacyChancePerDay ?? 0.1f;
+                if (_rng.NextDouble() > chance)
                     continue;
 
                 _lastKingActivation[kingdom] = now;

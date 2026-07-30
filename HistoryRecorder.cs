@@ -4,7 +4,10 @@ using System.IO;
 using System.Text;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Siege;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 
@@ -13,6 +16,8 @@ namespace MyFirstMod
     public class HistoryRecorder : CampaignBehaviorBase
     {
         private string? _historyDir;
+        private readonly HashSet<Settlement> _recentSiegeCaptures = new();
+        private readonly Dictionary<Settlement, (int Attackers, int Defenders)> _siegeStartTroops = new();
 
         public override void RegisterEvents()
         {
@@ -28,6 +33,24 @@ namespace MyFirstMod
                 new Action<Hero, Hero, KillCharacterAction.KillCharacterActionDetail, bool>(OnHeroKilled));
             CampaignEvents.OnClanChangedKingdomEvent.AddNonSerializedListener(this,
                 new Action<Clan, Kingdom, Kingdom, ChangeKingdomAction.ChangeKingdomActionDetail, bool>(OnClanChangedKingdom));
+
+            CampaignEvents.SiegeCompletedEvent.AddNonSerializedListener(this,
+                new Action<Settlement, MobileParty, bool, MapEvent.BattleTypes>(OnSiegeCompleted));
+
+            CampaignEvents.OnSiegeEventStartedEvent.AddNonSerializedListener(this,
+                new Action<SiegeEvent>(OnSiegeStarted));
+
+            try
+            {
+                var siegeEndedEvent = typeof(CampaignEvents).GetEvent("OnSiegeEventEndedEvent");
+                if (siegeEndedEvent != null)
+                {
+                    var actionType = typeof(Action<>).MakeGenericType(typeof(SiegeEvent));
+                    var handler = Delegate.CreateDelegate(actionType, this, nameof(OnSiegeEnded));
+                    siegeEndedEvent.AddEventHandler(null, handler);
+                }
+            }
+            catch { }
 
             try
             {
@@ -146,6 +169,7 @@ namespace MyFirstMod
         private void OnSettlementOwnerChanged(Settlement settlement, bool openToClaim, Hero newOwner, Hero oldOwner, Hero capturer, ChangeOwnerOfSettlementAction.ChangeOwnerOfSettlementDetail detail)
         {
             if (!settlement.IsTown && !settlement.IsCastle) return;
+            if (_recentSiegeCaptures.Remove(settlement)) return;
 
             var name = settlement.Name?.ToString() ?? "未知";
             var oldClan = oldOwner?.Clan?.Name?.ToString() ?? "未知";
@@ -155,6 +179,69 @@ namespace MyFirstMod
 
             var summary = $"{name}易主：从{oldKingdom}的{oldClan}转归{newKingdom}的{newClan}";
             RecordEvent("settlement_captured", summary);
+        }
+
+        private void OnSiegeStarted(SiegeEvent siegeEvent)
+        {
+            var settlement = siegeEvent.BesiegedSettlement;
+            if (settlement == null || (!settlement.IsTown && !settlement.IsCastle)) return;
+
+            var attackerParty = siegeEvent.BesiegerCamp.LeaderParty;
+            var attackerLeader = attackerParty?.LeaderHero?.Name?.ToString() ?? "?";
+            var attackerKingdom = attackerParty?.MapFaction?.Name?.ToString() ?? "?";
+
+            var attackers = 0;
+            foreach (var party in siegeEvent.BesiegerCamp.GetInvolvedPartiesForEventType(MapEvent.BattleTypes.Siege))
+                attackers += party.NumberOfHealthyMembers;
+
+            var defenders = 0;
+            if (settlement.Town?.GarrisonParty != null)
+                defenders += settlement.Town.GarrisonParty.MemberRoster.TotalHealthyCount;
+            defenders += settlement.MilitiaPartyComponent?.MobileParty?.MemberRoster?.TotalHealthyCount ?? 0;
+
+            _siegeStartTroops[settlement] = (attackers, defenders);
+            RecordEvent("siege_started", $"{attackerKingdom}的{attackerLeader}率{attackers}人围攻{settlement.Name}，守军{defenders}人");
+        }
+
+        private void OnSiegeCompleted(Settlement settlement, MobileParty attackerParty, bool isWin, MapEvent.BattleTypes battleType)
+        {
+            if (!settlement.IsTown && !settlement.IsCastle) return;
+
+            var attackerLeader = attackerParty?.LeaderHero?.Name?.ToString() ?? "?";
+            var attackerKingdom = attackerParty?.MapFaction?.Name?.ToString() ?? "?";
+
+            var attackers = 0;
+            var defenders = 0;
+            if (_siegeStartTroops.TryGetValue(settlement, out var counts))
+            {
+                attackers = counts.Attackers;
+                defenders = counts.Defenders;
+            }
+            _siegeStartTroops.Remove(settlement);
+
+            if (isWin)
+            {
+                var summary = $"{attackerKingdom}的{attackerLeader}率{attackers}人攻克{settlement.Name}，守军{defenders}人";
+                _recentSiegeCaptures.Add(settlement);
+                RecordEvent("settlement_captured", summary);
+            }
+            else
+            {
+                RecordEvent("siege_failed", $"{attackerKingdom}的{attackerLeader}围攻{settlement.Name}失败，攻城部队被击败");
+            }
+        }
+
+        private void OnSiegeEnded(SiegeEvent siegeEvent)
+        {
+            var settlement = siegeEvent.BesiegedSettlement;
+            if (settlement == null || (!settlement.IsTown && !settlement.IsCastle)) return;
+
+            if (!_siegeStartTroops.Remove(settlement)) return;
+
+            var attackerParty = siegeEvent.BesiegerCamp.LeaderParty;
+            var attackerLeader = attackerParty?.LeaderHero?.Name?.ToString() ?? "?";
+            var attackerKingdom = attackerParty?.MapFaction?.Name?.ToString() ?? "?";
+            RecordEvent("siege_abandoned", $"{attackerKingdom}的{attackerLeader}放弃了对{settlement.Name}的围攻");
         }
 
         private void OnKingdomDestroyed(Kingdom kingdom)

@@ -402,19 +402,19 @@ namespace MyFirstMod
             }
         }
 
-        private int _kingActivationDays = 10;
+        private float _diplomacyChancePerDay = 0.1f;
 
-        [SettingPropertyInteger("国王激活间隔（天）", 5, 120, Order = 10, RequireRestart = false,
-            HintText = "国王 Agent 的定期外交审视间隔。\n默认10天。")]
+        [SettingPropertyFloatingInteger("外交触发几率/天", 0.01f, 0.5f, Order = 10, RequireRestart = false,
+            HintText = "每个国王每天有独立几率触发外交审视。\n0.1=平均十天一次，0.5=平均两天一次。\n默认0.1。")]
         [SettingPropertyGroup("游戏设置")]
-        public int KingActivationDays
+        public float DiplomacyChancePerDay
         {
-            get => _kingActivationDays;
+            get => _diplomacyChancePerDay;
             set
             {
-                if (_kingActivationDays != value)
+                if (Math.Abs(_diplomacyChancePerDay - value) > 0.001f)
                 {
-                    _kingActivationDays = value;
+                    _diplomacyChancePerDay = value;
                     OnPropertyChanged();
                 }
             }
