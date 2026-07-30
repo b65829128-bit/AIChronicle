@@ -40,6 +40,11 @@ namespace MyFirstMod
             "factions.txt", "settlements.txt"
         };
 
+        private static readonly HashSet<string> _readableWorldDirs = new()
+        {
+            "history", "history/chronicles"
+        };
+
         public static string ActiveAgentId => _agentEntityId;
         public static string ActiveTargetId => _targetEntityId;
 
@@ -588,8 +593,26 @@ namespace MyFirstMod
             pattern = pattern.Replace('\\', '/').Trim('/');
 
             var isWorld = pattern.StartsWith("World/") || pattern == "World";
-            var baseDir = isWorld ? Path.Combine(_baseDir, "World") : _agentDir;
-            var searchPattern = isWorld ? pattern.Substring(6).TrimStart('/') : pattern;
+            var isWorldHistory = pattern.StartsWith("history/") || pattern == "history";
+
+            string baseDir;
+            string searchPattern;
+
+            if (isWorld)
+            {
+                baseDir = Path.Combine(_baseDir, "World");
+                searchPattern = pattern.Substring(6).TrimStart('/');
+            }
+            else if (isWorldHistory)
+            {
+                baseDir = Path.Combine(_baseDir, "World");
+                searchPattern = pattern;
+            }
+            else
+            {
+                baseDir = _agentDir;
+                searchPattern = pattern;
+            }
 
             if (string.IsNullOrEmpty(_agentDir) && !isWorld)
                 return "[错误] 未设置 agent 目录";
@@ -600,12 +623,33 @@ namespace MyFirstMod
             var dir = new DirectoryInfo(baseDir);
             try
             {
-                var files = dir.GetFiles(searchPattern, System.IO.SearchOption.AllDirectories);
-                foreach (var f in files)
+                var lastSlash = searchPattern.LastIndexOf('/');
+                if (lastSlash >= 0)
                 {
-                    var rel = f.FullName.Substring(baseDir.Length).TrimStart('/', '\\').Replace('\\', '/').TrimStart('/');
-                    if (isWorld) rel = "World/" + rel;
-                    results.AppendLine("[FILE] " + rel);
+                    var subDir = searchPattern.Substring(0, lastSlash);
+                    var filePattern = searchPattern.Substring(lastSlash + 1);
+                    var searchDir = Path.Combine(baseDir, subDir);
+                    if (Directory.Exists(searchDir))
+                    {
+                        var subDirInfo = new DirectoryInfo(searchDir);
+                        var files = subDirInfo.GetFiles(filePattern, SearchOption.TopDirectoryOnly);
+                        foreach (var f in files)
+                        {
+                            var rel = f.FullName.Substring(baseDir.Length).TrimStart('/', '\\').Replace('\\', '/').TrimStart('/');
+                            if (isWorld || isWorldHistory) rel = "World/" + rel;
+                            results.AppendLine("[FILE] " + rel);
+                        }
+                    }
+                }
+                else
+                {
+                    var files = dir.GetFiles(searchPattern, SearchOption.AllDirectories);
+                    foreach (var f in files)
+                    {
+                        var rel = f.FullName.Substring(baseDir.Length).TrimStart('/', '\\').Replace('\\', '/').TrimStart('/');
+                        if (isWorld || isWorldHistory) rel = "World/" + rel;
+                        results.AppendLine("[FILE] " + rel);
+                    }
                 }
             }
             catch { }
@@ -1015,14 +1059,23 @@ namespace MyFirstMod
             relPath = relPath.Replace('\\', '/').Trim('/');
             var dirPart = Path.GetDirectoryName(relPath)?.Replace('\\', '/') ?? "";
 
+            var isWorldPath = _readableWorldFiles.Contains(relPath)
+                || _readableWorldDirs.Any(d => relPath.StartsWith(d + "/") || relPath == d);
+
             if (read && !write)
             {
                 if (_readableDirs.Contains(dirPart)) return true;
-                if (_readableWorldFiles.Contains(relPath)) return true;
+                if (isWorldPath) return true;
             }
 
             if (write && _writableDirs.Contains(dirPart))
                 return true;
+
+            if (write && _agentEntityId == "__historian__")
+            {
+                if (relPath.StartsWith("history/chronicles/") || relPath == "history/chronicles")
+                    return true;
+            }
 
             return false;
         }
@@ -1032,6 +1085,9 @@ namespace MyFirstMod
             relPath = relPath.Replace('\\', '/').Trim('/');
 
             if (_readableWorldFiles.Contains(relPath))
+                return Path.Combine(_baseDir, "World", relPath);
+
+            if (_readableWorldDirs.Any(d => relPath.StartsWith(d + "/") || relPath == d))
                 return Path.Combine(_baseDir, "World", relPath);
 
             if (string.IsNullOrEmpty(_agentDir))

@@ -592,5 +592,32 @@
         "description": "Entity ID or Chinese name of the character to query. Omit to query yourself."
       }
     ]
+  },
+  {
+    "name": "change_kingdom",
+    "category": "diplomacy",
+    "description": "Change your clan's kingdom affiliation.\n\nUsage:\n- Call this to abdicate the throne, leave your kingdom, join a new kingdom, defect to an enemy kingdom, or become a mercenary.\n- Only clan leaders can use this.\n- action must be one of: abdicate, leave_kingdom, join_kingdom, defect_to_kingdom, join_as_mercenary.\n- abdicate: you must be the kingdom ruler. Designate an heir (same clan member, or leader of another clan in your kingdom) who will become the new ruler.\n- leave_kingdom: set 'rebellion' to true to declare war and keep fiefs; false to leave peacefully and lose fiefs.\n- join_kingdom: your clan becomes a vassal of the target kingdom (must not already be in a kingdom).\n- defect_to_kingdom: switch allegiance immediately — only possible if currently at war with target.\n- join_as_mercenary: your clan becomes a mercenary under the target kingdom (must not already be in a kingdom).",
+    "parameters": [
+      {
+        "name": "action",
+        "type": "string",
+        "description": "One of: abdicate, leave_kingdom, join_kingdom, defect_to_kingdom, join_as_mercenary"
+      },
+      {
+        "name": "kingdom_name",
+        "type": "string",
+        "description": "Name of the target kingdom. Required for join_kingdom, defect_to_kingdom, and join_as_mercenary. Optional for leave_kingdom."
+      },
+      {
+        "name": "rebellion",
+        "type": "boolean",
+        "description": "For leave_kingdom only: true to leave with rebellion (declare war, keep fiefs), false or omit to leave peacefully (lose fiefs). Defaults to false."
+      },
+      {
+        "name": "heir_entity_id",
+        "type": "string",
+        "description": "For abdicate only: the entity ID or Chinese name of the heir. Must be a member of your clan, or the leader of another clan in your kingdom."
+      }
+    ]
   }
 ]

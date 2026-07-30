@@ -48,6 +48,18 @@ namespace MyFirstMod
             return null;
         }
 
+        private static Kingdom? GetHeroKingdom(Hero hero)
+        {
+            foreach (var k in Kingdom.All)
+            {
+                if (k.RulingClan?.Leader == hero)
+                    return k;
+                if (k.Clans.Contains(hero.Clan))
+                    return k;
+            }
+            return hero.MapFaction as Kingdom;
+        }
+
         internal static Hero? GetDiplomacyHero()
         {
             if (AIChatClient.CurrentHero != null)
@@ -88,7 +100,7 @@ namespace MyFirstMod
         {
             var actingHero = GetDiplomacyHero();
             if (actingHero == null) return "[错误] 只有王国统治者才能提出议和";
-            var myKingdom = actingHero.MapFaction as Kingdom;
+            var myKingdom = GetHeroKingdom(actingHero);
             if (myKingdom == null) return "[错误] 你当前不属于任何王国";
             var target = FindKingdom(targetKingdomName);
             if (target == null)
@@ -97,6 +109,11 @@ namespace MyFirstMod
                     $"{actingHero.Name} 提议议和失败：未找到王国「{targetKingdomName}」", Colors.Red));
                 return $"[错误] 未找到王国：{targetKingdomName}";
             }
+
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"[诊断] {actingHero.Name}（{myKingdom.Name}）→ propose_peace → {target.Name}，IsAtWar={myKingdom.IsAtWarWith(target)}，myKingdom实例={myKingdom.GetHashCode()}，target实例={target.GetHashCode()}",
+                Colors.Cyan));
+
             if (!myKingdom.IsAtWarWith(target))
             {
                 InformationManager.DisplayMessage(new InformationMessage(
@@ -234,7 +251,7 @@ namespace MyFirstMod
         {
             var actingHero = GetDiplomacyHero();
             if (actingHero == null) return "[错误] 只有王国统治者才能处理外交提案";
-            var myKingdom = actingHero.MapFaction as Kingdom;
+            var myKingdom = GetHeroKingdom(actingHero);
             if (myKingdom == null) return "[错误] 你当前不属于任何王国";
 
             var content = AgentManager.ReadDiplomacyProposal(proposalId);
@@ -295,13 +312,17 @@ namespace MyFirstMod
                 return "已拒绝该提案。";
             }
 
-            var proposerKingdom = proposerEntity.HeroRef.MapFaction as Kingdom;
+            var proposerKingdom = GetHeroKingdom(proposerEntity.HeroRef);
             if (proposerKingdom == null) return "[错误] 提案发起人已不属于任何王国";
 
             switch (type)
             {
                 case "peace":
                 {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"[诊断] respond→peace：{myKingdom.Name} IsAtWarWith {proposerKingdom.Name} = {myKingdom.IsAtWarWith(proposerKingdom)}",
+                        Colors.Cyan));
+
                     if (!myKingdom.IsAtWarWith(proposerKingdom)) return "[错误] 当前并未与该王国交战";
                     var lines = content.Split('\n');
                     var tribute = "0_0";

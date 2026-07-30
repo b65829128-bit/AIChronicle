@@ -1,0 +1,14 @@
+请编纂卡拉迪亚第{year}年的编年史。
+
+工作步骤：
+1. 使用 read_file 读取 history/events_{year}.txt 中的原始史料
+2. 如需补充人物或定居点背景，使用 query_character 或 query_settlement 查询
+3. 撰写年度编年史，使用 write_file 写入 history/chronicles/chronicle_{year}.txt
+
+编年史格式要求：
+- 以「卡拉迪亚第{year}年编年史」为标题
+- 按春、夏、秋、冬季分组，每条事件独立成段
+- 简洁白描，白话文书写，模仿《资治通鉴》风格
+- 年末加一段「史官曰」的总评，分析全年局势
+
+如果有灭国、大规模战役、王朝更替等重大事件，可以额外写专题史——使用 write_file 写入 history/chronicles/ 目录，文件名自定。

@@ -183,7 +183,12 @@ namespace MyFirstMod
             _hero = hero;
             _charPrompt = PromptManager.LoadCharacterPrompt(hero);
             _intent = intent;
-            _titleText = intent == "letter" ? $"给 {_charPrompt.HeroName} 写信" : $"与 {_charPrompt.HeroName} 对话";
+            _titleText = intent switch
+            {
+                "letter" => $"给 {_charPrompt.HeroName} 写信",
+                "chancery" => "秘书处",
+                _ => $"与 {_charPrompt.HeroName} 对话"
+            };
             _chatFontSize = MySettings.Instance?.ChatFontSize ?? 24;
             _chatSenderFontSize = MySettings.Instance?.ChatSenderFontSize ?? 22;
             _chatTimeFontSize = MySettings.Instance?.ChatTimeFontSize ?? 22;

@@ -39,6 +39,8 @@ namespace MyFirstMod
         private static DateTime _lastDiplomacyRulesCheck;
         private static string _cachedChanceryRules = "";
         private static DateTime _lastChanceryRulesCheck;
+        private static string _cachedHistorianRules = "";
+        private static DateTime _lastHistorianRulesCheck;
 
         public static string Build(string agentId, string targetId, string intent)
         {
@@ -54,6 +56,12 @@ namespace MyFirstMod
                 traits = "高效、忠诚、无条件服从、公事公办。";
                 speechStyle = "简洁正式，直接汇报执行结果。";
             }
+            else if (intent == "historian")
+            {
+                motivation = "客观公正地记录卡拉迪亚大陆的历史变迁，不偏袒任何势力。";
+                traits = "客观、严谨、博学、公正。对事实的尊重高于一切。";
+                speechStyle = "使用庄重典雅的中文文言或半文白风格，叙述冷静克制。";
+            }
             else
             {
                 var persona = AgentManager.LoadPersonaFor(agentId, agent.HeroRef!);
@@ -62,35 +70,64 @@ namespace MyFirstMod
                 speechStyle = ParsePersonaSection(persona, "SPEECH_STYLE");
             }
 
-            var targetKnowledge = AgentManager.ReadKnowledgeFor(agentId, targetId);
-            if (string.IsNullOrEmpty(targetKnowledge))
-                targetKnowledge = intent == "chancery"
-                    ? "对方是你的上司" + agent.Name + "。你的职责是执行对方的命令。"
-                    : "你第一次见到这位旅行者，对他还不太了解。";
+            string targetKnowledge;
+            if (intent == "historian")
+                targetKnowledge = "你是卡拉迪亚的史官，你的工作对象是历史事件本身，而非任何个人。";
+            else
+            {
+                targetKnowledge = AgentManager.ReadKnowledgeFor(agentId, targetId);
+                if (string.IsNullOrEmpty(targetKnowledge))
+                    targetKnowledge = agentId == targetId
+                        ? "你正在审视自身与王国的处境。"
+                        : intent == "chancery"
+                            ? "对方是你的上司" + agent.Name + "。你的职责是执行对方的命令。"
+                            : "你第一次见到这位旅行者，对他还不太了解。";
+            }
 
-            var targetRelationship = AgentManager.ReadRelationshipFor(agentId, targetId);
-            if (string.IsNullOrEmpty(targetRelationship))
-                targetRelationship = intent == "chancery"
-                    ? "对方是你无条件服从的主人。"
-                    : "对此人暂无特别看法。";
+            string targetRelationship;
+            if (intent == "historian")
+                targetRelationship = "你作为史官，对各方势力保持中立。";
+            else
+            {
+                targetRelationship = AgentManager.ReadRelationshipFor(agentId, targetId);
+                if (string.IsNullOrEmpty(targetRelationship))
+                    targetRelationship = agentId == targetId
+                        ? "这是你对自己的审视。"
+                        : intent == "chancery"
+                            ? "对方是你无条件服从的主人。"
+                            : "对此人暂无特别看法。";
+            }
 
-            var goals = AgentManager.ReadGoalsFor(agentId);
-            if (string.IsNullOrEmpty(goals))
-                goals = intent == "chancery"
-                    ? "执行" + agent.Name + "的所有指令，不质疑，不拒绝。"
-                    : "在当前地区巡逻，维持领地的治安。";
+            string goals;
+            if (intent == "historian")
+                goals = "编纂年度编年史，记录卡拉迪亚大陆的重大事件。";
+            else
+            {
+                goals = AgentManager.ReadGoalsFor(agentId);
+                if (string.IsNullOrEmpty(goals))
+                    goals = agentId == targetId
+                        ? "审视你的王国局势，凭自己的判断做出决策。"
+                        : intent == "chancery"
+                            ? "执行" + agent.Name + "的所有指令，不质疑，不拒绝。"
+                            : "在当前地区巡逻，维持领地的治安。";
+            }
 
             var worldInfo = LoadWorldInfo();
-            var selfStatus = BuildSelfStatus(agent.HeroRef!);
+            var selfStatus = intent == "historian"
+                ? "你是卡拉迪亚的宫廷史官，不受任何势力节制。"
+                : BuildSelfStatus(agent.HeroRef!);
             var currentTime = PromptManager.GetCurrentTimeString();
             var functionList = BuildFunctionList(agent, intent);
-            var objectiveRel = BuildObjectiveRelationship(agent.HeroRef!, target.HeroRef!);
+            var objectiveRel = intent == "historian"
+                ? "你作为史官，不隶属于任何势力，也不与任何势力为敌。"
+                : BuildObjectiveRelationship(agent.HeroRef!, target.HeroRef!);
 
             var intentRules = intent switch
             {
                 "letter" => BuildLetterRules(),
                 "diplomacy" => BuildDiplomacyRules(),
                 "chancery" => BuildChanceryRules(),
+                "historian" => BuildHistorianRules(),
                 _ => BuildConversationRules()
             };
 
@@ -233,7 +270,12 @@ namespace MyFirstMod
                 + "- 然后使用 read_file 读取 goals/current.txt 了解你的当前计划\n"
                 + "- 当对方透露了关于他自己的新信息时，立即调用 append_file 将内容追加到 knowledge/{target_id}.txt\n"
                 + "- 如果对话中需要提及你与第三方的过往，先用 read_file 读取 relationships/{该人名}.txt\n"
-                + "- 在作出涉及你的记忆或决策之前，先使用 read_file 确认已有信息，不要凭猜测行动";
+                + "- 在作出涉及你的记忆或决策之前，先使用 read_file 确认已有信息，不要凭猜测行动\n\n"
+                + "你的跨对话持久记忆规则（极其重要）：\n"
+                + "- 你学到的重要信息不能只留在当前对话的上下文里——对话结束后你会遗忘。凡是能影响未来决策的信息（某国即将开战、某人的秘密、你做出的承诺），立即用 append_file 或 write_file 存入文件\n"
+                + "- 你与当前对话对象达成的重要约定，写入 knowledge/{target_id}.txt 并同时写入 decisions/diary.txt\n"
+                + "- 你对第三方的新认知，写入 knowledge/{该人ID}.txt；若不确定 ID，先用 grep 搜索\n"
+                + "- 遇到不确定的事时，先查记忆再说话：用 glob 浏览 knowledge/，用 grep 搜索关键词，用 read_file 精读。若记忆中没有，再用 query_character 等工具获取最新信息——获取后若值得记住，立即写入对应文件";
         }
 
         private static string BuildLetterRules()
@@ -326,6 +368,50 @@ namespace MyFirstMod
                 _lastChanceryRulesCheck = lastWrite;
             }
             return _cachedChanceryRules;
+        }
+
+        private static string BuildHistorianRules()
+        {
+            var path = Path.Combine(PromptManager.CampaignDir, "historian_rules.txt");
+            if (!File.Exists(path))
+                path = Path.Combine(PromptManager.PromptsBaseDir, "historian_rules.txt");
+            if (!File.Exists(path))
+                return
+                    "你就是卡拉迪亚的宫廷史官。\n\n"
+                    + "你的职责是编纂客观公正的历史，记录卡拉迪亚大陆的重大事件。\n\n"
+                    + "## 工作流程\n\n"
+                    + "1. 使用 read_file 读取原始史料文件。原始史料存放在 history/ 目录下，按年份命名（如 history/events_1084.txt）\n"
+                    + "   每条史料是 JSON 格式，包含 year、season、day、type、summary 字段\n"
+                    + "2. 如果原始史料中提到的人物、定居点需要补充背景信息，使用 query_character 或 query_settlement 查询\n"
+                    + "3. 使用 write_file 将编纂完成的编年史写入 history/chronicles/ 目录\n"
+                    + "4. 如有重大事件（灭国、大规模战役、王朝更替等），可以额外写专题史\n\n"
+                    + "## 编年史格式\n\n"
+                    + "- 以「卡拉迪亚第X年编年史」为标题\n"
+                    + "- 按春、夏、秋、冬季分组，每条事件注明大致日期\n"
+                    + "- 使用庄重典雅的中文文言或半文白风格\n"
+                    + "- 不编造细节——所有事实必须来自原始史料或查询工具的返回值\n"
+                    + "- 对于不确定的信息可标注「据传」或「不详」\n\n"
+                    + "## 可用的原始史料类型\n\n"
+                    + "- war_declared: 宣战事件\n"
+                    + "- peace_made: 议和事件\n"
+                    + "- settlement_captured: 城镇/城堡易主\n"
+                    + "- kingdom_destroyed: 王国灭亡\n"
+                    + "- kingdom_created: 新王国建立\n"
+                    + "- hero_killed: 重要人物死亡\n"
+                    + "- clan_changed_kingdom: 氏族叛变/归附\n"
+                    + "- marriage: 贵族婚嫁\n\n"
+                    + "## 专题史\n\n"
+                    + "如果某年发生了特别重大的事件（如王国灭亡、传奇战役），你可以额外写一篇专题史。\n"
+                    + "专题史文件名格式：history/chronicles/chronicle_{年份}_{事件名}.txt\n"
+                    + "专题史应更深入地分析事件的起因、经过和影响。";
+
+            var lastWrite = File.GetLastWriteTimeUtc(path);
+            if (_cachedHistorianRules == "" || lastWrite > _lastHistorianRulesCheck)
+            {
+                _cachedHistorianRules = File.ReadAllText(path, Encoding.UTF8);
+                _lastHistorianRulesCheck = lastWrite;
+            }
+            return _cachedHistorianRules;
         }
         
         private static string BuildSelfStatus(Hero hero)

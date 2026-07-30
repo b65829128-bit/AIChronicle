@@ -109,7 +109,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **书信模式** | 支持书信 intent，O 键唤起收信人列表 |
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 51 个工具定义在 `tools.json`（41 个游戏工具）和 `agent_tools.json`（10 个文件工具）中，热重载，不硬编码 |
+| **工具定义文件化** | 52 个工具定义在 `tools.json`（42 个游戏工具）和 `agent_tools.json`（10 个文件工具）中，热重载，不硬编码 |
 | **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁 |
 | **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`tool_call_prompt.txt`、`persona_generation.txt`、`context_template.txt`、`chancery_rules.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环（max N 轮或无限），模型调用工具 → 执行 → 追加结果 → 重请求 |
@@ -208,6 +208,7 @@ C:\Users\yangui\BLMods\MyFirstMod\
 ├── ContextBuilder.cs          ← Context 动态组装器
 ├── LetterListScreen.cs        ← 书信收信人列表屏幕
 ├── AgentScheduler.cs          ← 信件异步事件驱动调度器
+├── HistoryRecorder.cs         ← 历史记录器（监听游戏事件写入原始史料）
 ├── _Module/
 │   ├── SubModule.xml         ← 模组元数据（ID、依赖、DLL路径）
 │   ├── GUI/
@@ -570,6 +571,12 @@ Usage:
 - ~~文件编辑 → `write_file`/`edit_file`/`delete_file`/`glob`~~ （已实现，chat_logs 和 persona.txt 为只读保护）
 - ~~发起外交/王国级动作~~ → `declare_war` / `propose_peace` / `propose_alliance` / `propose_trade` / `gift_fief`（已全部实现）
 - 物品交易 → `give_item` / `give_item` / `request_items`（已全部实现）
+- ~~氏族阵营切换~~ → `change_kingdom`（已实现，支持离国/加入/叛逃/雇佣兵四种模式）
+- NPC 自立建国 → `create_kingdom`（待开发）<br>
+  `ChangeKingdomAction.ApplyByCreateKingdom(Clan, Kingdom)` 后端方法已存在，接受任意氏族。<br>
+  阻碍：① `Kingdom` 对象构造函数不在反编译源码中，可能需要反射或查找静态工厂；<br>
+  ② `DefaultKingdomCreationModel` 全部方法硬编码为 `IsPlayerKingdomCreationPossible`（只检 `Hero.MainHero`），需替换或 patch。<br>
+  条件门槛（四级家族+有封地+100兵）本身合理，移植给 NPC 直接可用。
 
 ### 流式架构（已实现，参考 opencode）
 
@@ -604,6 +611,54 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 - 防递归：书信规则强调"除非必要不回信" + 深度硬上限
 - 聊天记录使用显式路径（`GetChatLogPathFor`）防线程竞态
 - 外交提案感知：`LetterReceived` 处理时自动检测双方是否有待处理的外交提案（`AgentManager.GetProposalsBetween`），如有则将提案摘要注入上下文提示 Agent
+
+### 历史系统（HistoryRecorder + 史官 Agent）
+
+历史系统由两部分组成：**事件记录器** 和 **史官 Agent**。
+
+#### 事件记录器（HistoryRecorder）
+
+`HistoryRecorder.cs` 是一个 `CampaignBehavior`，在 `OnGameStart` 中注册。它监听以下 `CampaignEvents`：
+
+| 事件 | 游戏钩子 | 史料 type |
+|------|---------|-----------|
+| 宣战 | `WarDeclared` | `war_declared` |
+| 议和 | `MakePeace` | `peace_made` |
+| 城镇/城堡易主 | `OnSettlementOwnerChangedEvent`（过滤 IsTown/IsCastle） | `settlement_captured` |
+| 王国灭亡 | `KingdomDestroyedEvent` | `kingdom_destroyed` |
+| 新王国建立 | `OnKingdomCreatedEvent`（反射注册） | `kingdom_created` |
+| 贵族死亡 | `HeroKilledEvent`（过滤有 clan 的） | `hero_killed` |
+| 氏族叛变 | `OnClanChangedKingdomEvent` | `clan_changed_kingdom` |
+| 贵族婚嫁 | `MarriageOfferedToPlayerEvent` 等（反射注册） | `marriage` |
+
+每条事件以 JSONL 格式追加到 `World/history/events_{year}.txt`：
+```json
+{"year":1084,"season":"春","day":12,"type":"war_declared","summary":"瓦兰迪亚向库赛特宣战"}
+```
+
+#### 史官 Agent
+
+- **触发时机**：每年年终（年份推进时），`AgentScheduler.CheckYearAdvance()` 检测年份变化并队列 `YearlyChronicle` 事件
+- **专题触发**：灭国/新王国建立时，`HistoryRecorder` 调用 `AgentScheduler.QueueSpecialChronicle()` 即时队列 `SpecialChronicle` 事件
+- **Entity**：史官是虚拟 Entity（ID: `__historian__`，`HeroRef = null`），不映射任何游戏 NPC
+- **工具**：`query` + `file` 分类的工具（`ActivatedCategories = {"universal", "query", "file"}`）
+- **权限**：可读 `World/history/` 目录，可写 `World/history/chronicles/` 目录
+- **提示词**：使用 `intent = "historian"` 的 `ContextBuilder.Build()`，规则来自 `historian_rules.txt`
+- **输出**：年度编年史 → `World/history/chronicles/chronicle_{year}.txt`；专题史 → 自命名文件
+
+#### NPC 查阅历史
+
+- `AgentManager.IsPathAllowed` 和 `ResolvePath` 新增了对 `history/` 和 `history/chronicles/` 路径的支持
+- NPC Agent 可用 `read_file("history/chronicles/chronicle_1084.txt")` 直接读取史官成文
+- 原始史料（`events_*.txt`）对 NPC 只读
+- 写入历史目录的权限保留给 `__historian__` entity
+
+#### 年份检测
+
+- `AgentScheduler` 用 `_lastChronicleYear` 追踪上次处理年份，初始值 = 游戏起始年份
+- 每帧 `Tick()` 中调用 `CheckYearAdvance()`，检测 `currentYear > _lastChronicleYear`
+- 对每个已跳过的年份，检查 `events_{year}.txt` 是否存在且 `chronicle_{year}.txt` 不存在，满足条件才队列事件
+- 防止重复生成：已存在编年史的年份跳过
 
 ## 调试方法
 

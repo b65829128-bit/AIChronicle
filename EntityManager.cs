@@ -36,6 +36,33 @@ namespace MyFirstMod
             AgentManager.Activate(agent.Id, target.Id);
         }
 
+        public static void ActivateHistorian()
+        {
+            var historianId = "__historian__";
+            if (!_entityCache.TryGetValue(historianId, out var historian))
+            {
+                historian = new Entity
+                {
+                    Id = historianId,
+                    Name = "史官",
+                    Title = "卡拉迪亚编年史官",
+                    Culture = "帝国",
+                    Controller = EntityController.Agent,
+                    HeroRef = null,
+                    Capabilities = new HashSet<EntityCapability>
+                    {
+                        EntityCapability.FileSystem,
+                        EntityCapability.SendLetter
+                    }
+                };
+                _entityCache[historianId] = historian;
+            }
+
+            _activeAgentId = historianId;
+            _activeTargetId = historianId;
+            AgentManager.Activate(historianId, historianId);
+        }
+
         public static Entity GetOrCreateEntity(Hero hero)
         {
             if (_heroToEntity.TryGetValue(hero, out var existing))

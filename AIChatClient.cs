@@ -51,6 +51,7 @@ namespace MyFirstMod
             "conversation" => new[] { "universal", "query", "social", "file" },
             "letter" => new[] { "universal", "query", "file", "communication" },
             "diplomacy" => new[] { "universal", "query", "diplomacy" },
+            "historian" => new[] { "universal", "query", "file" },
             _ => new[] { "universal", "query", "social", "military", "movement", "diplomacy", "file", "communication" },
         };
 
@@ -292,7 +293,9 @@ namespace MyFirstMod
             var settings = MySettings.Instance!;
             var systemPrompt = hero != null
                 ? PromptManager.BuildAgentSystemPrompt(hero, charPrompt, intent)
-                : PromptManager.BuildSystemPrompt(charPrompt.HeroName, charPrompt);
+                : intent == "historian"
+                    ? ContextBuilder.Build("__historian__", "__historian__", "historian")
+                    : PromptManager.BuildSystemPrompt(charPrompt.HeroName, charPrompt);
 
             var historyLimit = settings.ChatHistoryLimit;
             var trimmedHistory = charPrompt.ChatHistory;

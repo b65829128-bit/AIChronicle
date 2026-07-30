@@ -1,0 +1,14 @@
+卡拉迪亚发生了一件重大事件：{event_summary}
+
+请为此事件编纂一篇专题史。
+
+工作步骤：
+1. 使用 read_file 读取相关年份的原始史料 history/events_*.txt（用 glob 查找）
+2. 使用 query_character 或 query_settlement 查询相关人物和地点的背景信息
+3. 撰写专题史，使用 write_file 写入 history/chronicles/ 目录，文件名自定
+
+写作要求：
+- 以事件为核心展开叙述，追溯前因后果
+- 简洁白描，白话文，模仿《资治通鉴》风格
+- 可加入「史官曰」评论，分析此事件的历史意义
+- 不编造细节，实事求是

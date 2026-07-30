@@ -86,6 +86,12 @@ namespace MyFirstMod
         private static DateTime _lastAgentToolsCheck;
         private static string _cachedAgentPrompt = "";
         private static DateTime _lastAgentPromptCheck;
+        private static string _cachedYearlyChroniclePrompt = "";
+        private static DateTime _lastYearlyChroniclePromptCheck;
+        private static string _cachedSpecialChroniclePrompt = "";
+        private static DateTime _lastSpecialChroniclePromptCheck;
+        private static string _cachedBiographyPrompt = "";
+        private static DateTime _lastBiographyPromptCheck;
 
         public static string PromptsBaseDir => _promptsBaseDir;
         public static string CampaignDir => _campaignDir;
@@ -135,6 +141,10 @@ namespace MyFirstMod
             CopyPromptToCampaign("chancery_rules.txt");
             CopyPromptToCampaign("conversation_rules.txt");
             CopyPromptToCampaign("letter_rules.txt");
+            CopyPromptToCampaign("historian_rules.txt");
+            CopyPromptToCampaign("yearly_chronicle_prompt.txt");
+            CopyPromptToCampaign("special_chronicle_prompt.txt");
+            CopyPromptToCampaign("biography_prompt.txt");
             CopyTemplateToCampaign("context_template.txt");
         }
 
@@ -460,6 +470,41 @@ namespace MyFirstMod
             var prompt = new CharacterPrompt { HeroId = name, HeroName = name };
             SaveCharacterPrompt(prompt);
             return prompt;
+        }
+
+        public static string LoadYearlyChroniclePrompt()
+        {
+            return LoadPromptFile("yearly_chronicle_prompt.txt", ref _cachedYearlyChroniclePrompt, ref _lastYearlyChroniclePromptCheck)
+                ?? "请编纂卡拉迪亚第{year}年的编年史。";
+        }
+
+        public static string LoadSpecialChroniclePrompt()
+        {
+            return LoadPromptFile("special_chronicle_prompt.txt", ref _cachedSpecialChroniclePrompt, ref _lastSpecialChroniclePromptCheck)
+                ?? "卡拉迪亚发生了一件重大事件：{event_summary}\n\n请为此事件编纂一篇专题史。";
+        }
+
+        public static string LoadBiographyPrompt()
+        {
+            return LoadPromptFile("biography_prompt.txt", ref _cachedBiographyPrompt, ref _lastBiographyPromptCheck)
+                ?? "重要人物之死：{event_summary}\n\n请为此人编纂一篇列传。";
+        }
+
+        private static string? LoadPromptFile(string filename, ref string cache, ref DateTime lastCheck)
+        {
+            var path = Path.Combine(_campaignDir, filename);
+            if (!File.Exists(path))
+                path = Path.Combine(_promptsBaseDir, filename);
+            if (!File.Exists(path))
+                return null;
+
+            var lastWrite = File.GetLastWriteTimeUtc(path);
+            if (cache == "" || lastWrite > lastCheck)
+            {
+                cache = File.ReadAllText(path, Encoding.UTF8);
+                lastCheck = lastWrite;
+            }
+            return cache;
         }
     }
 }

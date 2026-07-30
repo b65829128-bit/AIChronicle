@@ -1,0 +1,220 @@
+<Prefab>
+  <Window>
+    <Widget WidthSizePolicy="StretchToParent" HeightSizePolicy="StretchToParent"
+            Sprite="BlankWhiteSquare_9" Color="#000000CC">
+      <Children>
+
+        <Widget WidthSizePolicy="Fixed" HeightSizePolicy="Fixed"
+                SuggestedWidth="1100" SuggestedHeight="700"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Sprite="BlankWhiteSquare_9" Color="#1C1814FF" DoNotAcceptEvents="true">
+          <Children>
+
+            <Widget WidthSizePolicy="StretchToParent" HeightSizePolicy="Fixed"
+                    SuggestedHeight="52"
+                    Sprite="BlankWhiteSquare_9" Color="#2A231DFF" DoNotAcceptEvents="true">
+              <Children>
+                <Widget WidthSizePolicy="Fixed" HeightSizePolicy="Fixed"
+                        SuggestedWidth="6" SuggestedHeight="42"
+                        HorizontalAlignment="Left" VerticalAlignment="Center"
+                        MarginLeft="14" Sprite="BlankWhiteSquare_9"
+                        Color="#D69846FF" DoNotAcceptEvents="true" />
+                <TextWidget WidthSizePolicy="CoverChildren" HeightSizePolicy="CoverChildren"
+                            VerticalAlignment="Center" MarginLeft="28"
+                            Text="@TitleText" Brush.FontSize="28"
+                            Brush.FontColor="#D69846FF" />
+                <ButtonWidget WidthSizePolicy="Fixed" HeightSizePolicy="Fixed"
+                              SuggestedWidth="32" SuggestedHeight="32"
+                              HorizontalAlignment="Right" VerticalAlignment="Center"
+                              MarginRight="12"
+                              Brush="SPChatlog.Checkbox.CombatLog"
+                              Command.Click="ExecuteClose"
+                              UpdateChildrenStates="true" />
+              </Children>
+            </Widget>
+
+            <Widget WidthSizePolicy="StretchToParent" HeightSizePolicy="StretchToParent"
+                    MarginTop="52" DoNotAcceptEvents="true">
+              <Children>
+
+                <Widget WidthSizePolicy="Fixed" HeightSizePolicy="StretchToParent"
+                        SuggestedWidth="340"
+                        Sprite="BlankWhiteSquare_9" Color="#231E19FF" DoNotAcceptEvents="true">
+                  <Children>
+
+                    <Widget WidthSizePolicy="StretchToParent" HeightSizePolicy="Fixed"
+                            SuggestedHeight="38" DoNotAcceptEvents="false">
+                      <Children>
+                        <TextWidget WidthSizePolicy="CoverChildren" HeightSizePolicy="CoverChildren"
+                                    VerticalAlignment="Center" MarginLeft="14"
+                                    Text="史册目录" Brush.FontSize="20"
+                                    Brush.FontColor="#B89B72FF" />
+                        <Widget WidthSizePolicy="StretchToParent" HeightSizePolicy="Fixed"
+                                SuggestedHeight="1" VerticalAlignment="Bottom"
+                                Sprite="BlankWhiteSquare_9" Color="#3D3228FF" DoNotAcceptEvents="true" />
+                      </Children>
+                    </Widget>
+
+                    <ScrollablePanel WidthSizePolicy="StretchToParent"
+                                     HeightSizePolicy="StretchToParent"
+                                     MarginTop="38"
+                                     AutoHideScrollBars="false"
+                                     ClipRect="ListClipRect"
+                                     InnerPanel="ListClipRect\ChronicleList"
+                                     VerticalScrollbar="..\ListScrollbar\VerticalScrollbar">
+                      <Children>
+                        <Widget Id="ListClipRect" ClipContents="true"
+                                WidthSizePolicy="StretchToParent"
+                                HeightSizePolicy="StretchToParent"
+                                MarginLeft="6" MarginRight="6">
+                          <Children>
+                            <ListPanel Id="ChronicleList" DataSource="{Chronicles}"
+                                       WidthSizePolicy="StretchToParent"
+                                       HeightSizePolicy="CoverChildren"
+                                       StackLayout.LayoutMethod="VerticalTopToBottom">
+                              <ItemTemplate>
+                                <ButtonWidget WidthSizePolicy="StretchToParent"
+                                              HeightSizePolicy="Fixed" SuggestedHeight="52"
+                                              MarginBottom="2"
+                                              Brush="ButtonBrush2"
+                                              Command.Click="ExecuteSelect"
+                                              UpdateChildrenStates="true"
+                                              DoNotPassEventsToChildren="true">
+                                  <Children>
+                                    <Widget WidthSizePolicy="Fixed" HeightSizePolicy="Fixed"
+                                            SuggestedWidth="4" SuggestedHeight="36"
+                                            HorizontalAlignment="Left" VerticalAlignment="Center"
+                                            MarginLeft="6"
+                                            Sprite="BlankWhiteSquare_9"
+                                            Color="#D69846FF"
+                                            IsVisible="@IsSelected" DoNotAcceptEvents="true" />
+                                    <TextWidget WidthSizePolicy="StretchToParent"
+                                                HeightSizePolicy="CoverChildren"
+                                                VerticalAlignment="Center"
+                                                MarginLeft="16"
+                                                Text="@Name" FontSize="18"
+                                                Brush.FontColor="#D4C5B2FF" />
+                                  </Children>
+                                </ButtonWidget>
+                              </ItemTemplate>
+                            </ListPanel>
+                          </Children>
+                        </Widget>
+                      </Children>
+                    </ScrollablePanel>
+
+                    <Widget Id="ListScrollbar" WidthSizePolicy="Fixed"
+                            HeightSizePolicy="StretchToParent"
+                            SuggestedWidth="8" HorizontalAlignment="Right" DoNotAcceptEvents="true">
+                      <Children>
+                        <Widget WidthSizePolicy="Fixed" HeightSizePolicy="StretchToParent"
+                                SuggestedWidth="3" HorizontalAlignment="Center"
+                                Sprite="BlankWhiteSquare_9" Color="#3D3228FF" />
+                        <ScrollbarWidget Id="VerticalScrollbar" WidthSizePolicy="Fixed"
+                                         HeightSizePolicy="StretchToParent" SuggestedWidth="8"
+                                         AlignmentAxis="Vertical"
+                                         Handle="Handle" MaxValue="100" MinValue="0">
+                          <Children>
+                            <ImageWidget Id="Handle" WidthSizePolicy="Fixed"
+                                         HeightSizePolicy="Fixed"
+                                         SuggestedWidth="6" SuggestedHeight="20"
+                                         HorizontalAlignment="Center"
+                                         Brush="FaceGen.Scrollbar.Handle" />
+                          </Children>
+                        </ScrollbarWidget>
+                      </Children>
+                    </Widget>
+
+                  </Children>
+                </Widget>
+
+                <Widget WidthSizePolicy="Fixed" HeightSizePolicy="StretchToParent"
+                        SuggestedWidth="1" MarginLeft="340"
+                        Sprite="BlankWhiteSquare_9" Color="#3D3228FF" DoNotAcceptEvents="true" />
+
+                <Widget WidthSizePolicy="StretchToParent" HeightSizePolicy="StretchToParent"
+                        MarginLeft="341" IsVisible="@IsContentVisible"
+                        Sprite="BlankWhiteSquare_9" Color="#1C1814FF" DoNotAcceptEvents="true">
+                  <Children>
+
+                    <Widget WidthSizePolicy="StretchToParent" HeightSizePolicy="Fixed"
+                            SuggestedHeight="38" DoNotAcceptEvents="false">
+                      <Children>
+                        <TextWidget WidthSizePolicy="CoverChildren" HeightSizePolicy="CoverChildren"
+                                    VerticalAlignment="Center" MarginLeft="20"
+                                    Text="@SelectedTitle" Brush.FontSize="22"
+                                    Brush.FontColor="#D69846FF" />
+                        <Widget WidthSizePolicy="StretchToParent" HeightSizePolicy="Fixed"
+                                SuggestedHeight="1" VerticalAlignment="Bottom"
+                                Sprite="BlankWhiteSquare_9" Color="#3D3228FF" DoNotAcceptEvents="true" />
+                      </Children>
+                    </Widget>
+
+                    <ScrollablePanel WidthSizePolicy="StretchToParent"
+                                     HeightSizePolicy="StretchToParent"
+                                     MarginTop="44" MarginLeft="14" MarginRight="14"
+                                     MarginBottom="14"
+                                     AutoHideScrollBars="false"
+                                     ClipRect="ContentClipRect"
+                                     InnerPanel="ContentClipRect\ContentText"
+                                     VerticalScrollbar="..\ContentScrollbar\VerticalScrollbar">
+                      <Children>
+                        <Widget Id="ContentClipRect" ClipContents="true"
+                                WidthSizePolicy="StretchToParent"
+                                HeightSizePolicy="StretchToParent">
+                          <Children>
+                            <RichTextWidget Id="ContentText" WidthSizePolicy="StretchToParent"
+                                            HeightSizePolicy="CoverChildren"
+                                            Text="@ContentText"
+                                            Brush.FontSize="@FontSize"
+                                            Brush.FontColor="#D4C5B2FF" />
+                          </Children>
+                        </Widget>
+                      </Children>
+                    </ScrollablePanel>
+
+                    <Widget Id="ContentScrollbar" WidthSizePolicy="Fixed"
+                            HeightSizePolicy="StretchToParent"
+                            SuggestedWidth="8" HorizontalAlignment="Right"
+                            MarginTop="44" MarginBottom="14" DoNotAcceptEvents="true">
+                      <Children>
+                        <Widget WidthSizePolicy="Fixed" HeightSizePolicy="StretchToParent"
+                                SuggestedWidth="3" HorizontalAlignment="Center"
+                                Sprite="BlankWhiteSquare_9" Color="#3D3228FF" />
+                        <ScrollbarWidget Id="VerticalScrollbar" WidthSizePolicy="Fixed"
+                                         HeightSizePolicy="StretchToParent" SuggestedWidth="8"
+                                         AlignmentAxis="Vertical"
+                                         Handle="Handle" MaxValue="100" MinValue="0">
+                          <Children>
+                            <ImageWidget Id="Handle" WidthSizePolicy="Fixed"
+                                         HeightSizePolicy="Fixed"
+                                         SuggestedWidth="6" SuggestedHeight="20"
+                                         HorizontalAlignment="Center"
+                                         Brush="FaceGen.Scrollbar.Handle" />
+                          </Children>
+                        </ScrollbarWidget>
+                      </Children>
+                    </Widget>
+
+                  </Children>
+                </Widget>
+
+                <TextWidget WidthSizePolicy="CoverChildren"
+                            HeightSizePolicy="CoverChildren"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Text="选择左侧一篇编年史开始阅读"
+                            MarginLeft="341"
+                            IsHidden="@IsContentVisible"
+                            Brush.FontSize="22"
+                            Brush.FontColor="#5C5244FF" />
+
+              </Children>
+            </Widget>
+
+          </Children>
+        </Widget>
+
+      </Children>
+    </Widget>
+  </Window>
+</Prefab>

@@ -19,6 +19,19 @@ namespace MyFirstMod
         private static LordChatBehavior? _chatBehavior;
         private static bool _prevLetterO;
         private static bool _prevChanceryP;
+        private static bool _prevHistoryH;
+
+        private static bool IsPlayerFreeOnMap()
+        {
+            if (Campaign.Current == null) return false;
+            try
+            {
+                var state = Game.Current?.GameStateManager?.ActiveState;
+                if (state == null) return false;
+                return state.GetType().Name == "MapState";
+            }
+            catch { return true; }
+        }
 
         protected override void OnSubModuleLoad()
         {
@@ -44,10 +57,16 @@ namespace MyFirstMod
         {
             base.OnGameStart(game, gameStarter);
 
+            InformationManager.DisplayMessage(new InformationMessage(
+                "[MyFirstMod] O键=信箱 | H键=史书 | M键=秘书处",
+                Colors.Green));
+
             if (game.GameType is Campaign && gameStarter is CampaignGameStarter starter)
             {
                 _chatBehavior = new LordChatBehavior();
                 starter.AddBehavior(_chatBehavior);
+
+                starter.AddBehavior(new HistoryRecorder());
 
                 var kdpbType = Type.GetType("TaleWorlds.CampaignSystem.CampaignBehaviors.KingdomDecisionProposalBehavior, TaleWorlds.CampaignSystem");
                 InformationManager.DisplayMessage(new InformationMessage(
@@ -61,7 +80,7 @@ namespace MyFirstMod
                         harmony.Patch(regMethod,
                             postfix: new HarmonyMethod(typeof(SubModule).GetMethod(nameof(KdpbRegisterPatched), BindingFlags.Static | BindingFlags.NonPublic)));
 
-                    var prefix = new HarmonyMethod(typeof(SubModule).GetMethod(nameof(BlockDiplomacyDecision), BindingFlags.Static | BindingFlags.NonPublic));
+                    var prefix = new HarmonyMethod(typeof(SubModule).GetMethod(nameof(BlockDiplomacyDecisionLogged), BindingFlags.Static | BindingFlags.NonPublic));
 
                     var warM = kdpbType.GetMethod("GetRandomWarDecision", BindingFlags.Instance | BindingFlags.NonPublic);
                     if (warM != null) harmony.Patch(warM, prefix: prefix);
@@ -100,9 +119,9 @@ namespace MyFirstMod
             AgentScheduler.CheckPlayerProposal();
 
             var oDown = Input.IsKeyDown(InputKey.O);
-            if (oDown && !_prevLetterO && Campaign.Current != null)
+            if (oDown && !_prevLetterO && IsPlayerFreeOnMap())
             {
-                if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen)
+                if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen && !HistoryScreen.IsOpen)
                     LetterListScreen.Open();
                 else if (LetterListScreen.IsOpen)
                     LetterListScreen.Close();
@@ -110,12 +129,22 @@ namespace MyFirstMod
             _prevLetterO = oDown;
 
             var mDown = Input.IsKeyDown(InputKey.M);
-            if (mDown && !_prevChanceryP && Campaign.Current != null)
+            if (mDown && !_prevChanceryP && IsPlayerFreeOnMap())
             {
-                if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen)
+                if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen && !HistoryScreen.IsOpen)
                     AIChatScreen.OpenChancery();
             }
             _prevChanceryP = mDown;
+
+            var hDown = Input.IsKeyDown(InputKey.H);
+            if (hDown && !_prevHistoryH && IsPlayerFreeOnMap())
+            {
+                if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen && !HistoryScreen.IsOpen)
+                    HistoryScreen.Open();
+                else if (HistoryScreen.IsOpen)
+                    HistoryScreen.Close();
+            }
+            _prevHistoryH = hDown;
 
             if (_pendingChatHero != null)
             {
@@ -169,7 +198,40 @@ namespace MyFirstMod
 
         private static bool BlockDiplomacyDecision(ref object __result)
         {
-            if (MySettings.Instance?.BanVanillaDiplomacy == true)
+            var enabled = MySettings.Instance?.BanVanillaDiplomacy == true;
+            if (enabled)
+            {
+                __result = null;
+                return false;
+            }
+            return true;
+        }
+
+        private static readonly System.Collections.Generic.Dictionary<string, int> _blockLogCounter = new();
+        private static bool BlockDiplomacyDecisionLogged(ref object __result)
+        {
+            var stack = new System.Diagnostics.StackTrace();
+            foreach (var frame in stack.GetFrames())
+            {
+                var method = frame.GetMethod();
+                var name = method?.Name ?? "";
+                if (name.Contains("Peace") || name.Contains("War") || name.Contains("Alliance") || name.Contains("Trade"))
+                {
+                    if (!_blockLogCounter.ContainsKey(name))
+                        _blockLogCounter[name] = 0;
+                    if (_blockLogCounter[name] < 3)
+                    {
+                        _blockLogCounter[name]++;
+                        InformationManager.DisplayMessage(new InformationMessage(
+                            $"[MyFirstMod] 拦截原版外交：{name}（第{_blockLogCounter[name]}次）",
+                            Colors.Cyan));
+                    }
+                    break;
+                }
+            }
+
+            var enabled = MySettings.Instance?.BanVanillaDiplomacy == true;
+            if (enabled)
             {
                 __result = null;
                 return false;

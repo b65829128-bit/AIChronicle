@@ -51,7 +51,11 @@
   - Agent 国王可以调用 `declare_war` 宣战（单向立即生效）
   - Agent 国王可以调用 `propose_peace` / `propose_alliance` / `propose_trade` 提出外交提案（双向，需对方国王同意）
 - Agent 国王可以调用 `respond_to_diplomacy_proposal` 接受或拒绝收到的外交提案
-- Agent 国王可以调用 `gift_fief` 将王国范围内任意封地（城镇/城堡）直接转让给某位封臣家族领袖（雇佣兵除外），无需选举投票，国王敕令立即生效
+- Agent 国王可以调用 `gift_fief` 将王国范围内任意封地直接转让给某位封臣家族领袖
+- Agent 氏族领袖可以调用 `change_kingdom` 变换阵营：离国、加入、叛逃、当雇佣兵、禅让王位
+  - `abdicate`：国王指定继承人禅让（支持同氏族或同王国其他氏族领袖）
+  - `leave_kingdom`：脱离王国（可选叛乱保留封地）
+  - `join_kingdom` / `defect_to_kingdom` / `join_as_mercenary`：加入/叛逃/当佣兵
 - 外交提案存储在 `World/diplomacy/` 目录，对方国王的定期激活由 `AgentScheduler` 管理（每 15 天一次）
   - 被俘或逃亡的国王统治者仍会被激活，状态提示中会标明"你仍是王国统治者"，确保外交工具可正常使用
   - **已知限制：** "禁止原版外交" 开关仅阻止 AI 国王通过原版机制发起外交，**不阻止玩家通过王国界面手动发起外交**（宣战/议和/结盟/贸易按钮仍然有效）。这是当前的一个已知缺口——向后兼容补丁路径未找到。玩家作为国王应使用 M 键秘书处执行外交，王国界面按钮请手动避免使用。
@@ -79,6 +83,19 @@
 - 当 AI 国王向**玩家**发起外交提案时，玩家会**弹出按钮对话框**（接受/拒绝），不会由 AI 自动处理
 - **玩家**的外交主动行为应在秘书处（M 键）执行
 
+### 历史系统
+
+- 游戏中的重大事件（宣战/议和/城镇易主/灭国/建国/贵族阵亡/氏族叛变/婚嫁/氏族领袖更替）被自动记录为**原始史料**
+- 原始史料以 JSONL 格式存储在 `NPCs/World/history/events_{年份}.txt`，永久保存
+- 每当年份推进时，**史官 Agent** 自动激活，读取原始史料并编纂**年度编年史**（间隔可在 MCM 中调整）
+- 氏族领袖、国王、玩家死亡时，史官自动编纂**列传**（人物传记）
+- 灭国、建国等重大事件触发**专题史**
+- 编年史存储于 `NPCs/World/history/chronicles/`，以《资治通鉴》白话风格书写，年末附「史官曰」评论
+- 战役地图上按 **H 键**打开史书 UI（1100×700 大屏，左侧目录右侧正文），字体大小可调
+- NPC Agent 可通过 `read_file` 阅读编年史——历史成为 NPC 的共同知识
+- 史官提示词（`historian_rules.txt`、`yearly_chronicle_prompt.txt`、`biography_prompt.txt`）全部热重载
+- 史料记录类型：war_declared / peace_made / settlement_captured / kingdom_destroyed / kingdom_created / hero_killed / clan_changed_kingdom / clan_leader_changed / marriage
+
 ### 工具分类系统
 
 所有工具按 8 个分类组织，Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁：
@@ -90,7 +107,7 @@
 | social | change_relation, give_gold, request_gold, give_item, request_items | conversation |
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous |
 | military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops | autonomous |
-| diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal, gift_fief | diplomacy |
+| diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal, gift_fief, change_kingdom | diplomacy |
 | file | read_file, write_file, append_file, edit_file, delete_file, move_file, list_dir, glob, grep | letter, autonomous, conversation |
 | communication | send_letter | letter |
 
@@ -138,6 +155,10 @@ _Module/Prompts/
 ├── conversation_rules.txt       # 对话规则
 ├── letter_rules.txt             # 书信规则
 ├── diplomacy_rules.txt          # 外交决策规则（玩家可编辑，热重载）
+├── historian_rules.txt          # 史官编年史规则（玩家可编辑，热重载）
+├── yearly_chronicle_prompt.txt  # 年度编年史激活提示词（热重载）
+├── biography_prompt.txt         # 人物列传激活提示词（热重载）
+├── special_chronicle_prompt.txt # 专题史激活提示词（热重载）
 ├── Templates/                   # NPC 目录模板
 │   ├── persona.txt
 │   ├── context_template.txt
@@ -154,6 +175,7 @@ _Module/Prompts/
         ├── persona_generation.txt # 本战役性格生成提示词（热重载）
         ├── context_template.txt  # 本战役 Context 模板（热重载）
         ├── diplomacy_rules.txt   # 本战役外交决策规则（热重载）
+        ├── historian_rules.txt  # 本战役史官编年史规则（热重载）
         └── NPCs/                 # Agent 管理的 NPC 文件系统
             └── {entity_id}/        # 每个 Entity 独立目录
                 ├── character.json # 基础 ID 信息（只读，自动生成）
@@ -215,6 +237,9 @@ _Module/Prompts/
 | 环境扫描半径（km） | query_surroundings 扫描半径硬上限 | `20` |
 | 禁止原版外交（Agent 主导） | 禁止原版 AI 外交，所有外交由国王 Agent 决策 | 开启 |
 | 国王激活间隔（天） | 国王 Agent 定期外交审视的间隔 | `30` |
+| 编年史间隔（年） | 史官编纂编年史的间隔（1=每年，3=每三年） | `1` |
+| 史书字体大小 | 史书 UI 中编年史正文的字体大小 | `28` |
+| 强制开始外交 | 立即激活所有国王 Agent 进行外交审视，重置计时器（按钮） | — |
 | 对话字体大小 | 聊天窗口中对话内容的字号 | `24` |
 | 角色名字体大小 | 聊天窗口中角色名称的字号 | `22` |
 | 时间戳字体大小 | 聊天窗口中时间戳的字号 | `22` |
@@ -281,13 +306,16 @@ MyFirstMod/
 ├── Entity.cs             # Entity 数据模型（统一玩家/NPC，附能力标签）
 ├── EntityManager.cs      # Entity 生命周期管理、查找与缓存
 ├── ContextBuilder.cs     # 动态上下文组装（persona + 能力 + 模板）
+├── HistoryRecorder.cs    # 历史记录器（监听游戏事件自动写入原始史料）
+├── HistoryScreenVM.cs    # 史书 UI ViewModel（编年史列表、内容加载）
 ├── AGENTS.md             # AI 开发工作流文档
 ├── README_MOD.md         # 本文件（功能说明）
 ├── _Module/
 │   ├── SubModule.xml     # 模组元数据
 │   ├── GUI/Prefabs/
 │   │   ├── AIChatScreen.xml      # 聊天窗口 GauntletUI 布局
-│   │   └── LetterListScreen.xml  # 书信系统界面布局
+│   │   ├── LetterListScreen.xml  # 书信系统界面布局
+│   │   └── HistoryScreen.xml     # 史书 UI 布局（1100×700 双栏）
 │   └── Prompts/
 │       ├── system_prompt.txt      # 系统提示词模板（玩家可编辑，热重载）
 │       ├── world_info.txt         # 默认世界背景
@@ -306,4 +334,4 @@ MyFirstMod/
 ## 版本
 
 - 游戏版本：Bannerlord v1.4.7
-- 模组版本：v0.6.0
+- 模组版本：v1.0.0

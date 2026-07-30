@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
@@ -13,7 +15,9 @@ namespace MyFirstMod
         LetterReceived,
         BehaviorCheckIn,
         KingDiplomacy,
-        PlanCheckIn
+        PlanCheckIn,
+        YearlyChronicle,
+        SpecialChronicle
     }
 
     public class ActivationEvent
@@ -35,6 +39,9 @@ namespace MyFirstMod
         private static int _nextKingIndex = 0;
         private static readonly Dictionary<string, CampaignTime> _lastProposalActivation = new();
         private static ActivationEvent? _pendingPlayerProposal;
+        private static int _lastChronicleYear;
+        private static bool _historianInitialized;
+        private static int _warmupFramesHistorian = 60;
 
         public static bool IsProcessing => _currentTask != null && !_currentTask.IsCompleted;
         public static int CurrentProcessingDepth => _currentProcessingDepth;
@@ -42,6 +49,20 @@ namespace MyFirstMod
         public static void RecordProposalActivation(string entityId)
         {
             _lastProposalActivation[entityId] = CampaignTime.Now;
+        }
+
+        public static void ForceDiplomacyRound()
+        {
+            _lastKingActivation.Clear();
+            _lastProposalActivation.Clear();
+            foreach (var k in Kingdom.All)
+            {
+                if (!k.IsEliminated)
+                    _lastKingActivation[k] = CampaignTime.Zero;
+            }
+            InformationManager.DisplayMessage(new InformationMessage(
+                "[MyFirstMod] 外交计时器已重置，所有国王将在接下来的游戏日中依次被激活。",
+                Colors.Cyan));
         }
 
         public static void QueueEvent(ActivationEvent evt)
@@ -56,6 +77,7 @@ namespace MyFirstMod
 
             if (!_eventQueue.TryDequeue(out var evt))
             {
+                CheckYearAdvance();
                 CheckKingActivations();
                 return;
             }
@@ -150,6 +172,72 @@ namespace MyFirstMod
             }
         }
 
+        private static void CheckYearAdvance()
+        {
+            if (Campaign.Current == null) return;
+            if (string.IsNullOrEmpty(PromptManager.CampaignDir)) return;
+            if (_warmupFramesHistorian > 0)
+            {
+                _warmupFramesHistorian--;
+                return;
+            }
+
+            if (!_historianInitialized)
+            {
+                _historianInitialized = true;
+                _lastChronicleYear = CampaignTime.Now.GetYear;
+                return;
+            }
+
+            var currentYear = CampaignTime.Now.GetYear;
+            if (currentYear <= _lastChronicleYear) return;
+
+            var interval = MySettings.Instance?.ChronicleInterval ?? 1;
+            if (currentYear - _lastChronicleYear < interval) return;
+
+            for (var y = _lastChronicleYear; y < currentYear; y++)
+            {
+                if (y <= 0) continue;
+
+                var yearFile = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "history", $"events_{y}.txt");
+                if (!File.Exists(yearFile)) continue;
+
+                var chronicleFile = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "history", "chronicles", $"chronicle_{y}.txt");
+                if (File.Exists(chronicleFile)) continue;
+
+                QueueEvent(new ActivationEvent
+                {
+                    Type = ActivationEventType.YearlyChronicle,
+                    AgentId = "__historian__",
+                    TargetId = "__historian__",
+                    Content = PromptManager.LoadYearlyChroniclePrompt().Replace("{year}", y.ToString()),
+                    Depth = 0
+                });
+            }
+
+            _lastChronicleYear = currentYear;
+        }
+
+        public static void QueueSpecialChronicle(string eventSummary)
+        {
+            if (string.IsNullOrEmpty(PromptManager.CampaignDir)) return;
+
+            var isBiography = eventSummary.StartsWith("重要人物之死");
+            var prompt = isBiography
+                ? PromptManager.LoadBiographyPrompt()
+                : PromptManager.LoadSpecialChroniclePrompt();
+            var content = prompt.Replace("{event_summary}", eventSummary);
+
+            QueueEvent(new ActivationEvent
+            {
+                Type = ActivationEventType.SpecialChronicle,
+                AgentId = "__historian__",
+                TargetId = "__historian__",
+                Content = content,
+                Depth = 0
+            });
+        }
+
         private static async Task ProcessEvent(ActivationEvent evt)
         {
             var prevAgentId = EntityManager.ActiveAgentId;
@@ -157,6 +245,12 @@ namespace MyFirstMod
 
             try
             {
+                if (evt.Type == ActivationEventType.YearlyChronicle || evt.Type == ActivationEventType.SpecialChronicle)
+                {
+                    await ProcessHistorianEvent(evt);
+                    return;
+                }
+
                 var agentEntity = EntityManager.GetOrCreateEntityById(evt.AgentId);
                 var targetEntity = EntityManager.GetOrCreateEntityById(evt.TargetId);
 
@@ -369,6 +463,88 @@ namespace MyFirstMod
                 }),
                 pauseGameActiveState: true,
                 prioritize: true);
+        }
+
+        private static async Task ProcessHistorianEvent(ActivationEvent evt)
+        {
+            var settings = MySettings.Instance;
+            if (settings == null || string.IsNullOrEmpty(settings.ApiKey))
+                return;
+
+            try
+            {
+                var eventLabel = evt.Type == ActivationEventType.YearlyChronicle ? "编年史" : "专题史";
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"史官正在编纂{eventLabel}...",
+                    Colors.Cyan));
+
+                EntityManager.ActivateHistorian();
+
+                var charPrompt = new CharacterPrompt
+                {
+                    HeroId = "__historian__",
+                    HeroName = "史官",
+                    ChatHistory = new List<ChatHistoryEntry>
+                    {
+                        new() { Role = "user", Content = evt.Content }
+                    }
+                };
+
+                var response = await AIChatClient.SendMessage(
+                    charPrompt, hero: null, includeTools: true, intent: "historian");
+
+                var expectedYear = ExtractYearFromContent(evt.Content);
+                var chronicleDir = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "history", "chronicles");
+                var fileExists = false;
+                if (expectedYear > 0 && Directory.Exists(chronicleDir))
+                {
+                    var expectedFile = Path.Combine(chronicleDir, $"chronicle_{expectedYear}.txt");
+                    fileExists = File.Exists(expectedFile);
+                }
+                else if (Directory.Exists(chronicleDir))
+                {
+                    fileExists = Directory.GetFiles(chronicleDir, "chronicle_*.txt").Length > 0;
+                }
+
+                if (fileExists)
+                {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"史官已完成{eventLabel}的编纂。",
+                        Colors.Green));
+                }
+                else if (!string.IsNullOrEmpty(response.Content))
+                {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"史官{eventLabel}编纂已结束，但编年史文件未生成（可能读取史料失败）。",
+                        Colors.Yellow));
+                }
+                else
+                {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"史官{eventLabel}编纂未产生文本输出。",
+                        Colors.Yellow));
+                }
+            }
+            catch (Exception ex)
+            {
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"[MyFirstMod] 史官处理异常：{ex.Message}",
+                    Colors.Red));
+            }
+        }
+        private static int ExtractYearFromContent(string content)
+        {
+            if (string.IsNullOrEmpty(content)) return -1;
+            var prefix = "第";
+            var suffix = "年";
+            var start = content.IndexOf(prefix, StringComparison.Ordinal);
+            if (start < 0) return -1;
+            start += prefix.Length;
+            var end = content.IndexOf(suffix, start, StringComparison.Ordinal);
+            if (end < 0) return -1;
+            if (int.TryParse(content.Substring(start, end - start), out var year))
+                return year;
+            return -1;
         }
     }
 }

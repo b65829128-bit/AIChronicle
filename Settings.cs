@@ -402,10 +402,10 @@ namespace MyFirstMod
             }
         }
 
-        private int _kingActivationDays = 60;
+        private int _kingActivationDays = 30;
 
         [SettingPropertyInteger("国王激活间隔（天）", 5, 120, Order = 10, RequireRestart = false,
-            HintText = "国王 Agent 的定期外交审视间隔。间隔越短 Token 消耗越大。\n推荐范围：15-60 天。")]
+            HintText = "国王 Agent 的定期外交审视间隔。间隔越短 Token 消耗越大。\n默认30天。")]
         [SettingPropertyGroup("游戏设置")]
         public int KingActivationDays
         {
@@ -415,6 +415,42 @@ namespace MyFirstMod
                 if (_kingActivationDays != value)
                 {
                     _kingActivationDays = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _chronicleInterval = 1;
+
+        [SettingPropertyInteger("编年史间隔（年）", 1, 10, Order = 11, RequireRestart = false,
+            HintText = "史官编纂编年史的间隔。\n1 = 每年编纂，3 = 每三年编纂，以此类推。\n间隔越大 Token 消耗越低，但历史细节越粗糙。")]
+        [SettingPropertyGroup("游戏设置")]
+        public int ChronicleInterval
+        {
+            get => _chronicleInterval;
+            set
+            {
+                if (_chronicleInterval != value)
+                {
+                    _chronicleInterval = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _chronicleFontSize = 28;
+
+        [SettingPropertyInteger("史书字体大小", 14, 36, Order = 12, RequireRestart = false,
+            HintText = "史书 UI 中编年史正文的字体大小。")]
+        [SettingPropertyGroup("游戏设置")]
+        public int ChronicleFontSize
+        {
+            get => _chronicleFontSize;
+            set
+            {
+                if (_chronicleFontSize != value)
+                {
+                    _chronicleFontSize = value;
                     OnPropertyChanged();
                 }
             }
@@ -489,6 +525,14 @@ namespace MyFirstMod
             }
 
             AIChatClient.TestConnection();
+        };
+
+        [SettingPropertyButton("强制开始外交", Content = "立即触发", Order = 12,
+            RequireRestart = false, HintText = "立即激活所有国王 Agent 进行一轮外交审视，并重置计时器。")]
+        [SettingPropertyGroup("游戏设置")]
+        public Action ForceDiplomacy { get; set; } = () =>
+        {
+            AgentScheduler.ForceDiplomacyRound();
         };
     }
 }
