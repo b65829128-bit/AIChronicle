@@ -154,7 +154,7 @@ namespace MyFirstMod
                 if (entity.Controller == EntityController.Human) continue;
 
                 if (_lastProposalActivation.TryGetValue(entity.Id, out var lastProposalTime)
-                    && (CampaignTime.Now - lastProposalTime).ToDays < 10)
+                    && (CampaignTime.Now - lastProposalTime).ToDays < (MySettings.Instance?.KingCooldownDays ?? 3))
                     continue;
 
                 var now = CampaignTime.Now;
@@ -179,7 +179,8 @@ namespace MyFirstMod
                     + $"步骤1：调用 query_pending_proposals 查看是否有待处理的提案，有则用 respond_to_diplomacy_proposal 逐一处理\n"
                     + $"步骤2：调用 query_war_status 了解当前所有战争的战况\n"
                     + proposalLines
-                    + $"\n然后依据你自己的判断采取行动——以下是你可用的外交工具：\n"
+                    + $"\n（提示：你可以在 goals/strategy.txt 中记录你的长期战略方针，如交好谁、提防谁、扩张方向等。每次外交审视前，先 read_file 查看已有战略，据此做出连贯的决策；局势变化时可 edit_file 调整。）\n\n"
+                    + $"然后依据你自己的判断采取行动——以下是你可用的外交工具：\n"
                     + "- propose_peace：结束一场战争（可附带赔款条件）\n"
                     + "- propose_alliance：与中立王国结盟\n"
                     + "- propose_trade：与中立王国签订贸易协定\n"

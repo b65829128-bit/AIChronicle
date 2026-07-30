@@ -490,32 +490,34 @@ namespace MyFirstMod
             var nsDir = pos.Y > midY ? "北" : "南";
             var ewDir = pos.X > midX ? "东" : "西";
 
-            var neighbors = new List<(float dist, Settlement s)>();
+            var neighbors = new List<(float pathDist, float lineDist, string direction, Settlement s)>();
             foreach (var s in Settlement.All)
             {
                 if (s == settlement) continue;
                 if (!s.IsTown && !s.IsCastle) continue;
                 var sPos = s.GatePosition.ToVec2();
-                var dx = pos.X - sPos.X;
-                var dy = pos.Y - sPos.Y;
-                var dist = (float)Math.Sqrt(dx * dx + dy * dy);
-                neighbors.Add((dist, s));
+                var dx = sPos.X - pos.X;
+                var dy = sPos.Y - pos.Y;
+                var lineDist = (float)Math.Sqrt(dx * dx + dy * dy);
+                var pathDist = Campaign.Current.Models.MapDistanceModel.GetDistance(settlement, s, false, false, MobileParty.NavigationType.Default);
+                var dir = CompassDirection(dx, dy);
+                neighbors.Add((pathDist, lineDist, dir, s));
             }
-            neighbors.Sort((a, b) => a.dist.CompareTo(b.dist));
+            neighbors.Sort((a, b) => a.pathDist.CompareTo(b.pathDist));
             var top = neighbors.Take(8).ToList();
 
             var isBorder = false;
             string nearestOtherKingdom = "";
             float nearestOtherDist = float.MaxValue;
-            foreach (var (dist, s) in top)
+            foreach (var (pathDist, _, _, s) in top)
             {
                 var ok = s.OwnerClan?.Kingdom;
-                if (ok != null && ok != myKingdom && dist <= 15000f)
+                if (ok != null && ok != myKingdom && pathDist <= 15000f)
                 {
                     isBorder = true;
-                    if (dist < nearestOtherDist)
+                    if (pathDist < nearestOtherDist)
                     {
-                        nearestOtherDist = dist;
+                        nearestOtherDist = pathDist;
                         nearestOtherKingdom = ok.Name?.ToString() ?? "?";
                     }
                 }
@@ -535,21 +537,37 @@ namespace MyFirstMod
             sb.AppendLine($"类型：{(settlement.IsTown ? "城镇" : "城堡")}");
             sb.AppendLine($"坐标位置：大陆{nsDir}{ewDir}部 · {myKingdom?.Name?.ToString() ?? "中立区"}");
             sb.AppendLine($"所属家族：{settlement.OwnerClan?.Name?.ToString() ?? "无主"}");
-            sb.AppendLine($"战略位置：{(isBorder ? $"边境前哨 — 距{nearestOtherKingdom}领土仅{(int)(nearestOtherDist/1000f)}km" : "核心腹地")}");
+            sb.AppendLine($"战略位置：{(isBorder ? $"边境前哨 — 距{nearestOtherKingdom}领土仅{(int)(nearestOtherDist/1000f)}km（寻路距离）" : "核心腹地")}");
 
             sb.AppendLine();
-            sb.AppendLine("周边定居点（最近" + top.Count + "个）：");
+            sb.AppendLine("周边定居点（最近" + top.Count + "个，按寻路距离排序）：");
             for (int i = 0; i < top.Count; i++)
             {
-                var (dist, s) = top[i];
-                var km = (int)(dist / 1000f);
+                var (pathDist, lineDist, dir, s) = top[i];
                 var tag = FactionTag(s);
                 var kingdomTag = s.OwnerClan?.Kingdom?.Name?.ToString() ?? "中立区";
                 var type = s.IsTown ? "城镇" : "城堡";
-                sb.AppendLine($"  {i + 1}. {s.Name}  {type}  {kingdomTag}  [{tag}]  {km}km");
+                sb.AppendLine($"  {i + 1}. {s.Name}  {type}  {kingdomTag}  [{tag}]  {dir}方向");
+                sb.AppendLine($"     寻路{pathDist / 1000f:F0}km  直线{lineDist / 1000f:F1}km");
             }
 
             return sb.ToString().TrimEnd();
+        }
+
+        private static string CompassDirection(float dx, float dy)
+        {
+            if (Math.Abs(dx) < 0.1f && Math.Abs(dy) < 0.1f) return "同地";
+            var angle = Math.Atan2(dy, dx) * (180.0 / Math.PI);
+            if (angle < 0) angle += 360;
+
+            if (angle < 22.5 || angle >= 337.5) return "东";
+            if (angle < 67.5) return "东北";
+            if (angle < 112.5) return "北";
+            if (angle < 157.5) return "西北";
+            if (angle < 202.5) return "西";
+            if (angle < 247.5) return "西南";
+            if (angle < 292.5) return "南";
+            return "东南";
         }
 
         private static string ExecuteQueryClanMembers(string clanName)

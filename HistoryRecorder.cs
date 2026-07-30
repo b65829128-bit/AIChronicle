@@ -213,6 +213,10 @@ namespace MyFirstMod
             {
                 AgentScheduler.QueueSpecialChronicle($"重要人物之死：{clan}族长 {name}{cause}。");
             }
+            else if (victim.Clan != null && MySettings.Instance?.BiographyAllNobles != false)
+            {
+                AgentScheduler.QueueSpecialChronicle($"重要人物之死：{clan}成员 {name}{cause}。");
+            }
             else if (victim == Hero.MainHero)
             {
                 AgentScheduler.QueueSpecialChronicle($"重要人物之死：冒险者 {name}{cause}，一段传奇就此落幕。");

@@ -402,10 +402,10 @@ namespace MyFirstMod
             }
         }
 
-        private int _kingActivationDays = 30;
+        private int _kingActivationDays = 10;
 
         [SettingPropertyInteger("国王激活间隔（天）", 5, 120, Order = 10, RequireRestart = false,
-            HintText = "国王 Agent 的定期外交审视间隔。间隔越短 Token 消耗越大。\n默认30天。")]
+            HintText = "国王 Agent 的定期外交审视间隔。\n默认10天。")]
         [SettingPropertyGroup("游戏设置")]
         public int KingActivationDays
         {
@@ -415,6 +415,24 @@ namespace MyFirstMod
                 if (_kingActivationDays != value)
                 {
                     _kingActivationDays = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _kingCooldownDays = 3;
+
+        [SettingPropertyInteger("国王冷静期（天）", 1, 30, Order = 13, RequireRestart = false,
+            HintText = "国王每次外交激活后的冷却时间。冷却期内不会被定时激活，但收到的外交提案仍会正常触发。\n默认3天。")]
+        [SettingPropertyGroup("游戏设置")]
+        public int KingCooldownDays
+        {
+            get => _kingCooldownDays;
+            set
+            {
+                if (_kingCooldownDays != value)
+                {
+                    _kingCooldownDays = value;
                     OnPropertyChanged();
                 }
             }
@@ -433,6 +451,24 @@ namespace MyFirstMod
                 if (_chronicleInterval != value)
                 {
                     _chronicleInterval = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private bool _biographyAllNobles = true;
+
+        [SettingPropertyBool("所有贵族立传", Order = 14, RequireRestart = false,
+            HintText = "勾选：所有有氏族的贵族死后都立传。\n不勾选：仅氏族领袖和国王死后立传。")]
+        [SettingPropertyGroup("游戏设置")]
+        public bool BiographyAllNobles
+        {
+            get => _biographyAllNobles;
+            set
+            {
+                if (_biographyAllNobles != value)
+                {
+                    _biographyAllNobles = value;
                     OnPropertyChanged();
                 }
             }
