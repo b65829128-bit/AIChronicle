@@ -8,6 +8,7 @@ using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.Encounters;
 using TaleWorlds.CampaignSystem.LogEntries;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Roster;
@@ -225,6 +226,9 @@ namespace MyFirstMod
                             args["kingdom_name"]?.ToString() ?? "",
                             args["rebellion"]?.ToObject<bool>() ?? false,
                             args["heir_entity_id"]?.ToString());
+
+                    case "let_go":
+                        return ExecuteLetGo();
 
                     case "query_settlement_villages":
                         return ExecuteQuerySettlementVillages(args["settlement_name"]?.ToString() ?? "");
@@ -1492,6 +1496,8 @@ namespace MyFirstMod
             if (string.IsNullOrEmpty(recipientId)) return "[错误] 请提供收信人实体 ID 或名称";
             if (string.IsNullOrEmpty(content)) return "[错误] 信件内容不能为空";
             if (AIChatClient.CurrentHero == null) return "[错误] 无当前领主";
+            if (AIChatClient.CurrentHero.IsPrisoner) return "[错误] 你正在被俘虏，无法发信";
+            if (AIChatClient.CurrentHero.IsFugitive) return "[错误] 你正在逃亡中，无法发信";
             var senderEntity = EntityManager.GetOrCreateEntity(AIChatClient.CurrentHero);
             var resolvedId = EntityManager.ResolveEntityId(recipientId);
             if (resolvedId == null) return $"[错误] 未找到名为 \"{recipientId}\" 的实体";
@@ -1505,21 +1511,66 @@ namespace MyFirstMod
             AgentManager.StoreOutgoingLetter(senderEntity.Id, resolvedId, content);
             var recipientEntity = EntityManager.GetEntityById(resolvedId);
             var recipientName = recipientEntity?.Name ?? resolvedId;
+            var recipientHero = recipientEntity?.HeroRef;
+            if (recipientHero != null)
+            {
+                if (recipientHero.IsPrisoner) return $"[错误] {recipientName} 正在被俘虏，无法收信";
+                if (recipientHero.IsFugitive) return $"[错误] {recipientName} 正在逃亡中，无法收信";
+                if (recipientHero.IsDisabled) return $"[错误] {recipientName} 处于不可用状态，无法收信";
+            }
 
             var nextDepth = AgentScheduler.IsProcessing
                 ? AgentScheduler.CurrentProcessingDepth + 1
                 : 0;
 
-            AgentScheduler.QueueEvent(new ActivationEvent
+            var delayHours = CalculateLetterDelay(AIChatClient.CurrentHero, recipientEntity?.HeroRef);
+
+            var evt = new ActivationEvent
             {
                 Type = ActivationEventType.LetterReceived,
                 AgentId = resolvedId,
                 TargetId = senderEntity.Id,
                 Content = content,
                 Depth = nextDepth
-            });
+            };
 
-            return $"信件已发送给 {recipientName}。";
+            if (delayHours > 0.1f)
+                AgentScheduler.QueueDelayedEvent(evt, delayHours);
+            else
+                AgentScheduler.QueueEvent(evt);
+
+            var delayNote = delayHours > 0.1f ? $"（预计{delayHours:F0}小时后送达）" : "";
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"{senderEntity.Name} 给 {recipientName} 写了一封信{delayNote}",
+                Colors.Cyan));
+
+            return $"信件已发送给 {recipientName}。{delayNote}";
+        }
+
+        private static float CalculateLetterDelay(Hero sender, Hero? recipient)
+        {
+            if (sender == null || recipient == null) return 0f;
+            var senderParty = sender.PartyBelongedTo;
+            var recipientParty = recipient.PartyBelongedTo;
+            Vec2 senderPos, recipientPos;
+
+            if (senderParty != null)
+                senderPos = senderParty.GetPosition2D;
+            else if (sender.CurrentSettlement != null)
+                senderPos = sender.CurrentSettlement.GetPosition2D;
+            else
+                return 0f;
+
+            if (recipientParty != null)
+                recipientPos = recipientParty.GetPosition2D;
+            else if (recipient.CurrentSettlement != null)
+                recipientPos = recipient.CurrentSettlement.GetPosition2D;
+            else
+                return 0f;
+
+            var dist = senderPos.Distance(recipientPos);
+            var km = dist / 1000f;
+            return Math.Max(1f, km / 4f);
         }
 
         private static string ExecuteBrowseTools(string category)
@@ -2297,6 +2348,42 @@ namespace MyFirstMod
                 default:
                     return $"[错误] 未知 action：{action}。可用：abdicate, leave_kingdom, join_kingdom, defect_to_kingdom, join_as_mercenary";
             }
+        }
+
+        private static string ExecuteLetGo()
+        {
+            var hero = AIChatClient.CurrentHero;
+            if (hero == null) return "[错误] 无当前领主";
+
+            var encounter = PlayerEncounter.Current;
+            if (encounter == null) return "[错误] 当前没有遭遇战，无法放行";
+
+            var encounteredParty = PlayerEncounter.EncounteredMobileParty;
+            if (encounteredParty == null) return "[错误] 没有遭遇方";
+
+            var myParty = hero.PartyBelongedTo;
+            if (myParty == null) return "[错误] 你没有带领部队";
+
+            if (encounteredParty.LeaderHero != Hero.MainHero && encounteredParty != MobileParty.MainParty)
+                return "[错误] 对方不是玩家，此工具仅供对玩家放行使用";
+
+            PlayerEncounter.LeaveEncounter = true;
+
+            foreach (var party in MobileParty.All)
+            {
+                if (party != encounteredParty && party.MapFaction == myParty.MapFaction)
+                {
+                    if (party.Ai != null)
+                        party.Ai.SetDoNotAttackMainParty(12);
+                }
+            }
+
+            if (myParty.Ai != null)
+                myParty.Ai.SetDoNotAttackMainParty(12);
+
+            MobileParty.MainParty.IgnoreForHours(6f);
+
+            return $"你决定放{encounteredParty.LeaderHero?.Name?.ToString() ?? "玩家"}一马。对方已安全离开，你的部队短时间内不会再次追击。";
         }
     }
 }

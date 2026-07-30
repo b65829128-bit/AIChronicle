@@ -619,5 +619,11 @@
         "description": "For abdicate only: the entity ID or Chinese name of the heir. Must be a member of your clan, or the leader of another clan in your kingdom."
       }
     ]
+  },
+  {
+    "name": "let_go",
+    "category": "social",
+    "description": "Let the other party go free from an encounter.\n\nUsage:\n- Call this when you are in an encounter with the other person and your forces are significantly stronger than theirs.\n- You decide to release them without a fight, granting them safe passage.\n- This ends the current encounter peacefully. The released party will be teleported away and cannot be attacked for a period of time.\n- Call this ONLY if you are the stronger party in the encounter and have decided not to attack.\n- Do NOT call this if you are in a settlement, in a battle, or not currently in an encounter with the other person.\n- This is a diplomatic gesture — releasing someone may improve relations, but it also means you lose the chance to capture them or take their loot.",
+    "parameters": []
   }
 ]

@@ -39,9 +39,10 @@
   - Agent 可以调用 `change_relation` 修改对任意人物的好感度（单次上限在 MCM 中设置，默认 +-5），可指定目标实体
   - Agent 可以调用 `give_gold` 赠予任意人物金币（直接转账），可指定目标实体
   - Agent 可以调用 `request_gold` 向任意人物索要金币（向玩家索要时弹出确认框）
-  - Agent 可以调用 `give_item` 将自己物品/装备交给任意人物（直接转账）
-  - Agent 可以调用 `request_items` 向任意人物索要物品（向玩家索要时弹出确认框）
-  - **已知限制：** `request_gold` 和 `request_items` 向 NPC 索要时直接划转，NPC 不会经过 LLM 决策——未来应改为异步事件，让 NPC Agent 自行判断是否给
+- Agent 可以调用 `give_item` 将自己物品/装备交给任意人物（直接转账）
+- Agent 可以调用 `request_items` 向任意人物索要物品（向玩家索要时弹出确认框）
+- Agent 可以调用 `let_go` 在遭遇战中放玩家一马（仅当 NPC 兵力占优时可用，设置冷却期避免立即追击）
+- **已知限制：** `request_gold` 和 `request_items` 向 NPC 索要时直接划转，NPC 不会经过 LLM 决策——未来应改为异步事件，让 NPC Agent 自行判断是否给
   - Agent 可以调用 `query_character` 查询任意人物的公开信息
   - Agent 可以调用 `query_clan_fiefs` 查询任意家族的封地情况（城镇/城堡列表、族长、所属王国）
   - Agent 可以调用 `query_recent_events` 查询任意人物的近期事件（比武夺冠、被俘、释放、婚嫁、阵亡等百科记录）
@@ -75,6 +76,10 @@
 - 级联深度在 MCM 中可调（默认 5，超出的只存档不处理）
 - 所有信件的收发对玩家可见（左下角提示）
 - 当书信双方之间存在待处理的外交提案时，收信 Agent 的上下文会自动注入提案摘要（提示 Agent 此信可能是对方对提案的回复）
+- 书信有**距离延时**：信使按 4km/h 递送，距离越远到达越慢（最低 1 小时），发信时左下角显示预计送达时间
+- 收信人回信同样计算延时，形成自然的往返时间差
+- 被俘虏、逃亡、死亡的 NPC 无法收发信
+- 无氏族的路人 NPC 不能写信、不能索要金币（保留聊天和好感修改）
 
 ### AI 外交系统
 
@@ -104,7 +109,7 @@
 |------|---------|:--|
 | universal | update_knowledge, cancel_action | 全部 |
 | query | query_character, query_settlement, query_settlement_geography, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_clan_fiefs, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills | 全部 |
-| social | change_relation, give_gold, request_gold, give_item, request_items | conversation |
+| social | change_relation, give_gold, request_gold, give_item, request_items, let_go | conversation |
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous |
 | military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops | autonomous |
 | diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal, gift_fief, change_kingdom | diplomacy |

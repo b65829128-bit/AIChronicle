@@ -32,6 +32,7 @@ namespace MyFirstMod
     public static class AgentScheduler
     {
         private static readonly ConcurrentQueue<ActivationEvent> _eventQueue = new();
+        private static readonly List<(CampaignTime DueTime, ActivationEvent Event)> _delayedEvents = new();
         private static Task? _currentTask;
         private static int _currentProcessingDepth = -1;
         private static readonly Dictionary<Kingdom, CampaignTime> _lastKingActivation = new();
@@ -70,10 +71,36 @@ namespace MyFirstMod
             _eventQueue.Enqueue(evt);
         }
 
+        public static void QueueDelayedEvent(ActivationEvent evt, float delayHours)
+        {
+            var dueTime = CampaignTime.HoursFromNow(delayHours);
+            lock (_delayedEvents)
+            {
+                _delayedEvents.Add((dueTime, evt));
+            }
+        }
+
+        private static void CheckDelayedEvents()
+        {
+            lock (_delayedEvents)
+            {
+                for (int i = _delayedEvents.Count - 1; i >= 0; i--)
+                {
+                    if (_delayedEvents[i].DueTime.IsPast)
+                    {
+                        _eventQueue.Enqueue(_delayedEvents[i].Event);
+                        _delayedEvents.RemoveAt(i);
+                    }
+                }
+            }
+        }
+
         public static void Tick()
         {
             if (_currentTask != null && !_currentTask.IsCompleted) return;
             _currentTask = null;
+
+            CheckDelayedEvents();
 
             if (!_eventQueue.TryDequeue(out var evt))
             {

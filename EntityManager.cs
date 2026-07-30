@@ -191,10 +191,12 @@ namespace MyFirstMod
         private static HashSet<EntityCapability> ComputeCapabilities(Hero hero, EntityController controller)
         {
             var caps = new HashSet<EntityCapability>();
+            var isNoble = hero.Clan != null;
             if (controller == EntityController.Agent)
             {
                 caps.Add(EntityCapability.FileSystem);
-                caps.Add(EntityCapability.SendLetter);
+                if (isNoble)
+                    caps.Add(EntityCapability.SendLetter);
             }
             if (hero.PartyBelongedTo != null && hero.PartyBelongedTo.LeaderHero == hero)
             {
@@ -205,7 +207,10 @@ namespace MyFirstMod
                 caps.Add(EntityCapability.Diplomat);
             if (hero.Gold > 0)
                 caps.Add(EntityCapability.GiveGold);
-            caps.Add(EntityCapability.RequestGold);
+            if (isNoble)
+            {
+                caps.Add(EntityCapability.RequestGold);
+            }
             caps.Add(EntityCapability.ChangeRelation);
             return caps;
         }

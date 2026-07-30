@@ -109,7 +109,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **书信模式** | 支持书信 intent，O 键唤起收信人列表 |
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 52 个工具定义在 `tools.json`（42 个游戏工具）和 `agent_tools.json`（10 个文件工具）中，热重载，不硬编码 |
+| **工具定义文件化** | 53 个工具定义在 `tools.json`（43 个游戏工具）和 `agent_tools.json`（10 个文件工具）中，热重载，不硬编码 |
 | **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁 |
 | **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`tool_call_prompt.txt`、`persona_generation.txt`、`context_template.txt`、`chancery_rules.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环（max N 轮或无限），模型调用工具 → 执行 → 追加结果 → 重请求 |
@@ -735,6 +735,7 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | `buy_food` | 行军 | 在定居点买粮到够吃 N 天（自动挑最便宜的） |
 | `give_item` | 社交 | 将自己物品/装备交给任意人物 |
 | `request_items` | 社交 | 向任意人物索要物品（NPC 直接划转，玩家弹确认框） |
+| `let_go` | 社交 | 遭遇战中放走玩家（仅当己方兵力占优时可用，含冷却期） |
 
 ### 文件工具（agent_tools.json，10 个）
 
