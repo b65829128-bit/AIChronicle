@@ -109,7 +109,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **书信模式** | 支持书信 intent，O 键唤起收信人列表 |
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 48 个工具定义在 `tools.json`（38 个游戏工具）和 `agent_tools.json`（10 个文件工具）中，热重载，不硬编码 |
+| **工具定义文件化** | 51 个工具定义在 `tools.json`（41 个游戏工具）和 `agent_tools.json`（10 个文件工具）中，热重载，不硬编码 |
 | **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁 |
 | **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`tool_call_prompt.txt`、`persona_generation.txt`、`context_template.txt`、`chancery_rules.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环（max N 轮或无限），模型调用工具 → 执行 → 追加结果 → 重请求 |
@@ -568,8 +568,8 @@ Usage:
 - ~~改变对目标的态度 → `change_relation(delta)`~~ （已实现，支持 target_entity_id）
 - ~~领主军事行动 → 劫掠/围攻/追击/驻防/巡逻/护送/绕行~~ （已全部实现为 7 个部队 AI 工具 + 中断恢复 + 定时签到）
 - ~~文件编辑 → `write_file`/`edit_file`/`delete_file`/`glob`~~ （已实现，chat_logs 和 persona.txt 为只读保护）
-- 发起外交/王国级动作 → `declare_war` / `make_peace` / `join_kingdom` / `gift_fief`
-- 物品交易 → `give_item`
+- ~~发起外交/王国级动作~~ → `declare_war` / `propose_peace` / `propose_alliance` / `propose_trade` / `gift_fief`（已全部实现）
+- 物品交易 → `give_item` / `give_item` / `request_items`（已全部实现）
 
 ### 流式架构（已实现，参考 opencode）
 
@@ -638,12 +638,14 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | dotnet CLI | `dotnet` | 编译、创建新项目 |
 | Rider | `C:\Program Files\JetBrains\JetBrains Rider 2026.2\bin\rider64.exe` | IDE |
 
-### 游戏工具（tools.json，38 个）
+### 游戏工具（tools.json，41 个）
 
 | 工具 | 类别 | 说明 |
 |------|------|------|
+| `query_clan_fiefs` | 查询 | 查询氏族持有的封地列表 |
 | `query_character` | 查询 | 查询人物公开档案（身份/家族/王国/兵力/位置），系统权威数据 |
 | `query_settlement` | 查询 | 查询定居点信息（所有者/繁荣度/类型） |
+| `query_settlement_geography` | 查询 | 查询定居点地理情报（位置/周边邻居/边境标签） |
 | `query_world_state` | 查询 | 获取世界局势（王国兵力/交战状态） |
 | `query_recent_events` | 查询 | 查询人物近期事件（比武/俘虏/婚嫁/阵亡等百科记录） |
 | `query_surroundings` | 查询 | 扫描周围环境（当前位置、附近城镇城堡、附近部队及阵营关系） |
@@ -667,6 +669,7 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | `propose_alliance` | 外交 | 向另一王国提议结盟（双向，国王专属） |
 | `propose_trade` | 外交 | 向另一王国提议贸易协定（双向，国王专属） |
 | `respond_to_diplomacy_proposal` | 外交 | 接受或拒绝收到的外交提案（国王专属） |
+| `gift_fief` | 外交 | 国王敕令将封地直接转让给指定封臣家族领袖（国王专属，不经过选举） |
 | `cancel_action` | 控制 | 取消当前任务，回归自主 AI |
 | `query_party_troops` | 查询 | 查看部队详情（金币/兵力/各兵种经验升级路径/俘虏/物品栏/装备栏） |
 | `query_available_troops` | 查询 | 查看当前定居点可招募兵种（需在定居点内） |

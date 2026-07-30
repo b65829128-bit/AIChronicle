@@ -338,9 +338,11 @@ namespace MyFirstMod
                                     "request_gold" => $"向{tname}索要了金币",
                                     "query_character" => "查询了人物信息",
                                     "query_settlement" => "查询了定居点信息",
+                                    "query_settlement_geography" => "查询了地理情报",
                                     "query_world_state" => "获取了世界局势",
                                     "query_kingdom_settlements" => "查询了王国领土",
                                     "query_clan_members" => "查询了家族成员",
+                                    "query_clan_fiefs" => "查询了家族封地",
                                     "query_kingdom_clans" => "查询了王国家族",
                                     "query_recent_events" => "查询了近期事件",
                                     "query_surroundings" => "扫描了周围环境",
@@ -350,6 +352,7 @@ namespace MyFirstMod
                                     "propose_alliance" => "提出了结盟",
                                     "propose_trade" => "提出了贸易协定",
                                     "respond_to_diplomacy_proposal" => "回复了外交提案",
+                                    "gift_fief" => $"将 {set} 转让了",
                                     _ => $"调用了 {tc.Name}"
                                 };
                             }

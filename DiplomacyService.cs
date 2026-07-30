@@ -5,6 +5,7 @@ using System.Reflection;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Library;
 
 namespace MyFirstMod
@@ -109,8 +110,13 @@ namespace MyFirstMod
             var tributeArg = $"{tributeAmount}_{tributeDays}";
             AgentManager.StoreDiplomacyProposal(myEntity.Id, targetEntity.Id, "peace", tributeArg, message);
             var msgPart = !string.IsNullOrEmpty(message) ? $"\n\n附言：\"{message}\"" : "";
+            var tributeDesc = tributeAmount > 0
+                ? $"愿意每日支付 {tributeAmount} 金币、持续 {tributeDays} 天作为赔款"
+                : tributeAmount < 0
+                    ? $"要求对方每日赔偿 {Math.Abs(tributeAmount)} 金币、持续 {tributeDays} 天"
+                    : "不附带赔款条件";
             QueueKingActivation(targetEntity.Id, myEntity.Id,
-                $"来自 {myEntity.Name}（{myKingdom.Name} 统治者）的议和提案：愿意支付每日 {tributeAmount} 金币、持续 {tributeDays} 天作为赔款。你接受这个议和条件吗？请用 respond_to_diplomacy_proposal 回复。{msgPart}");
+                $"来自 {myEntity.Name}（{myKingdom.Name} 统治者）的议和提案：{tributeDesc}。你接受这个议和条件吗？请用 respond_to_diplomacy_proposal 回复。{msgPart}");
             InformationManager.DisplayMessage(new InformationMessage(
                 $"{myEntity.Name}（{myKingdom.Name}）向 {target.Name} 提议议和", Colors.Cyan));
             return $"议和提案已发送给{target.Name}的统治者{targetRuler.Name}，等待回复。";
@@ -170,6 +176,58 @@ namespace MyFirstMod
             InformationManager.DisplayMessage(new InformationMessage(
                 $"{myEntity.Name}（{myKingdom.Name}）向 {target.Name} 提议贸易协定", Colors.Cyan));
             return $"贸易协定提案已发送给{target.Name}的统治者{targetRuler.Name}，等待回复。";
+        }
+
+        internal static string ExecuteTransferFief(string settlementName, string targetEntityId)
+        {
+            var actingHero = GetDiplomacyHero();
+            if (actingHero == null) return "[错误] 只有王国统治者才能转让封地";
+            var myKingdom = actingHero.MapFaction as Kingdom;
+            if (myKingdom == null) return "[错误] 你当前不属于任何王国";
+
+            var settlement = FindSettlement(settlementName);
+            if (settlement == null) return $"[错误] 未找到定居点：{settlementName}";
+            if (!settlement.IsTown && !settlement.IsCastle)
+                return $"[错误] 只能转让城镇或城堡，村庄归属其主城无法单独转让。";
+
+            var ownerClan = settlement.OwnerClan;
+            if (ownerClan == null) return $"[错误] {settlement.Name} 没有归属家族";
+            if (ownerClan.Kingdom != myKingdom)
+                return $"[错误] {settlement.Name} 不在你的王国内";
+
+            var targetId = EntityManager.ResolveEntityId(targetEntityId) ?? targetEntityId;
+            var targetEntity = EntityManager.GetEntityById(targetId);
+            if (targetEntity == null) return $"[错误] 未找到目标实体：{targetEntityId}";
+            var targetHero = targetEntity.HeroRef;
+            if (targetHero == null) return $"[错误] 目标实体无效";
+
+            if (targetHero.Clan?.Kingdom != myKingdom)
+                return $"[错误] {targetHero.Name} 不在你的王国内";
+
+            if (targetHero.Clan?.Leader != targetHero)
+                return $"[错误] {targetHero.Name} 不是家族领袖，只有家族领袖能持有封地";
+
+            if (targetHero.Clan.IsUnderMercenaryService)
+                return $"[错误] {targetHero.Name} 的家族是雇佣兵，雇佣兵不能持有封地";
+
+            if (targetHero.Clan == ownerClan)
+                return $"[错误] {settlement.Name} 已经属于 {targetHero.Clan.Name}";
+
+            var oldClanName = ownerClan.Name?.ToString() ?? "?";
+            var oldLeaderName = ownerClan.Leader?.Name?.ToString() ?? "?";
+            var newClanName = targetHero.Clan.Name?.ToString() ?? "?";
+
+            IsInProgress = true;
+            try
+            {
+                ChangeOwnerOfSettlementAction.ApplyByKingDecision(targetHero, settlement);
+            }
+            finally { IsInProgress = false; }
+
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"{actingHero.Name} 将 {settlement.Name} 从 {oldClanName} 转让给了 {newClanName}", Colors.Cyan));
+
+            return $"已将{settlement.Name}从{oldClanName}（{oldLeaderName}）转让给{newClanName}（{targetHero.Name}）。";
         }
 
         internal static string ExecuteRespondToProposal(string proposalId, bool accepted)
@@ -310,6 +368,51 @@ namespace MyFirstMod
                 default:
                     return $"[错误] 未知的提案类型：{type}";
             }
+        }
+
+        private static Settlement? FindSettlement(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            var trimmed = name.Trim();
+            var lower = trimmed.ToLowerInvariant();
+
+            foreach (var s in Settlement.All)
+            {
+                var sName = s.Name?.ToString() ?? "";
+                if (sName.Trim().Equals(trimmed, StringComparison.OrdinalIgnoreCase))
+                    return s;
+            }
+
+            var candidates = new List<Settlement>();
+            foreach (var s in Settlement.All)
+            {
+                var sName = s.Name?.ToString() ?? "";
+                if (sName.Contains(trimmed) || trimmed.Contains(sName))
+                    candidates.Add(s);
+            }
+
+            if (candidates.Count > 0)
+            {
+                var fort = candidates.FirstOrDefault(c => c.IsTown || c.IsCastle);
+                if (fort != null) return fort;
+                return candidates[0];
+            }
+
+            foreach (var s in Settlement.All)
+            {
+                var sName = (s.Name?.ToString() ?? "").ToLowerInvariant();
+                if (sName.Contains(lower) || lower.Contains(sName))
+                    candidates.Add(s);
+            }
+
+            if (candidates.Count > 0)
+            {
+                var fort = candidates.FirstOrDefault(c => c.IsTown || c.IsCastle);
+                if (fort != null) return fort;
+                return candidates[0];
+            }
+
+            return null;
         }
 
         private static void QueueKingActivation(string agentId, string targetId, string message)

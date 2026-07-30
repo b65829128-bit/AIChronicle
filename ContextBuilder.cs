@@ -20,7 +20,7 @@ namespace MyFirstMod
             [EntityCapability.RequestGold] = new[] { "request_gold" },
             [EntityCapability.ChangeRelation] = new[] { "change_relation" },
             [EntityCapability.SendLetter] = new[] { "send_letter" },
-            [EntityCapability.Diplomat] = new[] { "declare_war", "propose_peace", "propose_alliance", "propose_trade", "respond_to_diplomacy_proposal", "query_pending_proposals" },
+            [EntityCapability.Diplomat] = new[] { "declare_war", "propose_peace", "propose_alliance", "propose_trade", "respond_to_diplomacy_proposal", "gift_fief", "query_pending_proposals" },
         };
 
         private static readonly Dictionary<string, string> CategoryNames = new()
@@ -280,17 +280,17 @@ namespace MyFirstMod
                 path = Path.Combine(PromptManager.PromptsBaseDir, "diplomacy_rules.txt");
             if (!File.Exists(path))
                 return
-                    "你是{name}，{title}。你是{name}所在王国的最高统治者。这不是闲聊——你必须根据实际数据做出并执行外交决策。\n\n"
-                    + "你必须严格按照以下步骤行事，不得跳过：\n"
-                    + "1. 先调用 query_pending_proposals 查看是否有待处理的外交提案，有则用 respond_to_diplomacy_proposal 逐个处理（接受或拒绝）\n"
-                    + "2. 调用 query_war_status 查看你王国所有战争的实时战况\n"
-                    + "3. 根据战况和提案结果，决定是否采取新的外交行动\n\n"
+                    "你是{name}，{title}。你是所在王国的最高统治者。审视你的王国局势，凭你自己的判断做出外交决断。\n\n"
+                    + "步骤：\n"
+                    + "1. 先调用 query_pending_proposals 查看是否有待处理的外交提案，有则用 respond_to_diplomacy_proposal 逐一处理\n"
+                    + "2. 调用 query_war_status 了解当前所有战争的战况\n"
+                    + "3. 根据你对局势的个人判断，决定是否采取新的外交行动——如何决策由你做主\n\n"
                     + "重要规则：\n"
                     + "- 不要说你会做某件事——必须调用对应的 function。例如，说「我决定议和」而不调用 propose_peace 等于什么都没做\n"
                     + "- 每次回复最多调用 3 个工具。先处理提案，再决定新的行动\n"
-                    + "- 如果没有任何待处理提案且当前没有战争，可以直接表示「暂无需要处理的外交事务」并停止\n"
-                    + "- 不要虚构数据——所有战争统计必须来自 query_war_status 的返回值\n"
-                    + "- 你的决策是你的决策——不需要征求他人意见，你是国王\n"
+                    + "- 没有待处理提案且你不想采取新行动时，可以说「暂无需要处理的外交事务」\n"
+                    + "- 不要虚构数据——所有统计来自 query_war_status 的返回值\n"
+                    + "- 你是国王，你的决断就是王国的决断，不需要征求任何人同意\n"
                     + "- 绝对不要用 send_letter 处理外交事务。send_letter 只能用于私人通信。外交提案只能用 propose_peace / propose_alliance / propose_trade / declare_war / respond_to_diplomacy_proposal";
 
             var lastWrite = File.GetLastWriteTimeUtc(path);

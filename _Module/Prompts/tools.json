@@ -36,6 +36,18 @@
     ]
   },
   {
+    "name": "query_settlement_geography",
+    "category": "query",
+    "description": "Get geographic intelligence about a settlement — its map position, what other settlements are nearby, and whether it's on the frontier or deep in friendly territory.\n\nUsage:\n- Call this to understand the STRATEGIC POSITION of a settlement before making military decisions.\n- The settlement_name must be a town or castle (not a village).\n- Returns: quadrant location on the Calradia map (NW/NE/SW/SE), nearby towns/castles sorted by distance (up to 8, with faction relations: 友方/敌方/中立), whether it's on the border (<15km from another kingdom) or core territory.\n- Distances are in km. All data is dynamically calculated from the live map state.\n- This is essential for planning invasions, defense lines, corridor strategies, and understanding geopolitical geography.",
+    "parameters": [
+      {
+        "name": "settlement_name",
+        "type": "string",
+        "description": "Name of the town or castle to query geography for, in Chinese or English."
+      }
+    ]
+  },
+  {
     "name": "query_world_state",
     "category": "query",
     "description": "Get a summary of the world situation — wars, alliances, trade agreements, and strength for all kingdoms. You can also query a specific kingdom.\n\nUsage:\n- Call this to understand the diplomatic and military landscape of Calradia.\n- If kingdom_name is omitted, returns data for ALL kingdoms.\n- If kingdom_name is provided, returns data for that specific kingdom only.\n- Returns for each kingdom: ruler, total strength, current wars, alliances, and trade agreements.\n- Kingdom names support both Chinese and English.",
@@ -291,6 +303,18 @@
     ]
   },
   {
+    "name": "query_clan_fiefs",
+    "category": "query",
+    "description": "List all towns and castles owned by a specific clan.\n\nUsage:\n- Call this to see what territories a clan controls.\n- The clan_name parameter should match the Chinese or English clan name.\n- Returns: list of towns and castles with their names and prosperity.\n- This is public encyclopedia information — all nobles know which clan holds which fiefs.",
+    "parameters": [
+      {
+        "name": "clan_name",
+        "type": "string",
+        "description": "Name of the clan to query fiefs for, in Chinese or English."
+      }
+    ]
+  },
+  {
     "name": "query_war_status",
     "category": "query",
     "description": "Get the war statistics between two kingdoms. Shows casualties, captured towns/castles, and raids — broken down per side.\n\nUsage:\n- Call this to understand how a war is going — who is winning, how much damage each side has suffered and inflicted.\n- The kingdom_name parameter is the kingdom to check wars for. Omit to query your own kingdom.\n- For each enemy kingdom currently at war, returns: war duration, casualties inflicted/received, towns captured/lost, castles captured/lost, raids conducted/suffered.\n- This is the same data the game uses to compute war progress and peace decisions.\n- If the kingdom is at peace, returns a peace summary instead.",
@@ -322,7 +346,7 @@
   {
     "name": "propose_peace",
     "category": "diplomacy",
-    "description": "Propose a peace treaty to end a war with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You must be at war with the target kingdom.\n- tribute_amount: daily tribute you are willing to pay to end the war (0 if none).\n- tribute_days: how many days to pay tribute for.\n- message: a personal statement to the other ruler. Explain why you want peace, any terms, etc.\n- This is NOT unilateral — the other ruler decides. Be prepared for rejection.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
+    "description": "Propose a peace treaty to end a war with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You must be at war with the target kingdom.\n- tribute_amount: daily tribute to transfer. Positive = you pay them, negative = they pay you. 0 for no tribute.\n- tribute_days: how many days the tribute lasts.\n- message: a personal statement to the other ruler. Explain why you want peace, any terms, etc.\n- This is NOT unilateral — the other ruler decides. Be prepared for rejection.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
     "parameters": [
       {
         "name": "target_kingdom",
@@ -332,12 +356,12 @@
       {
         "name": "tribute_amount",
         "type": "integer",
-        "description": "Daily tribute gold to offer (0 for no tribute)."
+        "description": "Daily tribute amount. Positive = you pay the other kingdom, negative = they pay you. 0 for no tribute."
       },
       {
         "name": "tribute_days",
         "type": "integer",
-        "description": "Number of days to pay tribute for (0 for no tribute)."
+        "description": "Number of days the tribute lasts (0 if no tribute)."
       },
       {
         "name": "message",
@@ -400,6 +424,23 @@
         "name": "accepted",
         "type": "boolean",
         "description": "Whether to accept (true) or reject (false) the proposal."
+      }
+    ]
+  },
+  {
+    "name": "gift_fief",
+    "category": "diplomacy",
+    "description": "Transfer a fief (town or castle) from one clan to another within your kingdom. This is a unilateral king's decree — no voting or election.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom (king/queen).\n- The settlement_name is the fief to transfer (town or castle name, in Chinese or English). Villages cannot be transferred independently — they follow their bound town/castle.\n- The target_entity_id specifies WHICH clan leader receives the fief, by entity ID or Chinese name.\n- The target must be a non-mercenary clan leader in your kingdom.\n- The fief must currently belong to some clan within your kingdom.\n- Do NOT use this for mercenary clans — mercenaries cannot hold fiefs.\n- This takes effect immediately with no election or voting process.\n- Call query_kingdom_settlements first to see what fiefs are available, and query_kingdom_clans to see eligible recipients.",
+    "parameters": [
+      {
+        "name": "settlement_name",
+        "type": "string",
+        "description": "Name of the town or castle to transfer, in Chinese or English."
+      },
+      {
+        "name": "target_entity_id",
+        "type": "string",
+        "description": "Entity ID or Chinese name of the clan leader to receive the fief. Must be a non-mercenary clan leader in your kingdom."
       }
     ]
   },

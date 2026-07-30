@@ -22,6 +22,7 @@
 - **工具能力过滤**：每个 Entity 有 EntityCapability 集合，无部队的 NPC 不拿到行军工具
 - 认知更新机制使用 OpenAI function calling 协议
   - Agent 可以调用 `query_settlement` 查询任意定居点实时信息（所有者、繁荣度）
+  - Agent 可以调用 `query_settlement_geography` 查询任意城镇/城堡的地理情报（大陆方位、周边定居点及阵营关系、边境/腹地标签，距离精确到km，全部动态计算实时地图数据）
   - Agent 可以调用 `query_world_state` 获取当前世界局势（各王国兵力、交战状态）
   - Agent 可以调用 `move_to_settlement` 工具，让 NPC 部队实际行军移动到地图上的城镇/城堡（非瞬移）
   - Agent 可以调用 `wait_at_settlement` 工具，让 NPC 在到达城镇后停留指定时长（游戏内小时）
@@ -42,14 +43,16 @@
   - Agent 可以调用 `request_items` 向任意人物索要物品（向玩家索要时弹出确认框）
   - **已知限制：** `request_gold` 和 `request_items` 向 NPC 索要时直接划转，NPC 不会经过 LLM 决策——未来应改为异步事件，让 NPC Agent 自行判断是否给
   - Agent 可以调用 `query_character` 查询任意人物的公开信息
+  - Agent 可以调用 `query_clan_fiefs` 查询任意家族的封地情况（城镇/城堡列表、族长、所属王国）
   - Agent 可以调用 `query_recent_events` 查询任意人物的近期事件（比武夺冠、被俘、释放、婚嫁、阵亡等百科记录）
   - Agent 可以调用 `query_surroundings` 扫描周围环境：当前位置、附近城镇/城堡、附近部队及其阵营关系和距离
   - Agent 可以调用 `query_war_status` 查询王国战争状态：双方阵亡数、攻下的城镇/城堡、劫掠村庄数
   - Agent 国王可以调用 `query_pending_proposals` 列出当前待处理的外交提案（无需参数，自动过滤本国相关提案）
   - Agent 国王可以调用 `declare_war` 宣战（单向立即生效）
   - Agent 国王可以调用 `propose_peace` / `propose_alliance` / `propose_trade` 提出外交提案（双向，需对方国王同意）
-  - Agent 国王可以调用 `respond_to_diplomacy_proposal` 接受或拒绝收到的外交提案
-  - 外交提案存储在 `World/diplomacy/` 目录，对方国王的定期激活由 `AgentScheduler` 管理（每 15 天一次）
+- Agent 国王可以调用 `respond_to_diplomacy_proposal` 接受或拒绝收到的外交提案
+- Agent 国王可以调用 `gift_fief` 将王国范围内任意封地（城镇/城堡）直接转让给某位封臣家族领袖（雇佣兵除外），无需选举投票，国王敕令立即生效
+- 外交提案存储在 `World/diplomacy/` 目录，对方国王的定期激活由 `AgentScheduler` 管理（每 15 天一次）
   - 被俘或逃亡的国王统治者仍会被激活，状态提示中会标明"你仍是王国统治者"，确保外交工具可正常使用
   - **已知限制：** "禁止原版外交" 开关仅阻止 AI 国王通过原版机制发起外交，**不阻止玩家通过王国界面手动发起外交**（宣战/议和/结盟/贸易按钮仍然有效）。这是当前的一个已知缺口——向后兼容补丁路径未找到。玩家作为国王应使用 M 键秘书处执行外交，王国界面按钮请手动避免使用。
   - Agent 可以调用 `grep` 在个人文件系统中按关键词搜索，定位到具体文件和行号后再用 `read_file` 精读
@@ -83,11 +86,11 @@
 | 分类 | 包含工具 | 默认激活场景 |
 |------|---------|:--|
 | universal | update_knowledge, cancel_action | 全部 |
-| query | query_character, query_settlement, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills | 全部 |
+| query | query_character, query_settlement, query_settlement_geography, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_clan_fiefs, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills | 全部 |
 | social | change_relation, give_gold, request_gold, give_item, request_items | conversation |
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous |
 | military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops | autonomous |
-| diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal | diplomacy |
+| diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal, gift_fief | diplomacy |
 | file | read_file, write_file, append_file, edit_file, delete_file, move_file, list_dir, glob, grep | letter, autonomous, conversation |
 | communication | send_letter | letter |
 
@@ -303,4 +306,4 @@ MyFirstMod/
 ## 版本
 
 - 游戏版本：Bannerlord v1.4.7
-- 模组版本：v0.0.1
+- 模组版本：v0.6.0

@@ -79,6 +79,9 @@ namespace MyFirstMod
                     case "query_settlement":
                         return QuerySettlement(args["name"]?.ToString() ?? "");
 
+                    case "query_settlement_geography":
+                        return ExecuteQuerySettlementGeography(args["settlement_name"]?.ToString() ?? "");
+
                     case "query_world_state":
                         return QueryWorldState(args["kingdom_name"]?.ToString());
 
@@ -87,6 +90,9 @@ namespace MyFirstMod
 
                     case "query_clan_members":
                         return ExecuteQueryClanMembers(args["clan_name"]?.ToString() ?? "");
+
+                    case "query_clan_fiefs":
+                        return ExecuteQueryClanFiefs(args["clan_name"]?.ToString() ?? "");
 
                     case "query_kingdom_clans":
                         return ExecuteQueryKingdomClans(args["kingdom_name"]?.ToString() ?? "");
@@ -117,6 +123,11 @@ namespace MyFirstMod
                         return DiplomacyService.ExecuteRespondToProposal(
                             args["proposal_id"]?.ToString() ?? "",
                             args["accepted"]?.ToObject<bool>() ?? false);
+
+                    case "gift_fief":
+                        return DiplomacyService.ExecuteTransferFief(
+                            args["settlement_name"]?.ToString() ?? "",
+                            args["target_entity_id"]?.ToString() ?? "");
 
                     case "move_to_settlement":
                         return ExecuteMoveToSettlement(
@@ -311,24 +322,19 @@ namespace MyFirstMod
             if (string.IsNullOrEmpty(name))
                 return "[错误] 请提供定居点名称";
 
-            foreach (var s in Settlement.All)
-            {
-                var sName = s.Name?.ToString() ?? "";
-                if (sName.Contains(name) || name.Contains(sName))
-                {
-                    var type = s.IsTown ? "城镇" : s.IsCastle ? "城堡" : "村庄";
-                    var owner = s.OwnerClan?.Name?.ToString() ?? "无主";
-                    var kingdom = s.OwnerClan?.Kingdom?.Name?.ToString();
-                    var prosperity = s.IsTown ? s.Town?.Prosperity.ToString("F0") ?? "?" : "-";
+            var s = FindSettlement(name);
+            if (s == null)
+                return $"[未找到] 名称为 \"{name}\" 的定居点";
 
-                    return $"{sName}（{type}）\n"
-                        + $"所属氏族：{owner}\n"
-                        + (kingdom != null ? $"所属王国：{kingdom}\n" : "")
-                        + $"繁荣度：{prosperity}";
-                }
-            }
+            var type = s.IsTown ? "城镇" : s.IsCastle ? "城堡" : "村庄";
+            var owner = s.OwnerClan?.Name?.ToString() ?? "无主";
+            var kingdom = s.OwnerClan?.Kingdom?.Name?.ToString();
+            var prosperity = s.IsTown ? s.Town?.Prosperity.ToString("F0") ?? "?" : "-";
 
-            return $"[未找到] 名称为 \"{name}\" 的定居点";
+            return $"{s.Name}（{type}）\n"
+                + $"所属氏族：{owner}\n"
+                + (kingdom != null ? $"所属王国：{kingdom}\n" : "")
+                + $"繁荣度：{prosperity}";
         }
 
         private static string QueryWorldState(string? kingdomName)
@@ -395,12 +401,13 @@ namespace MyFirstMod
 
                 foreach (var s in Settlement.All)
                 {
-                    if (s.OwnerClan?.Kingdom == kingdom)
-                    {
-                        var entry = s.Name + "（" + (s.OwnerClan?.Name?.ToString() ?? "?") + "）";
-                        if (s.IsTown) towns.Add(entry);
-                        else if (s.IsCastle) castles.Add(entry);
-                    }
+                    if (s.OwnerClan?.Kingdom != kingdom) continue;
+
+                    var isBorder = IsBorderSettlement(s);
+                    var tag = isBorder ? " ⚔边境" : "";
+                    var entry = s.Name + tag + "（" + (s.OwnerClan?.Name?.ToString() ?? "?") + "）";
+                    if (s.IsTown) towns.Add(entry);
+                    else if (s.IsCastle) castles.Add(entry);
                 }
 
                 sb.AppendLine("城镇（" + towns.Count + "座）：");
@@ -415,6 +422,123 @@ namespace MyFirstMod
             }
 
             return "[未找到] 名为 \"" + kingdomName + "\" 的王国";
+        }
+
+        private static bool IsBorderSettlement(Settlement s)
+        {
+            if (!s.IsTown && !s.IsCastle) return false;
+            var pos = s.GatePosition.ToVec2();
+            var myKingdom = s.OwnerClan?.Kingdom;
+            if (myKingdom == null) return false;
+
+            foreach (var other in Settlement.All)
+            {
+                if (!other.IsTown && !other.IsCastle) continue;
+                if (other == s) continue;
+                var otherKingdom = other.OwnerClan?.Kingdom;
+                if (otherKingdom == null || otherKingdom == myKingdom) continue;
+
+                var oPos = other.GatePosition.ToVec2();
+                var dx = pos.X - oPos.X;
+                var dy = pos.Y - oPos.Y;
+                var dist = (float)Math.Sqrt(dx * dx + dy * dy);
+                if (dist <= 15000f) return true; // 15km
+            }
+            return false;
+        }
+
+        private static string ExecuteQuerySettlementGeography(string settlementName)
+        {
+            if (string.IsNullOrEmpty(settlementName))
+                return "[错误] 请提供定居点名称";
+
+            var settlement = FindSettlement(settlementName);
+            if (settlement == null)
+                return $"[错误] 未找到定居点：{settlementName}";
+            if (!settlement.IsTown && !settlement.IsCastle)
+                return $"[错误] {settlement.Name} 是村庄，地理查询仅支持城镇和城堡。";
+
+            var pos = settlement.GatePosition.ToVec2();
+            var myKingdom = settlement.OwnerClan?.Kingdom;
+            var myFaction = AIChatClient.CurrentHero?.MapFaction;
+
+            float minX = float.MaxValue, maxX = float.MinValue;
+            float minY = float.MaxValue, maxY = float.MinValue;
+            foreach (var s in Settlement.All)
+            {
+                if (!s.IsTown && !s.IsCastle) continue;
+                var p = s.GatePosition.ToVec2();
+                if (p.X < minX) minX = p.X;
+                if (p.X > maxX) maxX = p.X;
+                if (p.Y < minY) minY = p.Y;
+                if (p.Y > maxY) maxY = p.Y;
+            }
+
+            var midX = (minX + maxX) / 2f;
+            var midY = (minY + maxY) / 2f;
+            var nsDir = pos.Y > midY ? "北" : "南";
+            var ewDir = pos.X > midX ? "东" : "西";
+
+            var neighbors = new List<(float dist, Settlement s)>();
+            foreach (var s in Settlement.All)
+            {
+                if (s == settlement) continue;
+                if (!s.IsTown && !s.IsCastle) continue;
+                var sPos = s.GatePosition.ToVec2();
+                var dx = pos.X - sPos.X;
+                var dy = pos.Y - sPos.Y;
+                var dist = (float)Math.Sqrt(dx * dx + dy * dy);
+                neighbors.Add((dist, s));
+            }
+            neighbors.Sort((a, b) => a.dist.CompareTo(b.dist));
+            var top = neighbors.Take(8).ToList();
+
+            var isBorder = false;
+            string nearestOtherKingdom = "";
+            float nearestOtherDist = float.MaxValue;
+            foreach (var (dist, s) in top)
+            {
+                var ok = s.OwnerClan?.Kingdom;
+                if (ok != null && ok != myKingdom && dist <= 15000f)
+                {
+                    isBorder = true;
+                    if (dist < nearestOtherDist)
+                    {
+                        nearestOtherDist = dist;
+                        nearestOtherKingdom = ok.Name?.ToString() ?? "?";
+                    }
+                }
+            }
+
+            string FactionTag(Settlement s)
+            {
+                var sk = s.OwnerClan?.Kingdom;
+                if (sk == null) return "中立";
+                if (sk == myFaction) return "友方";
+                if (myFaction != null && myFaction.IsAtWarWith(sk)) return "敌方";
+                return "中立";
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"===== {settlement.Name} 地理情报 =====");
+            sb.AppendLine($"类型：{(settlement.IsTown ? "城镇" : "城堡")}");
+            sb.AppendLine($"坐标位置：大陆{nsDir}{ewDir}部 · {myKingdom?.Name?.ToString() ?? "中立区"}");
+            sb.AppendLine($"所属家族：{settlement.OwnerClan?.Name?.ToString() ?? "无主"}");
+            sb.AppendLine($"战略位置：{(isBorder ? $"边境前哨 — 距{nearestOtherKingdom}领土仅{(int)(nearestOtherDist/1000f)}km" : "核心腹地")}");
+
+            sb.AppendLine();
+            sb.AppendLine("周边定居点（最近" + top.Count + "个）：");
+            for (int i = 0; i < top.Count; i++)
+            {
+                var (dist, s) = top[i];
+                var km = (int)(dist / 1000f);
+                var tag = FactionTag(s);
+                var kingdomTag = s.OwnerClan?.Kingdom?.Name?.ToString() ?? "中立区";
+                var type = s.IsTown ? "城镇" : "城堡";
+                sb.AppendLine($"  {i + 1}. {s.Name}  {type}  {kingdomTag}  [{tag}]  {km}km");
+            }
+
+            return sb.ToString().TrimEnd();
         }
 
         private static string ExecuteQueryClanMembers(string clanName)
@@ -466,6 +590,54 @@ namespace MyFirstMod
             }
 
             return "[未找到] 名为 \"" + clanName + "\" 的家族";
+        }
+
+        private static string ExecuteQueryClanFiefs(string clanName)
+        {
+            if (string.IsNullOrEmpty(clanName))
+                return "[错误] 请提供家族名称";
+
+            Clan? targetClan = null;
+            foreach (var clan in Clan.All)
+            {
+                var cName = clan.Name?.ToString() ?? "";
+                if (cName.Contains(clanName) || clanName.Contains(cName))
+                {
+                    targetClan = clan;
+                    break;
+                }
+            }
+            if (targetClan == null)
+                return "[未找到] 名为 \"" + clanName + "\" 的家族";
+
+            var sb = new StringBuilder();
+            sb.AppendLine("===== " + targetClan.Name + " 的封地 =====");
+            sb.AppendLine("族长：" + (targetClan.Leader?.Name?.ToString() ?? "?"));
+            if (targetClan.Kingdom != null)
+                sb.AppendLine("所属王国：" + targetClan.Kingdom.Name);
+
+            var towns = new List<string>();
+            var castles = new List<string>();
+
+            foreach (var s in Settlement.All)
+            {
+                if (s.OwnerClan != targetClan) continue;
+                if (s.IsTown)
+                    towns.Add(s.Name?.ToString() ?? "?");
+                else if (s.IsCastle)
+                    castles.Add(s.Name?.ToString() ?? "?");
+            }
+
+            var total = towns.Count + castles.Count;
+            sb.AppendLine("总计：" + total + " 处");
+            sb.AppendLine("城镇（" + towns.Count + "座）：");
+            if (towns.Count == 0) sb.AppendLine("  （无）");
+            else foreach (var t in towns) sb.AppendLine("  " + t);
+            sb.AppendLine("城堡（" + castles.Count + "座）：");
+            if (castles.Count == 0) sb.AppendLine("  （无）");
+            else foreach (var c in castles) sb.AppendLine("  " + c);
+
+            return sb.ToString().TrimEnd();
         }
 
         private static string ExecuteQueryKingdomClans(string kingdomName)
@@ -806,8 +978,29 @@ namespace MyFirstMod
                 var msgLine = pContent.Split('\n')
                     .FirstOrDefault(l => l.StartsWith("message="))?.Substring(8);
 
+                var tributeLine = pContent.Split('\n')
+                    .FirstOrDefault(l => l.StartsWith("tribute="));
+
                 sb.AppendLine($"{i + 1}. [{typeName}] 来自 {proposerName}（{proposerId}）");
                 sb.AppendLine($"   ID: {p}");
+
+                if (tributeLine != null && type == "peace")
+                {
+                    var tributeData = tributeLine.Substring(8); // "500_30"
+                    var parts = tributeData.Split('_');
+                    if (parts.Length == 2
+                        && int.TryParse(parts[0], out var tAmount)
+                        && int.TryParse(parts[1], out var tDays))
+                    {
+                        var tributeDesc = tAmount > 0
+                            ? $"对方愿每日付 {tAmount} 金币 × {tDays} 天"
+                            : tAmount < 0
+                                ? $"对方要求每日付 {Math.Abs(tAmount)} 金币 × {tDays} 天"
+                                : "无赔款";
+                        sb.AppendLine($"   赔款：{tributeDesc}");
+                    }
+                }
+
                 if (!string.IsNullOrEmpty(msgLine))
                     sb.AppendLine($"   附言：\"{msgLine}\"");
                 sb.AppendLine();
@@ -1919,12 +2112,45 @@ namespace MyFirstMod
         private static Settlement? FindSettlement(string name)
         {
             if (string.IsNullOrEmpty(name)) return null;
+            var trimmed = name.Trim();
+            var lower = trimmed.ToLowerInvariant();
+
             foreach (var s in Settlement.All)
             {
                 var sName = s.Name?.ToString() ?? "";
-                if (sName.Contains(name) || name.Contains(sName))
+                if (sName.Trim().Equals(trimmed, StringComparison.OrdinalIgnoreCase))
                     return s;
             }
+
+            var candidates = new List<Settlement>();
+            foreach (var s in Settlement.All)
+            {
+                var sName = s.Name?.ToString() ?? "";
+                if (sName.Contains(trimmed) || trimmed.Contains(sName))
+                    candidates.Add(s);
+            }
+
+            if (candidates.Count > 0)
+            {
+                var fort = candidates.FirstOrDefault(c => c.IsTown || c.IsCastle);
+                if (fort != null) return fort;
+                return candidates[0];
+            }
+
+            foreach (var s in Settlement.All)
+            {
+                var sName = (s.Name?.ToString() ?? "").ToLowerInvariant();
+                if (sName.Contains(lower) || lower.Contains(sName))
+                    candidates.Add(s);
+            }
+
+            if (candidates.Count > 0)
+            {
+                var fort = candidates.FirstOrDefault(c => c.IsTown || c.IsCastle);
+                if (fort != null) return fort;
+                return candidates[0];
+            }
+
             return null;
         }
 

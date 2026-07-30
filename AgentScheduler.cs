@@ -126,18 +126,16 @@ namespace MyFirstMod
                     : "";
 
                 var activationMsg =
-                    $"你是{kingdom.Name}的至高统治者。现在审视你的王国外交局势。\n\n"
-                    + $"步骤1：调用 query_pending_proposals 查看是否有待处理的提案，有则用 respond_to_diplomacy_proposal 逐个处理\n"
-                    + $"步骤2：调用 query_war_status 查看战争状况\n"
+                    $"你是{kingdom.Name}的至高统治者。审视你的王国局势，凭自己的判断做出外交决断。\n\n"
+                    + $"步骤1：调用 query_pending_proposals 查看是否有待处理的提案，有则用 respond_to_diplomacy_proposal 逐一处理\n"
+                    + $"步骤2：调用 query_war_status 了解当前所有战争的战况\n"
                     + proposalLines
-                    + $"\n然后执行外交决策：\n"
-                    + "- 对于不利的战争 → propose_peace（提出议和条件）\n"
-                    + "- 对于有利的战争 → 继续，或 propose_peace 趁胜谈判\n"
-                    + "- 需要盟友 → propose_alliance（只能向中立王国提议）\n"
-                    + "- 发现战略良机 → declare_war（宣战）\n"
-                    + "- 加强经济 → propose_trade（贸易协定）\n\n"
-                    + "你的决策必须基于实数据。不要幻想、不要虚构。\n"
-                    + "不要用 send_letter 处理外交，外交方案只用上述 function 发起。";
+                    + $"\n然后依据你自己的判断采取行动——以下是你可用的外交工具：\n"
+                    + "- propose_peace：结束一场战争（可附带赔款条件）\n"
+                    + "- propose_alliance：与中立王国结盟\n"
+                    + "- propose_trade：与中立王国签订贸易协定\n"
+                    + "- declare_war：宣战\n\n"
+                    + "不要幻想或虚构数据。不要用 send_letter 处理外交，外交方案只用上述 function 发起。";
 
                 QueueEvent(new ActivationEvent
                 {
