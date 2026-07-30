@@ -18,6 +18,9 @@ namespace MyFirstMod
         private string? _historyDir;
         private readonly HashSet<Settlement> _recentSiegeCaptures = new();
         private readonly Dictionary<Settlement, (int Attackers, int Defenders)> _siegeStartTroops = new();
+        private List<string>? _serializedSiegeIds;
+        private List<int>? _serializedSiegeAttackers;
+        private List<int>? _serializedSiegeDefenders;
 
         public override void RegisterEvents()
         {
@@ -102,6 +105,41 @@ namespace MyFirstMod
 
         public override void SyncData(IDataStore dataStore)
         {
+            if (dataStore.SyncData("mfm_siege_ids", ref _serializedSiegeIds)
+                && dataStore.SyncData("mfm_siege_attackers", ref _serializedSiegeAttackers)
+                && dataStore.SyncData("mfm_siege_defenders", ref _serializedSiegeDefenders))
+            {
+                _siegeStartTroops.Clear();
+                if (_serializedSiegeIds != null && _serializedSiegeAttackers != null && _serializedSiegeDefenders != null)
+                {
+                    for (int i = 0; i < _serializedSiegeIds.Count
+                        && i < _serializedSiegeAttackers.Count
+                        && i < _serializedSiegeDefenders.Count; i++)
+                    {
+                        var id = _serializedSiegeIds[i];
+                        if (string.IsNullOrEmpty(id)) continue;
+                        foreach (var s in Settlement.All)
+                        {
+                            if (s.StringId == id)
+                            {
+                                _siegeStartTroops[s] = (_serializedSiegeAttackers[i], _serializedSiegeDefenders[i]);
+                                break;
+                            }
+                        }
+                    }
+                }
+                return;
+            }
+
+            _serializedSiegeIds = new List<string>();
+            _serializedSiegeAttackers = new List<int>();
+            _serializedSiegeDefenders = new List<int>();
+            foreach (var kv in _siegeStartTroops)
+            {
+                _serializedSiegeIds.Add(kv.Key.StringId);
+                _serializedSiegeAttackers.Add(kv.Value.Attackers);
+                _serializedSiegeDefenders.Add(kv.Value.Defenders);
+            }
         }
 
         private string GetHistoryDir()
@@ -200,7 +238,10 @@ namespace MyFirstMod
             defenders += settlement.MilitiaPartyComponent?.MobileParty?.MemberRoster?.TotalHealthyCount ?? 0;
 
             _siegeStartTroops[settlement] = (attackers, defenders);
-            RecordEvent("siege_started", $"{attackerKingdom}的{attackerLeader}率{attackers}人围攻{settlement.Name}，守军{defenders}人");
+            if (attackers > 0)
+                RecordEvent("siege_started", $"{attackerKingdom}的{attackerLeader}率{attackers}人围攻{settlement.Name}，守军{defenders}人");
+            else
+                RecordEvent("siege_started", $"{attackerKingdom}的{attackerLeader}围攻{settlement.Name}");
         }
 
         private void OnSiegeCompleted(Settlement settlement, MobileParty attackerParty, bool isWin, MapEvent.BattleTypes battleType)
@@ -221,7 +262,9 @@ namespace MyFirstMod
 
             if (isWin)
             {
-                var summary = $"{attackerKingdom}的{attackerLeader}率{attackers}人攻克{settlement.Name}，守军{defenders}人";
+                var summary = attackers > 0
+                    ? $"{attackerKingdom}的{attackerLeader}率{attackers}人攻克{settlement.Name}，守军{defenders}人"
+                    : $"{attackerKingdom}的{attackerLeader}攻克{settlement.Name}";
                 _recentSiegeCaptures.Add(settlement);
                 RecordEvent("settlement_captured", summary);
             }
