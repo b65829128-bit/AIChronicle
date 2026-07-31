@@ -118,7 +118,10 @@ namespace MyFirstMod
                     case "grep":
                         var gpattern = args["pattern"]?.ToString() ?? "";
                         var gpath = args["path"]?.ToString() ?? "";
-                        return AgentManager.ExecuteGrep(gpattern, gpath);
+                        var gmax = args["max_results"]?.ToObject<int>() ?? 20;
+                        var gctx = args["context_lines"]?.ToObject<int>() ?? 2;
+                        var gcs = args["case_sensitive"]?.ToObject<bool>() ?? false;
+                        return AgentManager.ExecuteGrep(gpattern, gpath, gmax, gctx, gcs);
 
                     case "list_dir":
                         var lpath = args["path"]?.ToString() ?? "";

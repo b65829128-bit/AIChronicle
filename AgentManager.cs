@@ -468,13 +468,18 @@ namespace MyFirstMod
             return "已写入。";
         }
 
-        public static string ExecuteGrep(string pattern, string path)
+        public static string ExecuteGrep(string pattern, string path, int maxResults, int contextLines, bool caseSensitive)
         {
             if (string.IsNullOrEmpty(pattern))
                 return "[错误] 搜索模式不能为空";
+            if (maxResults <= 0 || maxResults > 100)
+                maxResults = 20;
+            if (contextLines < 0 || contextLines > 10)
+                contextLines = 2;
 
+            var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
             var results = new StringBuilder();
-            var comparison = StringComparison.OrdinalIgnoreCase;
+            int matchCount = 0;
 
             if (path == "World")
             {
@@ -482,7 +487,8 @@ namespace MyFirstMod
                 if (Directory.Exists(worldDir))
                 {
                     foreach (var file in Directory.GetFiles(worldDir, "*.txt", SearchOption.AllDirectories))
-                        SearchFile(file, worldDir, "World", pattern, comparison, results);
+                        if (SearchFile(file, worldDir, "World", pattern, comparison, contextLines, maxResults, ref matchCount, results))
+                            break;
                 }
             }
             else
@@ -497,11 +503,12 @@ namespace MyFirstMod
                 if (Directory.Exists(searchDir))
                 {
                     foreach (var file in Directory.GetFiles(searchDir, "*.*", SearchOption.AllDirectories))
-                        SearchFile(file, _agentDir, "", pattern, comparison, results);
+                        if (SearchFile(file, _agentDir, "", pattern, comparison, contextLines, maxResults, ref matchCount, results))
+                            break;
                 }
                 else if (File.Exists(searchDir))
                 {
-                    SearchFile(searchDir, _agentDir, "", pattern, comparison, results);
+                    SearchFile(searchDir, _agentDir, "", pattern, comparison, contextLines, maxResults, ref matchCount, results);
                 }
                 else
                 {
@@ -512,21 +519,43 @@ namespace MyFirstMod
             if (results.Length == 0)
                 return "(无匹配结果)";
 
-            return results.ToString().TrimEnd();
+            var output = results.ToString().TrimEnd();
+            if (matchCount >= maxResults)
+                output += $"\n…（匹配较多，已显示前 {maxResults} 处；可用更精确的关键词或指定目录缩小范围）";
+            return output;
         }
 
-        private static void SearchFile(string filePath, string baseDir, string prefix, string pattern, StringComparison comparison, StringBuilder results)
+        /// <summary>
+        /// 搜索单个文件，返回匹配行及其上下文（contextLines 前后 N 行）。匹配行用 ▶ 标记。
+        /// 达到 maxResults 时返回 true，让外层停止继续搜索。相邻匹配的上下文块去重。
+        /// </summary>
+        private static bool SearchFile(string filePath, string baseDir, string prefix, string pattern, StringComparison comparison, int contextLines, int maxResults, ref int matchCount, StringBuilder results)
         {
             var relPath = filePath.Substring(baseDir.Length).TrimStart('/', '\\').Replace('\\', '/').TrimStart('/');
             if (!string.IsNullOrEmpty(prefix))
                 relPath = prefix + "/" + relPath;
 
             var lines = SafeFileIO.ReadAllLines(filePath);
+            int lastShown = -1;
+
             for (int i = 0; i < lines.Length; i++)
             {
-                if (lines[i].IndexOf(pattern, comparison) >= 0)
-                    results.AppendLine(relPath + ":" + (i + 1) + ": " + lines[i].Trim());
+                if (lines[i].IndexOf(pattern, comparison) < 0) continue;
+
+                matchCount++;
+                var start = Math.Max(0, i - contextLines);
+                var end = Math.Min(lines.Length - 1, i + contextLines);
+                for (int j = Math.Max(start, lastShown + 1); j <= end; j++)
+                {
+                    var marker = j == i ? "▶ " : "  ";
+                    results.AppendLine($"{relPath}:{j + 1}: {marker}{lines[j].Trim()}");
+                }
+                lastShown = Math.Max(lastShown, end);
+
+                if (matchCount >= maxResults)
+                    return true;
             }
+            return false;
         }
 
         private static readonly HashSet<string> _immutableFiles = new()

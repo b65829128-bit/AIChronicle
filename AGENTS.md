@@ -272,6 +272,8 @@ C:\Users\yangui\BLMods\MyFirstMod\
 
 部署后自动复制到：`D:\...\Modules\MyFirstMod\bin\Win64_Shipping_Client\MyFirstMod.dll`
 
+> ⚠️ **`_Module/` 目录（含 `Prompts/`、`GUI/`、`SubModule.xml`）也在 build 时由 Bannerlord.BuildResources 拷到游戏 Modules。纯提示词改动也必须 build 才生效**——只改项目里的 `.txt`/`.json` 不 build，游戏里一直是旧版。战役副本（`Campaigns/{战役}/`）在下次进档时按 newer-wins 同步覆盖。
+
 ## 开发工作流
 
 ### 每次修改代码后
