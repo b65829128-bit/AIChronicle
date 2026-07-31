@@ -1591,6 +1591,8 @@ namespace MyFirstMod
             var kingdom = hero.MapFaction as Kingdom;
             if (kingdom == null)
                 return "[错误] 你不属于任何王国，无法进谏";
+            if (hero.Clan?.IsUnderMercenaryService == true)
+                return "[错误] 雇佣兵无权进谏";
 
             var kingdomName = kingdom.Name.ToString();
             var currentYear = CampaignTime.Now.GetYear;
