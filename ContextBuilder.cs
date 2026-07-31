@@ -357,7 +357,7 @@ namespace MyFirstMod
                     + "- 没有待处理提案且你不想采取新行动时，可以说「暂无需要处理的外交事务」\n"
                     + "- 不要虚构数据——所有统计来自 query_war_status 的返回值\n"
                     + "- 你是国王，你的决断就是王国的决断，不需要征求任何人同意\n"
-                    + "- 绝对不要用 send_letter 处理外交事务。send_letter 只能用于私人通信。外交提案只能用 propose_peace / propose_alliance / propose_trade / declare_war / respond_to_diplomacy_proposal；盟约/贸易可单方面终止（end_alliance / end_trade_agreement）";
+                    + "- send_letter 不能替代外交动作——宣战/议和/结盟/贸易必须用对应 function；但可写信通知、沟通、试探他人（通信而非外交动作）";
 
             var lastWrite = File.GetLastWriteTimeUtc(path);
             if (_cachedDiplomacyRules == "" || lastWrite > _lastDiplomacyRulesCheck)

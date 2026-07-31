@@ -80,7 +80,7 @@ namespace MyFirstMod
         {
             "conversation" => new[] { "universal", "query", "social", "file" },
             "letter" => new[] { "universal", "query", "file", "communication", "movement", "military", "diplomacy" },
-            "diplomacy" => new[] { "universal", "query", "diplomacy" },
+            "diplomacy" => new[] { "universal", "query", "diplomacy", "communication" },
             "historian" => new[] { "universal", "query", "file" },
             "advisory" => new[] { "universal", "query", "file", "communication" },
             "fief_review" => new[] { "universal", "query", "file", "communication", "diplomacy" },

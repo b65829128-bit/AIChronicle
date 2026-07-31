@@ -301,7 +301,7 @@ namespace MyFirstMod
                     + "- propose_alliance：与中立王国结盟\n"
                     + "- propose_trade：与中立王国签订贸易协定\n"
                     + "- declare_war：宣战\n\n"
-                    + "不要幻想或虚构数据。不要用 send_letter 处理外交，外交方案只用上述 function 发起。";
+                    + "不要幻想或虚构数据。send_letter 不能替代外交动作（宣战/议和/结盟必须用对应 function），但可用 send_letter 写信通知、沟通、试探他人。";
 
                 QueueEvent(new ActivationEvent
                 {
