@@ -180,6 +180,16 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 此约定适用于 `context_template.txt`、`agent_system.txt` 以及所有新增的工具返回格式。
 
+### 提示词克制原则（模糊化，最核心的提示词设计原则）
+
+提示词**只引导、不规定**——让 LLM 自行判断，保持涌现与多元。写任何提示词时对照以下几条：
+
+- **不列举具体场景/类别清单**：会框死 LLM 的判断，让行为模板化。例如秘密谏言说明不写「私议王上、密报、密约」，而写「你认为不适合被历史记录或旁人知晓的事」
+- **用开放性表述**：「若你觉得…」「是否如此由你的性格与处境决定」，而非「必须/应当/禁止」的强制清单
+- **个人立场不强制度**：天命信仰、名分、谏言批判等，由人格与处境自然涌现，不写成统一规则（为此 persona 维度用随机掷定而非 LLM 自定，见 AgentManager 天命信仰）
+- **不注入上下文**：能靠提示词提醒 LLM 调用工具（如读写 diary、检索），就不要注入内容——注入会温水煮青蛙式稀释所有提示。这条有先例教训：别的 AI 模组因持续注入而系统崩坏
+- **度**：提示词给方向但不给答案。玩家可编辑的提示词默认按此原则起草
+
 ---
 
 ## 环境概况
@@ -657,6 +667,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 - 历史（H 键）可读本国公开谏言；史官 `_readableWorldDirs` 含 `"advisory"` 可读取
 - **玩家谏言**：秘书处（M 键）的 chancery 提示词引导使用 `submit_advisory`（玩家封臣/国王均可，雇佣兵被工具拒绝）——玩家谏言与 AI 谏言同一归档，可被史官写入编年史
 - **史官联动**：`historian_rules.txt` 和 `yearly_chronicle_prompt.txt` 引导史官可选读 `advisory/` 作为补充视角（补充事实背后的观点和史料未载细节）；原始史料仍为权威，引用须注明"某封臣当时的谏言"
+- **秘密谏言（不入史册）**：`submit_secret_advisory` 密陈给国王，写 `World/secret_advisory/{王国}_{年}.txt`，**史官无权读取**（`IsSecretAdvisoryAllowed` 仅本国王可读本国密陈）。公开谏言进史、密陈只呈国王，封臣可公开一套、私下另一套。提示词按克制原则模糊化：「你认为不适合被历史记录或旁人知晓的事」
 
 ### 内政审视与封地政治（配套制度）
 
@@ -754,7 +765,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | dotnet CLI | `dotnet` | 编译、创建新项目 |
 | Rider | `C:\Program Files\JetBrains\JetBrains Rider 2026.2\bin\rider64.exe` | IDE |
 
-### 游戏工具（tools.json，43 个）
+### 游戏工具（tools.json，45 个）
 
 | 工具 | 类别 | 说明 |
 |------|------|------|
@@ -800,7 +811,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | `request_items` | 社交 | 向任意人物索要物品（NPC 直接划转，玩家弹确认框） |
 | `let_go` | 社交 | 遭遇战中放走玩家（仅当己方兵力占优时可用，含冷却期） |
 
-### 文件工具（agent_tools.json，11 个）
+### 文件工具（agent_tools.json，12 个）
 
 | 工具 | 说明 |
 |------|------|
@@ -812,9 +823,10 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | `move_file` | 移动/重命名文件（如标记计划完成） |
 | `list_dir` | 列出目录内容 |
 | `glob` | 按文件名模式匹配（如 `knowledge/*.txt`） |
-| `grep` | 按关键词搜索文件内容 |
+| `grep` | 按关键词搜索文件内容（支持 max_results 上限、context_lines 上下文、case_sensitive） |
 | `send_letter` | 给其他 Entity 写信 |
-| `submit_advisory` | 向国王提交公开谏言（封臣谏言专用，系统自动归档） |
+| `submit_advisory` | 向国王提交公开谏言（封臣谏言专用，系统自动归档，史官可读） |
+| `submit_secret_advisory` | 向国王密陈秘密谏言（不入史册，仅本国王可读） |
 
 ## 故障排查
 
