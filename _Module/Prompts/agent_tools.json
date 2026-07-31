@@ -165,7 +165,7 @@
   {
     "name": "send_letter",
     "category": "communication",
-    "description": "Send a written letter to another entity. The letter will be delivered to their mailbox.\n\nUsage:\n- Call this when you need to communicate with someone who is not present — you are writing a letter, not speaking in person.\n- The recipient will see your letter and may reply later.\n- The content should be the full body of your letter, written in formal written style.",
+    "description": "Send a written letter to another entity. It will be delivered to their mailbox and they will be activated to respond — every letter costs real effort.\n\nUsage:\n- ONLY write when it is genuinely important: a vital notification, a necessary negotiation, an urgent warning, or a commitment that must be put in writing.\n- Do not write casually or out of politeness. If silence is acceptable, stay silent — unnecessary letters waste the recipient's effort and yours.\n- When you do write, make it count: clear, purposeful, complete in one letter.\n- The content should be the full body of your letter, written in formal written style.",
     "parameters": [
       {
         "name": "recipient_entity_id",
