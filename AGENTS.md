@@ -235,6 +235,7 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │       ├── agent_tools.json   ← Agent 文件工具定义（热重载）
 │       ├── persona_generation.txt ← NPC性格生成提示词（玩家可编辑，热重载）
 │       ├── advisory_rules.txt  ← 封臣谏言规则（热重载）
+│       ├── fief_review_rules.txt ← 封地审视规则（被夺方激活，热重载）
 │       ├── Templates/         ← NPC 目录模板
 │       │   ├── context_template.txt ← Context 模板
 │       └── Campaigns/         ← 各战役目录（运行时创建）
@@ -247,7 +248,7 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │               └── NPCs/          ← Agent 管理的 NPC 文件系统
 │                   └── {entity_id}/                 ← {Name}_{StringId}（如 博泰罗_CharacterObject_1664）
 │                       ├── persona.txt   ← [MOTIVATION]/[TRAITS]/[SPEECH_STYLE]
-│                       ├── persona_meta.json ← 自定义人格维度（权力欲/归属重心/冒险倾向）
+│                       ├── persona_meta.json ← 自定义人格维度（权力欲/归属重心/冒险倾向/天命信仰）
 │                       ├── knowledge/
 │                       ├── chat_logs/
 │                       ├── mailbox/
@@ -610,16 +611,17 @@ OnApplicationTick → AgentScheduler.Tick() → 若并发槽未满 → 取最高
 | P | 事件类型 | 说明 |
 |---|---------|------|
 | 0 | YearlyChronicle / SpecialChronicle（史官） | 最高，**永不跳过**（生成不受队列门槛限制，永远先出队） |
-| 1 | KingDiplomacy（国王外交/提案） | 高优先，外交提案不积压 |
+| 1 | KingDiplomacy（国王内外政务/提案） | 高优先，外交提案不积压；现同时处理内政（封地分配） |
 | 2 | LetterReceived | 中 |
-| 3 | BehaviorCheckIn / PlanCheckIn（签到） | 低 |
+| 3 | BehaviorCheckIn / PlanCheckIn / FiefReview（签到/封地审视） | 低 |
 | 4 | Advisory（概率激活的谏言） | 最低，只在无更高优先工作时处理 |
 
 - 并发安全：每任务上下文（`CurrentHero`/agent/深度等）经 `AsyncLocal` 隔离，工具仍统一回主线程串行执行
 - `ActivationEvent.Depth` 控制级联深度（`AsyncLocal` 按任务隔离，MCM 可调默认 5）
-- 支持事件类型：`LetterReceived`（来信）、`BehaviorCheckIn`（签到）、`KingDiplomacy`（国王外交）、`PlanCheckIn`（计划）、`YearlyChronicle`/`SpecialChronicle`（史官）、`Advisory`（谏言）
+- 支持事件类型：`LetterReceived`（来信）、`BehaviorCheckIn`（签到）、`KingDiplomacy`（国王内外政务）、`PlanCheckIn`（计划）、`YearlyChronicle`/`SpecialChronicle`（史官）、`Advisory`（谏言）、`FiefReview`（封地审视，被夺方激活触发内政矛盾）
+- **检查站冷却**：签到类激活（BehaviorCheckIn/PlanCheckIn）每 agent 至少间隔 **15 真实分钟**（`PartyBehaviorManager._lastCheckInByAgent`，用真实时间而非游戏时间——游戏时间加速时游戏小时冷却无效）。防止「move/wait 到达→立刻签到→再发指令」的 token 死循环
 - 被俘/逃亡的国王统治者现在也会被激活（仅跳过已死亡和 null 的），`BuildSelfStatus` 中会提示"你仍是王国统治者"
-- 玩家可见：左下角弹 `xxx 给 xxx 写了一封信` / `xxx 正在思考下一步行动...` / `xxx 正在处理外交事务...`
+- 玩家可见：左下角弹 `xxx 给 xxx 写了一封信` / `xxx 正在思考下一步行动...` / `xxx 正在处理内外政务...` / `xxx 发现自己被夺封了...`
 - 防递归：书信规则强调"除非必要不回信" + 深度硬上限
 - 聊天记录使用显式路径（`GetChatLogPathFor`）防线程竞态
 - **信件记忆连续性**：信件处理（`ProcessEvent`）会先 `LoadChatLogFor` 注入双方此前聊天记录，再追加信件内容——对方能记得过去见过面/聊过什么（原实现只给信件文本，导致跨信"不认得你"）
@@ -627,7 +629,7 @@ OnApplicationTick → AgentScheduler.Tick() → 若并发槽未满 → 取最高
 
 ### 封臣谏言机制（AgentScheduler）
 
-封臣谏言是"流式、单次激活"的内部政治压力系统，替代了早期的同步"封臣大会"（因 48 人批量 LLM 会卡死事件队列而废弃）：
+封臣谏言是"流式、单次激活"的内部政治压力系统，替代了早期的同步"封臣大会"（当时因 48 人批量 LLM 同步激活会卡死事件队列而废弃）。**该限制已随 v1.2.0 并发架构解除**：现在批量后台事件只是排队按 `MaxAgentConcurrency`（默认 5）并发槽位消化，不再卡死队列；新增后台 Agent 事件（记忆巩固、请封、夺权等）可直接排入 AgentScheduler，用优先级和 token 预算约束频度：
 
 ```
 Tick 无事件时 → CheckAdvisoryActivations()
@@ -649,10 +651,20 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 - 私人笔记 `decisions/personal_notes.txt` 非强制；若 LLM 写成了别的文件名，`ProcessAdvisory` 会强制合并归位
 - 国王外交激活（`KingDiplomacy`）的提示词自动注入"先 read_file World/advisory/ 了解封臣谏言"，但国王决策权不受限
 - 事件队列积压 >3 时暂停生成新的国王外交/封臣谏言，先消化积压（Tick 中 `PendingEventCount() <= 3` 门槛）
-- **token 截断重试**：`SendMessage` 捕获 `finish_reason`（`"length"`=被 `max_tokens` 截断）。谏言若被截断且未提交 → 自动重试一次（更坚决的提示直接进谏）；主动沉默（`finish_reason="stop"`）不重试。MCM「最大 Token 数」默认 8192（后端单轮上限），基本不会截断——勿调低，思考模型 + 工具循环需要大量输出 token
+- **token 截断重试**：`SendMessage` 捕获 `finish_reason`（`"length"`=被 `max_tokens` 截断）。谏言/史官若被截断且未提交/未落盘 → 自动重试一次（更坚决的提示直接进谏/直接 write_file）；主动沉默（`finish_reason="stop"`）不重试。MCM「最大 Token 数」上限 65536、默认 32768（DeepSeek V4 最高支持 384K 输出，旧 8192 上限已过时），史官长编年史亦不易截断
 - 历史（H 键）可读本国公开谏言；史官 `_readableWorldDirs` 含 `"advisory"` 可读取
 - **玩家谏言**：秘书处（M 键）的 chancery 提示词引导使用 `submit_advisory`（玩家封臣/国王均可，雇佣兵被工具拒绝）——玩家谏言与 AI 谏言同一归档，可被史官写入编年史
 - **史官联动**：`historian_rules.txt` 和 `yearly_chronicle_prompt.txt` 引导史官可选读 `advisory/` 作为补充视角（补充事实背后的观点和史料未载细节）；原始史料仍为权威，引用须注明"某封臣当时的谏言"
+
+### 内政审视与封地政治（配套制度）
+
+国王外交审视升级为**内外政务**——先内政后外交，内政缺地会自然驱动战争（内部驱动外部）：
+
+- **ContextBuilder**：`intent="diplomacy"` 且为统治者时，自动注入 `BuildCourtReport`（内政审视报告：封地账本 + 治理[`Town.Prosperity`/`Town.Loyalty`] + 近期战功）
+- **HistoryRecorder**：`RecordMerit` 写 `World/court/{王国}_merit.txt`（围攻/攻克/失利，真实事件记录），供内政审视读取
+- **diplomacy_rules.txt**：明示国王内外政务、赐地/夺封职权、夺封须师出有名（`gift_fief` 可附 `reason`）
+- **被夺方激活（FiefReview）**：`DiplomacyService.ExecuteTransferFief` 转让封地后，若原主（非国王本人）被夺封 → `AgentScheduler.QueueFiefReview` 激活原主审视处境（可写信/上表/转投他国，`intent="fief_review"` 分类含 diplomacy）。矛盾来自「失去的人」，得利方不激活
+- **军情迷雾**：`query_party_troops` 自己/同阵营全量精确；异国按距离与可达性分近距/远距/传闻三档（`GetIntelRadii` 按地图尺度相对锚），跨海不可达降为传闻——打破「完美信息→和平均衡」
 
 ### 历史系统（HistoryRecorder + 史官 Agent）
 
@@ -772,7 +784,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | `respond_to_diplomacy_proposal` | 外交 | 接受或拒绝收到的外交提案（国王专属） |
 | `gift_fief` | 外交 | 国王敕令将封地直接转让给指定封臣家族领袖（国王专属，不经过选举） |
 | `cancel_action` | 控制 | 取消当前任务，回归自主 AI |
-| `query_party_troops` | 查询 | 查看部队详情（金币/兵力/各兵种经验升级路径/俘虏/物品栏/装备栏） |
+| `query_party_troops` | 查询 | 查看部队详情（自己/同阵营全量：金币/兵力/各兵种经验升级路径/俘虏/物品/装备；异国仅侦察估计：按距离与可达性分近距/远距/传闻三档，不泄露军饷/经验/装备等机密） |
 | `query_available_troops` | 查询 | 查看当前定居点可招募兵种（需在定居点内） |
 | `query_settlement_villages` | 查询 | 查看城镇/城堡的附属村庄列表 |
 | `query_hero_skills` | 查询 | 查询人物 18 个技能等级和 6 个属性值 |

@@ -6,6 +6,7 @@ using System.Text;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
 using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
 
 namespace MyFirstMod
 {
@@ -129,11 +130,23 @@ namespace MyFirstMod
                 "chancery" => BuildChanceryRules(),
                 "historian" => BuildHistorianRules(),
                 "advisory" => BuildAdvisoryRules(),
+                "fief_review" => BuildFiefReviewRules(),
                 "chat" => BuildChatRules(),
                 _ => BuildConversationRules()
             };
 
             var kingdomName = (agent.HeroRef?.MapFaction as Kingdom)?.Name?.ToString() ?? "?";
+
+            // 配套制度：国王外交审视升级为内外政务——注入内政审视报告（封地账本/治理/战功），
+            // 让国王基于真实数据自行判断是否调整封地（包括夺封，需师出有名）。
+            if (intent == "diplomacy" && agent.HeroRef != null
+                && agent.HeroRef.MapFaction is Kingdom rulerKingdom
+                && rulerKingdom.RulingClan?.Leader == agent.HeroRef)
+            {
+                var courtReport = BuildCourtReport(agent.HeroRef);
+                if (!string.IsNullOrEmpty(courtReport))
+                    intentRules += "\n\n" + courtReport;
+            }
 
             var template = LoadContextTemplate();
             return template
@@ -323,6 +336,8 @@ namespace MyFirstMod
 
         private static string _cachedAdvisoryRules = "";
         private static DateTime _lastAdvisoryRulesCheck;
+        private static string _cachedFiefReviewRules = "";
+        private static DateTime _lastFiefReviewRulesCheck;
 
         private static string BuildDiplomacyRules()
         {
@@ -430,6 +445,16 @@ namespace MyFirstMod
                 + "请审视王国当前的局势，写下你的公开谏言。\n"
                 + "你的谏言将被国王和史官看到。\n"
                 + "私人想法和隐秘计划请写入私有文件。";
+        }
+
+        private static string BuildFiefReviewRules()
+        {
+            return LoadRulesFile("fief_review_rules.txt", ref _cachedFiefReviewRules, ref _lastFiefReviewRulesCheck)
+                ?? "你就是{name}，{title}。审视你此刻的处境与心情（上文是关于你封地的消息）。\n\n"
+                + "规则：\n"
+                + "- 你可以：写信给国王或他人交涉（send_letter）、上表陈情（submit_advisory）、或用 write_file/append_file 记录内心想法\n"
+                + "- 若你动了去意，你是氏族领袖，可考虑转投他国（change_kingdom）——是否如此由你的性格与处境决定\n"
+                + "- 出于真心还是另有谋划，都是你自己的事，按你的为人行事";
         }
 
         private static string BuildChatRules()
@@ -652,6 +677,65 @@ namespace MyFirstMod
                 "【行为守则】\n" +
                 "==============================\n{intent_rules}\n\n" +
                 "==============================\n【对话开始】\n==============================\n";
+        }
+
+        /// <summary>
+        /// 国王内政审视报告：封地账本 + 治理（繁荣/忠诚）+ 近期战功。
+        /// 全部来自真实游戏数据——让国王的封地决策（赐地/夺封/无视）是涌现判断而非脚本。
+        /// </summary>
+        private static string BuildCourtReport(Hero king)
+        {
+            var kingdom = king.MapFaction as Kingdom;
+            if (kingdom == null) return "";
+            var kingdomName = kingdom.Name?.ToString() ?? "?";
+
+            var sb = new StringBuilder();
+            sb.AppendLine("===== 内政审视：封地分配 =====");
+
+            foreach (var clan in Clan.All.Where(c => c.Kingdom == kingdom && !c.IsUnderMercenaryService))
+            {
+                var clanName = clan.Name?.ToString() ?? "?";
+                var fiefs = new List<string>();
+                var governance = new List<string>();
+                foreach (var s in Settlement.All)
+                {
+                    if (!s.IsTown && !s.IsCastle) continue;
+                    if (s.OwnerClan != clan) continue;
+                    fiefs.Add((s.IsTown ? "城" : "堡") + (s.Name?.ToString() ?? "?"));
+                    if (s.IsTown && s.Town != null)
+                    {
+                        var g = $"{s.Name}繁荣{s.Town.Prosperity.ToString("F0")}";
+                        try { g += $" 忠诚{s.Town.Loyalty.ToString("F0")}"; } catch { }
+                        governance.Add(g);
+                    }
+                }
+                sb.AppendLine($"{clanName}：{(fiefs.Count == 0 ? "无封地" : string.Join("、", fiefs))}");
+                foreach (var g in governance)
+                    sb.AppendLine($"  {g}");
+            }
+
+            sb.AppendLine("===== 近期战功（本王国名号） =====");
+            sb.AppendLine(ReadMeritLog(kingdomName));
+
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string ReadMeritLog(string kingdomName)
+        {
+            try
+            {
+                var baseDir = PromptManager.CampaignDir;
+                if (string.IsNullOrEmpty(baseDir)) return "（暂无战功记录）";
+                var path = Path.Combine(baseDir, "NPCs", "World", "court", $"{kingdomName}_merit.txt");
+                if (!File.Exists(path)) return "（暂无战功记录）";
+                var lines = SafeFileIO.ReadAllLines(path);
+                var recent = lines.Skip(Math.Max(0, lines.Length - 15)).ToArray();
+                return recent.Length == 0 ? "（暂无战功记录）" : string.Join("\n", recent);
+            }
+            catch
+            {
+                return "（战功记录读取失败）";
+            }
         }
     }
 }

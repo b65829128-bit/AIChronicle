@@ -19,7 +19,8 @@ namespace MyFirstMod
         PlanCheckIn,
         YearlyChronicle,
         SpecialChronicle,
-        Advisory
+        Advisory,
+        FiefReview
     }
 
     public class ActivationEvent
@@ -36,7 +37,7 @@ namespace MyFirstMod
             ActivationEventType.YearlyChronicle or ActivationEventType.SpecialChronicle => 0,
             ActivationEventType.KingDiplomacy => 1,
             ActivationEventType.LetterReceived => 2,
-            ActivationEventType.BehaviorCheckIn or ActivationEventType.PlanCheckIn => 3,
+            ActivationEventType.BehaviorCheckIn or ActivationEventType.PlanCheckIn or ActivationEventType.FiefReview => 3,
             _ => 4
         };
     }
@@ -388,6 +389,20 @@ namespace MyFirstMod
             });
         }
 
+        /// <summary>封地审视激活：某家族被夺封后，队列激活其领袖审视处境并决定反应（矛盾触发点）。</summary>
+        public static void QueueFiefReview(string agentEntityId, string content)
+        {
+            if (string.IsNullOrEmpty(agentEntityId)) return;
+            QueueEvent(new ActivationEvent
+            {
+                Type = ActivationEventType.FiefReview,
+                AgentId = agentEntityId,
+                TargetId = agentEntityId, // 自省：对方是自己
+                Content = content,
+                Depth = 1
+            });
+        }
+
         /// <summary>取走并清空合并缓冲，构建史官提示词（传记 vs 专题史按首条判断）。</summary>
         private static string ConsumeSpecialChronicleContent()
         {
@@ -474,7 +489,7 @@ namespace MyFirstMod
                 else if (evt.Type == ActivationEventType.KingDiplomacy)
                 {
                     MainThreadExecutor.DisplayMessage(new InformationMessage(
-                        $"{agentName} 正在处理外交事务...",
+                        $"{agentName} 正在处理内外政务...",
                         Colors.Cyan));
                 }
                 else if (evt.Type == ActivationEventType.PlanCheckIn)
@@ -483,6 +498,12 @@ namespace MyFirstMod
                     MainThreadExecutor.DisplayMessage(new InformationMessage(
                         $"{agentName} {shortContent}，正在继续执行计划...",
                         Colors.Cyan));
+                }
+                else if (evt.Type == ActivationEventType.FiefReview)
+                {
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
+                        $"{agentName} 发现自己被夺封了...",
+                        Colors.Yellow));
                 }
                 else
                 {
@@ -540,6 +561,7 @@ namespace MyFirstMod
                     ActivationEventType.BehaviorCheckIn => "chat",
                     ActivationEventType.KingDiplomacy => "diplomacy",
                     ActivationEventType.PlanCheckIn => "chat",
+                    ActivationEventType.FiefReview => "fief_review",
                     _ => "letter"
                 };
                 var response = await AIChatClient.SendMessage(
@@ -591,6 +613,14 @@ namespace MyFirstMod
                 MainThreadExecutor.DisplayMessage(new InformationMessage(
                     $"你收到了来自 {senderEntity.Name} 的一封信。按 O 键打开信箱查看。",
                     Colors.Cyan));
+                return;
+            }
+
+            if (evt.Type == ActivationEventType.FiefReview)
+            {
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
+                    $"你的封地遭变故：{evt.Content}",
+                    Colors.Red));
                 return;
             }
         }
@@ -730,20 +760,29 @@ namespace MyFirstMod
 
                 // 修复：成功判定改为"出现新文件或文件被修改"——传记是自命名文件（不叫 chronicle_*），
                 // 原检查只找 chronicle_*.txt 会把已成功写入的传记误报为"未生成"。
-                var wroteFile = false;
-                try
+                var wroteFile = HasChronicleChanged(chronicleDir, beforeFiles, beforeTimes);
+
+                // 修复：finish_reason="length"（被 max_tokens 截断）且未落盘 → 重试一次。
+                // 史官长编年史常在思考阶段耗尽 token 被截断（Content 为空、未调 write_file），谏言已有同类重试。
+                if (!wroteFile && response.FinishReason == "length")
                 {
-                    foreach (var f in Directory.GetFiles(chronicleDir))
+                    var year = ExtractYearFromContent(evtContent);
+                    var retryHint = year > 0
+                        ? $"你上一轮思考到一半被截断，未能写成编年史。现在请调用 write_file 将编年史写入 history/chronicles/chronicle_{year}.txt，尽快成文落盘。"
+                        : "你上一轮思考到一半被截断，未能写成内容。现在请调用 write_file 将内容写入 history/chronicles/ 目录（文件名自定），尽快成文落盘。";
+                    DebugLogger.Log($"史官因 token 截断重试 eventLabel={eventLabel} year={year}");
+                    var retryPrompt = new CharacterPrompt
                     {
-                        if (!beforeFiles.Contains(f)
-                            || (beforeTimes.TryGetValue(f, out var t) && File.GetLastWriteTimeUtc(f) > t))
+                        HeroId = "__historian__",
+                        HeroName = "史官",
+                        ChatHistory = new List<ChatHistoryEntry>
                         {
-                            wroteFile = true;
-                            break;
+                            new() { Role = "user", Content = retryHint }
                         }
-                    }
+                    };
+                    response = await AIChatClient.SendMessage(retryPrompt, hero: null, includeTools: true, intent: "historian");
+                    wroteFile = HasChronicleChanged(chronicleDir, beforeFiles, beforeTimes);
                 }
-                catch { }
 
                 if (wroteFile)
                 {
@@ -785,6 +824,21 @@ namespace MyFirstMod
             if (int.TryParse(content.Substring(start, end - start), out var year))
                 return year;
             return -1;
+        }
+
+        private static bool HasChronicleChanged(string chronicleDir, HashSet<string> beforeFiles, Dictionary<string, DateTime> beforeTimes)
+        {
+            try
+            {
+                foreach (var f in Directory.GetFiles(chronicleDir))
+                {
+                    if (!beforeFiles.Contains(f)
+                        || (beforeTimes.TryGetValue(f, out var t) && File.GetLastWriteTimeUtc(f) > t))
+                        return true;
+                }
+            }
+            catch { }
+            return false;
         }
 
         // ============ 封臣谏言系统 ============

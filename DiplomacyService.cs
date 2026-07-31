@@ -195,7 +195,7 @@ namespace MyFirstMod
             return $"贸易协定提案已发送给{target.Name}的统治者{targetRuler.Name}，等待回复。";
         }
 
-        internal static string ExecuteTransferFief(string settlementName, string targetEntityId)
+        internal static string ExecuteTransferFief(string settlementName, string targetEntityId, string reason = "")
         {
             var actingHero = GetDiplomacyHero();
             if (actingHero == null) return "[错误] 只有王国统治者才能转让封地";
@@ -211,6 +211,9 @@ namespace MyFirstMod
             if (ownerClan == null) return $"[错误] {settlement.Name} 没有归属家族";
             if (ownerClan.Kingdom != myKingdom)
                 return $"[错误] {settlement.Name} 不在你的王国内";
+
+            // 被夺方（原主）在转让前捕获——转让后 OwnerClan 已变
+            var deprivedLeader = ownerClan.Leader;
 
             var targetId = EntityManager.ResolveEntityId(targetEntityId) ?? targetEntityId;
             var targetEntity = EntityManager.GetEntityById(targetId);
@@ -241,8 +244,22 @@ namespace MyFirstMod
             }
             finally { IsInProgress = false; }
 
-            InformationManager.DisplayMessage(new InformationMessage(
-                $"{actingHero.Name} 将 {settlement.Name} 从 {oldClanName} 转让给了 {newClanName}", Colors.Cyan));
+            var notice = string.IsNullOrWhiteSpace(reason)
+                ? $"{actingHero.Name} 将 {settlement.Name} 从 {oldClanName} 转让给了 {newClanName}"
+                : $"{actingHero.Name} 以「{reason}」为由，将 {settlement.Name} 从 {oldClanName} 转让给了 {newClanName}";
+            InformationManager.DisplayMessage(new InformationMessage(notice, Colors.Cyan));
+
+            // 被夺方激活：原主（非国王本人）被夺封 → 队列封地审视，激起矛盾（矛盾来源是"失去的人"）
+            if (deprivedLeader != null && deprivedLeader != actingHero)
+            {
+                var deprivedEntity = EntityManager.GetEntityByHero(deprivedLeader);
+                if (deprivedEntity != null)
+                {
+                    var reasonText = string.IsNullOrWhiteSpace(reason) ? "（国王未明示理由）" : reason;
+                    var content = $"你的封地 {settlement.Name} 被国王 {actingHero.Name} 夺走，赐予了 {newClanName}（{targetHero.Name}）。国王给出的理由是：{reasonText}";
+                    AgentScheduler.QueueFiefReview(deprivedEntity.Id, content);
+                }
+            }
 
             return $"已将{settlement.Name}从{oldClanName}（{oldLeaderName}）转让给{newClanName}（{targetHero.Name}）。";
         }

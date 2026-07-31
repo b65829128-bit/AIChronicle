@@ -366,6 +366,24 @@ namespace MyFirstMod
             }
         }
 
+        private float _intelligenceScoutRadiusFraction = 0.2f;
+
+        [SettingPropertyFloatingInteger("情报侦察半径（占地图比例）", 0.05f, 0.5f, Order = 9, RequireRestart = false,
+            HintText = "query_party_troops 查看异国部队时，此比例 × 地图实际尺度 = 近距侦察半径（范围内兵力较准，之外模糊）。\n地图尺度用城镇/城堡包围盒实测，全图约 2000-3000 地图单位；0.2 ≈ 500 单位 ≈ 1-2 座城池间距。")]
+        [SettingPropertyGroup("游戏设置")]
+        public float IntelligenceScoutRadiusFraction
+        {
+            get => _intelligenceScoutRadiusFraction;
+            set
+            {
+                if (Math.Abs(_intelligenceScoutRadiusFraction - value) > 0.001f)
+                {
+                    _intelligenceScoutRadiusFraction = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private bool _banVanillaDiplomacy = true;
 
         [SettingPropertyBool("禁止原版外交（Agent 主导）", Order = 9, RequireRestart = false,
@@ -510,10 +528,10 @@ namespace MyFirstMod
             }
         }
 
-        private int _maxTokens = 8192;
+        private int _maxTokens = 32768;
 
-        [SettingPropertyInteger("最大 Token 数", 50, 8192, Order = 5, RequireRestart = false,
-            HintText = "AI 单次回复的最大 token 数。DeepSeek V4 最高支持 384K 输出。")]
+        [SettingPropertyInteger("最大 Token 数", 50, 65536, Order = 5, RequireRestart = false,
+            HintText = "AI 单次回复的最大 token 数。DeepSeek V4 最高支持 384K 输出；默认 32768 对长编年史/长思考都足够，特殊场景可上调至 65536。")]
         [SettingPropertyGroup("连接设置")]
         public int MaxTokens
         {

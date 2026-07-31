@@ -149,33 +149,47 @@ namespace MyFirstMod
             public int Ambition { get; set; }
             public int LoyaltyType { get; set; }
             public int RiskTolerance { get; set; }
+            public int MandateBelief { get; set; }
         }
 
         private static PersonaMeta LoadOrCreatePersonaMeta(Hero hero)
         {
             var path = GetPersonaMetaPath();
+            return LoadOrCreatePersonaMetaFromPath(path, new PersonaMeta
+            {
+                Ambition = RollWeightedTrait(skewPositive: true),
+                LoyaltyType = RollLoyaltyType(),
+                RiskTolerance = RollWeightedTrait(skewPositive: false),
+                MandateBelief = RollMandateBelief()
+            });
+        }
+
+        private static PersonaMeta LoadOrCreatePersonaMetaFromPath(string path, PersonaMeta fallback)
+        {
             if (File.Exists(path))
             {
                 try
                 {
                     var json = File.ReadAllText(path, Encoding.UTF8);
                     var meta = JsonConvert.DeserializeObject<PersonaMeta>(json);
-                    if (meta != null) return meta;
+                    if (meta != null)
+                    {
+                        // 旧存档迁移：persona_meta 缺失天命信仰字段时补掷一次并持久化，避免每次加载都变
+                        if (!json.Contains("\"MandateBelief\""))
+                        {
+                            meta.MandateBelief = RollMandateBelief();
+                            File.WriteAllText(path, JsonConvert.SerializeObject(meta, Formatting.Indented), Encoding.UTF8);
+                        }
+                        return meta;
+                    }
                 }
                 catch { }
             }
 
-            var newMeta = new PersonaMeta
-            {
-                Ambition = RollWeightedTrait(skewPositive: true),
-                LoyaltyType = RollLoyaltyType(),
-                RiskTolerance = RollWeightedTrait(skewPositive: false)
-            };
-
             var dir = Path.GetDirectoryName(path);
             if (dir != null) Directory.CreateDirectory(dir);
-            File.WriteAllText(path, JsonConvert.SerializeObject(newMeta, Formatting.Indented), Encoding.UTF8);
-            return newMeta;
+            File.WriteAllText(path, JsonConvert.SerializeObject(fallback, Formatting.Indented), Encoding.UTF8);
+            return fallback;
         }
 
         private static int RollWeightedTrait(bool skewPositive)
@@ -206,6 +220,20 @@ namespace MyFirstMod
             if (roll < 50) return 1;
             if (roll < 85) return 2;
             return 3;
+        }
+
+        /// <summary>
+        /// 天命信仰分布：不信 6% / 假托 20% / 平常 38% / 敬重 26% / 笃信 10%。
+        /// 极端少、中间多，保证同一世界里的立场多元。
+        /// </summary>
+        private static int RollMandateBelief()
+        {
+            var roll = _rng.Next(100);
+            if (roll < 6) return -2;
+            if (roll < 26) return -1;
+            if (roll < 64) return 0;
+            if (roll < 90) return 1;
+            return 2;
         }
 
         private static string BuildNativeTraitsText(Hero hero)
@@ -263,6 +291,17 @@ namespace MyFirstMod
                 _ => "?"
             };
             sb.AppendLine($"冒险倾向：{meta.RiskTolerance:+0;-0} — {riskDesc}");
+
+            var mandateDesc = meta.MandateBelief switch
+            {
+                2 => "笃信天命，真心信奉天命与大一统，言行以此自处",
+                1 => "敬重天命，大体相信，决策时会顾及名分",
+                0 => "对天命之说平常心，随大流、不较真",
+                -1 => "假托天命，嘴上说信、心里当权术工具",
+                -2 => "不信天命，视之为欺人之谈，只信实力",
+                _ => "?"
+            };
+            sb.AppendLine($"天命信仰：{meta.MandateBelief:+0;-0} — {mandateDesc}");
 
             return sb.ToString().TrimEnd();
         }
@@ -869,27 +908,13 @@ namespace MyFirstMod
         {
             var agentDir = GetAgentDirPath(agentId);
             var path = Path.Combine(agentDir, "persona_meta.json");
-            if (File.Exists(path))
-            {
-                try
-                {
-                    var json = File.ReadAllText(path, Encoding.UTF8);
-                    var meta = JsonConvert.DeserializeObject<PersonaMeta>(json);
-                    if (meta != null) return meta;
-                }
-                catch { }
-            }
-
-            var newMeta = new PersonaMeta
+            return LoadOrCreatePersonaMetaFromPath(path, new PersonaMeta
             {
                 Ambition = RollWeightedTrait(skewPositive: true),
                 LoyaltyType = RollLoyaltyType(),
-                RiskTolerance = RollWeightedTrait(skewPositive: false)
-            };
-
-            Directory.CreateDirectory(agentDir);
-            File.WriteAllText(path, JsonConvert.SerializeObject(newMeta, Formatting.Indented), Encoding.UTF8);
-            return newMeta;
+                RiskTolerance = RollWeightedTrait(skewPositive: false),
+                MandateBelief = RollMandateBelief()
+            });
         }
 
         public static void StoreOutgoingLetter(string senderId, string recipientId, string content)

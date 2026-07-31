@@ -430,7 +430,7 @@
   {
     "name": "gift_fief",
     "category": "diplomacy",
-    "description": "Transfer a fief (town or castle) from one clan to another within your kingdom. This is a unilateral king's decree — no voting or election.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom (king/queen).\n- The settlement_name is the fief to transfer (town or castle name, in Chinese or English). Villages cannot be transferred independently — they follow their bound town/castle.\n- The target_entity_id specifies WHICH clan leader receives the fief, by entity ID or Chinese name.\n- The target must be a non-mercenary clan leader in your kingdom.\n- The fief must currently belong to some clan within your kingdom.\n- Do NOT use this for mercenary clans — mercenaries cannot hold fiefs.\n- This takes effect immediately with no election or voting process.\n- Call query_kingdom_settlements first to see what fiefs are available, and query_kingdom_clans to see eligible recipients.",
+    "description": "Transfer a fief (town or castle) from one clan to another within your kingdom. This is a unilateral king's decree — no voting or election.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom (king/queen).\n- The settlement_name is the fief to transfer (town or castle name, in Chinese or English). Villages cannot be transferred independently — they follow their bound town/castle.\n- The target_entity_id specifies WHICH clan leader receives the fief, by entity ID or Chinese name.\n- The target must be a non-mercenary clan leader in your kingdom.\n- The fief must currently belong to some clan within your kingdom.\n- Do NOT use this for mercenary clans — mercenaries cannot hold fiefs.\n- This takes effect immediately with no election or voting process.\n- If you take a fief away from its current owner (not yourself), you must be able to justify it — provide a clear reason in the 'reason' parameter (师出有名). The deprived clan will learn of your reason and may react.\n- Call query_kingdom_settlements first to see what fiefs are available, and query_kingdom_clans to see eligible recipients.",
     "parameters": [
       {
         "name": "settlement_name",
@@ -441,6 +441,11 @@
         "name": "target_entity_id",
         "type": "string",
         "description": "Entity ID or Chinese name of the clan leader to receive the fief. Must be a non-mercenary clan leader in your kingdom."
+      },
+      {
+        "name": "reason",
+        "type": "string",
+        "description": "The justification for the transfer (师出有名), especially if it deprives the current owner. This reason will be told to the deprived clan and recorded. Omit only when granting a fief you already own yourself."
       }
     ]
   },
@@ -471,7 +476,7 @@
   {
     "name": "query_party_troops",
     "category": "query",
-    "description": "Inspect a party's troop roster, prisoners, inventory, and finances.\n\nUsage:\n- Call this to learn about your own party or another party's composition.\n- The target_entity_id specifies whose party to inspect. Omit to inspect your own party.\n- Returns: gold, daily wages, troop count/wounded/max, each troop type with count/Xp/upgrade paths, prisoners (with recruitability), food supply, horses, warhorses.\n- This is your primary tool for military self-assessment before making recruitment or upgrade decisions.\n- To see what troops are available for recruitment at a settlement, use query_available_troops.",
+    "description": "Inspect a party's troop roster, prisoners, inventory, and finances.\n\nUsage:\n- Call this to learn about your own party or another party's composition.\n- The target_entity_id specifies whose party to inspect. Omit to inspect your own party.\n- FULL detail (gold, wages, exact troop counts with Xp/upgrade paths, prisoners, items, equipment) is available ONLY for your own party and for parties of your own kingdom or allied faction.\n- For parties of FOREIGN kingdoms you receive only SCOUTING ESTIMATES, not exact figures: close range gives a rough troop count with composition (about ±20%); mid range gives only a wide estimate and qualitative description; distant or across the sea gives only unreliable rumors.\n- Treat foreign intel as estimates and act with uncertainty — you do not know the enemy's true strength.\n- This is your primary tool for military self-assessment before making recruitment or upgrade decisions.\n- To see what troops are available for recruitment at a settlement, use query_available_troops.",
     "parameters": [
       {
         "name": "target_entity_id",

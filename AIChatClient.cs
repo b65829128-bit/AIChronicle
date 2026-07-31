@@ -83,6 +83,7 @@ namespace MyFirstMod
             "diplomacy" => new[] { "universal", "query", "diplomacy" },
             "historian" => new[] { "universal", "query", "file" },
             "advisory" => new[] { "universal", "query", "file", "communication" },
+            "fief_review" => new[] { "universal", "query", "file", "communication", "diplomacy" },
             "chat" => new[] { "universal", "query", "file", "social", "communication" },
             _ => new[] { "universal", "query", "social", "military", "movement", "diplomacy", "file", "communication" },
         };

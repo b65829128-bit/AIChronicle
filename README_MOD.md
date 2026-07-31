@@ -104,6 +104,22 @@
 - 史官提示词（`historian_rules.txt`、`yearly_chronicle_prompt.txt`、`biography_prompt.txt`）全部热重载
 - 史料记录类型：war_declared / peace_made / siege_started / siege_failed / siege_abandoned / settlement_captured / kingdom_destroyed / kingdom_created / hero_killed / clan_changed_kingdom / clan_leader_changed / marriage
 
+### 天命意识形态
+
+- 世界共享「天命/大一统」意识形态（`world_info.txt`）：天无二日、天下终当归于一统，分裂被视为乱世而非长久之态
+- 重大外交行动（宣战/结盟/议和/贸易）若国王重视名分，应师出有名——无名之师、与僭越者结盟、求和于不义之邦会损害威信；是否看重名分由国王人格决定（`diplomacy_rules.txt`）
+- 封臣可在谏言中援引天命批判国王失德、兴无名之师、与僭越者结盟；直不直谏、出于真心还是个人谋划，由封臣自决（`advisory_rules.txt`）
+- NPC 性格新增「天命信仰」维度（`persona_meta.json`）：笃信 / 敬重 / 平常 / 假托 / 不信，随机分布（10/26/38/20/6），保持立场多元
+- 史官以「天命视角」编纂编年史（`historian_rules.txt`）：理解时人以天命评说兴衰，但保持中立，可在「史官曰」中借天命评王朝兴衰
+
+### 内政审视与封地政治
+
+- 国王外交审视升级为**内外政务**（`diplomacy_rules.txt`）：先审视内政（封地分配/治理/战功），再处理外交——内政缺地会自然推动国王开战或暂不议和
+- 国王审视时自动注入**内政审视报告**：封地账本（谁有地谁无地）、各城治理（繁荣度/忠诚度）、近期战功（`World/court/{王国}_merit.txt`，围城/攻克/失利真实记录）
+- 国王拥有赐地与夺封之权（`gift_fief` 可附 `reason` 名分参数）：赐地是恩赏，夺封须**师出有名**
+- **被夺方激活**：国王夺封（原主非国王本人）时，被夺家族被激活审视处境（FiefReview 事件，左下角提示「xxx 发现自己被夺封了」）——可忍气吞声 / 上表抗议 / 写信交涉 / 联络他国 / 转投他国（`change_kingdom`），触发内政矛盾，史官记入编年史
+- 封地审视规则：`fief_review_rules.txt`（热重载）；审视上下文含外交分类工具，封臣**知道**自己能转投
+
 ### 封臣谏言
 
 - 每个王国每天有概率（MCM 可调，默认 10%）触发一位氏族领袖向国王进谏
@@ -135,7 +151,7 @@ Agent 任何时候都可以调 `browse_tools("military")` 解锁某类工具，�
 
 ### 征兵与部队管理
 
-- Agent 可以调用 `query_party_troops` 查看自己或他人的部队详情：金币、日薪、兵力/伤兵/上限、各兵种数量经验升级路径、俘虏可招募性、物品栏（武器/盔甲/粮/马）、装备栏
+- Agent 可以调用 `query_party_troops` 查看部队详情。**军情迷雾**：自己与同阵营部队全量（金币、日薪、兵力/伤兵/上限、各兵种数量经验升级路径、俘虏可招募性、物品栏、装备栏）；异国部队仅侦察估计——近距给兵力带与兵种构成（约 ±20%），远距给宽泛区间与定性描述，跨海/远处只有传闻，不泄露军饷、经验、装备等机密
 - Agent 可以调用 `query_available_troops` 查看当前定居点可招募兵种（需在定居点内，被劫掠/敌对村庄无法招兵）
 - Agent 可以调用 `query_settlement_villages` 查看城镇/城堡下属村庄——可用作征兵路线规划
 - Agent 可以调用 `recruit_troops(兵种名, 数量)` 招募士兵（需在该定居点，自动扣金币）
@@ -176,6 +192,7 @@ _Module/Prompts/
 ├── diplomacy_rules.txt          # 外交决策规则（玩家可编辑，热重载）
 ├── historian_rules.txt          # 史官编年史规则（玩家可编辑，热重载）
 ├── advisory_rules.txt            # 封臣谏言规则（热重载）
+├── fief_review_rules.txt         # 封地审视规则（被夺方激活，热重载）
 ├── yearly_chronicle_prompt.txt  # 年度编年史激活提示词（热重载）
 ├── biography_prompt.txt         # 人物列传激活提示词（热重载）
 ├── special_chronicle_prompt.txt # 专题史激活提示词（热重载）
@@ -240,7 +257,7 @@ _Module/Prompts/
 | API URL | LLM API 端点 | `https://api.deepseek.com/v1/chat/completions` |
 | Model | 模型名称 | `deepseek-chat` |
 | API Key | 你的 API 密钥 | 空（需自行填入） |
-| 最大 Token 数 | AI 单次回复的 token 上限（8192 = 后端单轮上限，基本不截断） | `8192` |
+| 最大 Token 数 | AI 单次回复的 token 上限（DeepSeek V4 最高 384K 输出；默认 32768 足够长编年史/长思考，特殊场景可上调至 65536） | `32768` |
 | 回复创造性 | Temperature 值，越低越稳定保守 | `0.8` |
 | API 超时（秒） | 请求超时时间 | `30` |
 | Test Connection | 测试按钮 | 验证连通性和 function calling 支持 |
@@ -253,6 +270,7 @@ _Module/Prompts/
 | 最大好感变化 | Agent 单次修改好感度的上限 | `5` |
 | 信件级联深度上限 | NPC 间连环写信的最大层数 | `5` |
 | 环境扫描半径（km） | query_surroundings 扫描半径硬上限 | `20` |
+| 情报侦察半径（占地图比例） | query_party_troops 查看异国部队的近距侦察半径（地图尺度比例，0.2 ≈ 1-2 座城池间距），之外的情报降为模糊/传闻 | `0.2` |
 | 禁止原版外交（Agent 主导） | 禁止原版 AI 外交，所有外交由国王 Agent 决策 | 开启 |
 | 国王激活间隔（天） | 国王 Agent 定期外交审视的间隔 | `30` |
 | 编年史间隔（年） | 史官编纂编年史的间隔（1=每年，3=每三年） | `1` |
@@ -359,4 +377,4 @@ MyFirstMod/
 ## 版本
 
 - 游戏版本：Bannerlord v1.4.7
-- 模组版本：v1.0.0
+- 模组版本：v1.3.0

@@ -17,10 +17,16 @@ namespace MyFirstMod
     {
         private string? _historyDir;
         private readonly HashSet<Settlement> _recentSiegeCaptures = new();
-        private readonly Dictionary<Settlement, (int Attackers, int Defenders)> _siegeStartTroops = new();
+        // 围城开始时即记录攻城方名号——结束时 LeaderParty 可能已被击败/解散而取不到名字（史料 "?" 的根源）
+        private readonly Dictionary<Settlement, (int Attackers, int Defenders, string Leader, string Kingdom)> _siegeStartTroops = new();
+        // 攻城方名号的独立缓存（不随结束事件消耗）——OnSiegeEnded 与 OnSiegeCompleted 两个处理器都可能触发，
+        // 若只读共享的 _siegeStartTroops，先触发者 Remove 后，后触发者就拿不到名号（史料 "?" 残留的根源）。
+        private readonly Dictionary<Settlement, (string Leader, string Kingdom)> _siegeActorCache = new();
         private List<string>? _serializedSiegeIds;
         private List<int>? _serializedSiegeAttackers;
         private List<int>? _serializedSiegeDefenders;
+        private List<string>? _serializedSiegeLeaders;
+        private List<string>? _serializedSiegeKingdoms;
 
         public override void RegisterEvents()
         {
@@ -62,11 +68,15 @@ namespace MyFirstMod
                 _serializedSiegeIds = new List<string>();
                 _serializedSiegeAttackers = new List<int>();
                 _serializedSiegeDefenders = new List<int>();
+                _serializedSiegeLeaders = new List<string>();
+                _serializedSiegeKingdoms = new List<string>();
                 foreach (var kv in _siegeStartTroops)
                 {
                     _serializedSiegeIds.Add(kv.Key.StringId);
                     _serializedSiegeAttackers.Add(kv.Value.Attackers);
                     _serializedSiegeDefenders.Add(kv.Value.Defenders);
+                    _serializedSiegeLeaders.Add(kv.Value.Leader);
+                    _serializedSiegeKingdoms.Add(kv.Value.Kingdom);
                 }
             }
 
@@ -74,6 +84,10 @@ namespace MyFirstMod
                 && dataStore.SyncData("mfm_siege_attackers", ref _serializedSiegeAttackers)
                 && dataStore.SyncData("mfm_siege_defenders", ref _serializedSiegeDefenders))
             {
+                // 攻城方名号是新增字段，旧存档没有 → 可选同步，缺失则兜底 "?"
+                dataStore.SyncData("mfm_siege_leaders", ref _serializedSiegeLeaders);
+                dataStore.SyncData("mfm_siege_kingdoms", ref _serializedSiegeKingdoms);
+
                 _siegeStartTroops.Clear();
                 if (_serializedSiegeIds != null && _serializedSiegeAttackers != null && _serializedSiegeDefenders != null)
                 {
@@ -83,11 +97,13 @@ namespace MyFirstMod
                     {
                         var id = _serializedSiegeIds[i];
                         if (string.IsNullOrEmpty(id)) continue;
+                        var leader = _serializedSiegeLeaders != null && i < _serializedSiegeLeaders.Count ? _serializedSiegeLeaders[i] : "?";
+                        var kingdom = _serializedSiegeKingdoms != null && i < _serializedSiegeKingdoms.Count ? _serializedSiegeKingdoms[i] : "?";
                         foreach (var s in Settlement.All)
                         {
                             if (s.StringId == id)
                             {
-                                _siegeStartTroops[s] = (_serializedSiegeAttackers[i], _serializedSiegeDefenders[i]);
+                                _siegeStartTroops[s] = (_serializedSiegeAttackers[i], _serializedSiegeDefenders[i], leader, kingdom);
                                 break;
                             }
                         }
@@ -109,6 +125,40 @@ namespace MyFirstMod
                 Directory.CreateDirectory(Path.Combine(_historyDir, "chronicles"));
             }
             return _historyDir;
+        }
+
+        private string GetCourtDir()
+        {
+            var baseDir = PromptManager.CampaignDir;
+            if (string.IsNullOrEmpty(baseDir))
+                baseDir = PromptManager.PromptsBaseDir;
+            var dir = Path.Combine(baseDir, "NPCs", "World", "court");
+            Directory.CreateDirectory(dir);
+            return dir;
+        }
+
+        /// <summary>
+        /// 战功记录：围攻/攻克/失利 写入 World/court/{王国}_merit.txt。
+        /// 供国王内政审视读取——「近期战事中谁在出力」是朝堂风声的真实来源，不是编的。
+        /// </summary>
+        private void RecordMerit(string kingdomName, string leader, string action, string settlementName)
+        {
+            if (string.IsNullOrEmpty(kingdomName) || kingdomName == "?"
+                || string.IsNullOrEmpty(leader) || leader == "?"
+                || string.IsNullOrEmpty(settlementName))
+                return;
+            try
+            {
+                var filePath = Path.Combine(GetCourtDir(), $"{kingdomName}_merit.txt");
+                var now = CampaignTime.Now;
+                var season = GetSeasonName(now.GetSeasonOfYear);
+                var day = now.GetDayOfSeason + 1;
+                SafeFileIO.AppendAllText(filePath, $"{season}{day}: {leader} {action} {settlementName}" + Environment.NewLine);
+            }
+            catch (Exception e)
+            {
+                DebugLogger.Log($"战功记录失败：{e.Message}");
+            }
         }
 
         private void RecordEvent(string eventType, string summary)
@@ -200,19 +250,21 @@ namespace MyFirstMod
                 defenders += settlement.Town.GarrisonParty.MemberRoster.TotalHealthyCount;
             defenders += settlement.MilitiaPartyComponent?.MobileParty?.MemberRoster?.TotalHealthyCount ?? 0;
 
-            _siegeStartTroops[settlement] = (attackers, defenders);
+            _siegeStartTroops[settlement] = (attackers, defenders, attackerLeader, attackerKingdom);
+            _siegeActorCache[settlement] = (attackerLeader, attackerKingdom);
             if (attackers > 0)
                 RecordEvent("siege_started", $"{attackerKingdom}的{attackerLeader}率{attackers}人围攻{settlement.Name}，守军{defenders}人");
             else
                 RecordEvent("siege_started", $"{attackerKingdom}的{attackerLeader}围攻{settlement.Name}");
+            RecordMerit(attackerKingdom, attackerLeader, "围攻", settlement.Name?.ToString() ?? "?");
         }
 
         private void OnSiegeCompleted(Settlement settlement, MobileParty attackerParty, bool isWin, MapEvent.BattleTypes battleType)
         {
             if (!settlement.IsTown && !settlement.IsCastle) return;
 
-            var attackerLeader = attackerParty?.LeaderHero?.Name?.ToString() ?? "?";
-            var attackerKingdom = attackerParty?.MapFaction?.Name?.ToString() ?? "?";
+            var attackerLeader = attackerParty?.LeaderHero?.Name?.ToString();
+            var attackerKingdom = attackerParty?.MapFaction?.Name?.ToString();
 
             var attackers = 0;
             var defenders = 0;
@@ -220,8 +272,24 @@ namespace MyFirstMod
             {
                 attackers = counts.Attackers;
                 defenders = counts.Defenders;
+                // 攻城部队已被击败/解散时 LeaderParty 为空，用开始时的名号兜底（修复史料中的 "?"）
+                if (string.IsNullOrEmpty(attackerLeader)) attackerLeader = counts.Leader;
+                if (string.IsNullOrEmpty(attackerKingdom)) attackerKingdom = counts.Kingdom;
             }
             _siegeStartTroops.Remove(settlement);
+
+            // 名号兜底（不消耗缓存）：即使 _siegeStartTroops 已被 OnSiegeEnded 先消耗，仍能取到攻城名号
+            if (string.IsNullOrEmpty(attackerLeader) || string.IsNullOrEmpty(attackerKingdom))
+            {
+                if (_siegeActorCache.TryGetValue(settlement, out var actor))
+                {
+                    attackerLeader ??= actor.Leader;
+                    attackerKingdom ??= actor.Kingdom;
+                }
+            }
+
+            attackerLeader ??= "?";
+            attackerKingdom ??= "?";
 
             if (isWin)
             {
@@ -230,10 +298,12 @@ namespace MyFirstMod
                     : $"{attackerKingdom}的{attackerLeader}攻克{settlement.Name}";
                 _recentSiegeCaptures.Add(settlement);
                 RecordEvent("settlement_captured", summary);
+                RecordMerit(attackerKingdom, attackerLeader, "攻克", settlement.Name?.ToString() ?? "?");
             }
             else
             {
                 RecordEvent("siege_failed", $"{attackerKingdom}的{attackerLeader}围攻{settlement.Name}失败，攻城部队被击败");
+                RecordMerit(attackerKingdom, attackerLeader, "攻城失利", settlement.Name?.ToString() ?? "?");
             }
         }
 
@@ -242,11 +312,25 @@ namespace MyFirstMod
             var settlement = siegeEvent.BesiegedSettlement;
             if (settlement == null || (!settlement.IsTown && !settlement.IsCastle)) return;
 
-            if (!_siegeStartTroops.Remove(settlement)) return;
+            if (!_siegeStartTroops.TryGetValue(settlement, out var info)) return;
+            _siegeStartTroops.Remove(settlement);
 
             var attackerParty = siegeEvent.BesiegerCamp.LeaderParty;
-            var attackerLeader = attackerParty?.LeaderHero?.Name?.ToString() ?? "?";
-            var attackerKingdom = attackerParty?.MapFaction?.Name?.ToString() ?? "?";
+            var attackerLeader = attackerParty?.LeaderHero?.Name?.ToString();
+            var attackerKingdom = attackerParty?.MapFaction?.Name?.ToString();
+            if (string.IsNullOrEmpty(attackerLeader)) attackerLeader = info.Leader;
+            if (string.IsNullOrEmpty(attackerKingdom)) attackerKingdom = info.Kingdom;
+            // 名号兜底（不消耗缓存）：即使 _siegeStartTroops 已被 OnSiegeCompleted 先消耗，仍能取到攻城名号
+            if (string.IsNullOrEmpty(attackerLeader) || string.IsNullOrEmpty(attackerKingdom))
+            {
+                if (_siegeActorCache.TryGetValue(settlement, out var actor))
+                {
+                    attackerLeader ??= actor.Leader;
+                    attackerKingdom ??= actor.Kingdom;
+                }
+            }
+            attackerLeader ??= "?";
+            attackerKingdom ??= "?";
             RecordEvent("siege_abandoned", $"{attackerKingdom}的{attackerLeader}放弃了对{settlement.Name}的围攻");
         }
 

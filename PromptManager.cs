@@ -176,6 +176,7 @@ namespace MyFirstMod
             CopyPromptToCampaign("special_chronicle_prompt.txt");
             CopyPromptToCampaign("biography_prompt.txt");
             CopyPromptToCampaign("advisory_rules.txt");
+            CopyPromptToCampaign("fief_review_rules.txt");
             CopyTemplateToCampaign("context_template.txt");
         }
 

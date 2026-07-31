@@ -54,13 +54,30 @@ namespace MyFirstMod
             }
         }
 
-        /// <summary>战役结束/切档时清空待执行动作。</summary>
+        /// <summary>战役结束/切档时清空待执行动作与检查站冷却。</summary>
         public static void ResetForNewCampaign()
         {
             lock (_pendingLock)
             {
                 _pendingActions.Clear();
             }
+            _lastCheckInByAgent.Clear();
+        }
+
+        // 检查站冷却：防止 move/wait activate 到达后立刻签到 → agent 再发新指令 → 死循环（蒙楚格/加里俄斯反复激活的根因）。
+        // 用真实时间（而非游戏时间）——游戏时间加速时 12 游戏小时可能只是几十真实秒，根本挡不住循环。
+        private static readonly Dictionary<string, DateTime> _lastCheckInByAgent = new();
+        private const double MinCheckInIntervalRealMinutes = 15f;
+
+        private static bool CheckInCooldownPassed(string agentId)
+        {
+            if (!_lastCheckInByAgent.TryGetValue(agentId, out var last)) return true;
+            return (DateTime.Now - last).TotalMinutes >= MinCheckInIntervalRealMinutes;
+        }
+
+        private static void MarkCheckIn(string agentId)
+        {
+            _lastCheckInByAgent[agentId] = DateTime.Now;
         }
 
         public static void Tick()
@@ -197,9 +214,11 @@ namespace MyFirstMod
 
                     if (action.CheckInHours > 0f && action.TargetReached
                         && !action.CheckInQueued && action.ArrivedAt != null
-                        && (CampaignTime.Now - action.ArrivedAt.Value).ToHours >= action.CheckInHours)
+                        && (CampaignTime.Now - action.ArrivedAt.Value).ToHours >= action.CheckInHours
+                        && CheckInCooldownPassed(hero.Id.ToString()))
                     {
                         action.CheckInQueued = true;
+                        MarkCheckIn(hero.Id.ToString());
 
                         var agentEntity = EntityManager.GetEntityByHero(hero);
                         if (agentEntity != null)
@@ -318,6 +337,9 @@ namespace MyFirstMod
             if (!action.ActivateOnComplete) return;
             var agentEntity = EntityManager.GetEntityByHero(action.Hero);
             if (agentEntity == null) return;
+            // 冷却中：跳过本次签到——打断「move 到达→签到→再 move」的快速循环（蒙楚格反复激活根因）
+            if (!CheckInCooldownPassed(action.Hero.Id.ToString())) return;
+            MarkCheckIn(action.Hero.Id.ToString());
 
             var party = action.Hero.PartyBelongedTo;
             if (party != null && party.IsActive)
