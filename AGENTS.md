@@ -109,12 +109,18 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **书信模式** | 支持书信 intent，O 键唤起收信人列表 |
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 53 个工具定义在 `tools.json`（43 个游戏工具）和 `agent_tools.json`（10 个文件工具）中，热重载，不硬编码 |
+| **工具定义文件化** | 54 个工具定义在 `tools.json`（43 个游戏工具）和 `agent_tools.json`（11 个文件/通信工具，含 `submit_advisory`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
 | **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁 |
 | **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`tool_call_prompt.txt`、`persona_generation.txt`、`context_template.txt`、`chancery_rules.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
-| **多轮工具调用** | `SendMessage` 内建 SSE 流式循环（max N 轮或无限），模型调用工具 → 执行 → 追加结果 → 重请求 |
+| **多轮工具调用** | `SendMessage` 内建 SSE 流式循环，模型调用工具 → 执行 → 追加结果 → 重请求，直到模型自然停止（无轮数限制，仅保留极高安全阀防死循环） |
 | **秘书处** | M 键打开，玩家的个人行政助手。固定 persona（无条件服从），不读玩家 persona。国王/封臣/平民均可使用，可用工具取决于玩家当前身份 |
 | **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
+
+> **提示词同步规则（newer-wins）**：基础目录 `_Module/Prompts/` 是模板源，战役创建时复制到 `Campaigns/{战役}/`。每次进档（`OnSessionLaunched` → `PromptManager.StartCampaign`）会做同步——**只要基础目录文件比战役副本新，就覆盖战役副本**。玩家在战役副本上的手动编辑（时间戳更新）会被保留。
+>
+> **已知边界情况（待解决）**：如果玩家在战役副本自定义了某文件（副本时间戳更新），之后基础目录又修改了（基础更晚）→ newer-wins 会覆盖副本，玩家自定义丢失。当前对开发期是期望行为；未来如需保护战役自定义，需引入"用户修改标记"机制（如哈希比对或 .custom 标记文件）。
+>
+> **运行期热重载**：游戏运行中，编辑战役副本文件立即生效（加载器按 LastWriteTime 重新读取）；编辑基础目录要下次进档才同步。
 
 ### 两个模型
 
@@ -223,6 +229,7 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │       ├── agent_tools.json   ← Agent 文件工具定义（热重载）
 │       ├── tool_call_prompt.txt ← 独立工具调用代理提示词（热重载）
 │       ├── persona_generation.txt ← NPC性格生成提示词（玩家可编辑，热重载）
+│       ├── advisory_rules.txt  ← 封臣谏言规则（热重载）
 │       ├── Templates/         ← NPC 目录模板
 │       │   ├── context_template.txt ← Context 模板
 │       └── Campaigns/         ← 各战役目录（运行时创建）
@@ -612,6 +619,32 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 - 聊天记录使用显式路径（`GetChatLogPathFor`）防线程竞态
 - 外交提案感知：`LetterReceived` 处理时自动检测双方是否有待处理的外交提案（`AgentManager.GetProposalsBetween`），如有则将提案摘要注入上下文提示 Agent
 
+### 封臣谏言机制（AgentScheduler）
+
+封臣谏言是"流式、单次激活"的内部政治压力系统，替代了早期的同步"封臣大会"（因 48 人批量 LLM 会卡死事件队列而废弃）：
+
+```
+Tick 无事件时 → CheckAdvisoryActivations()
+    ↓
+每个王国每天 10% 概率（MCM AdvisoryProbability 可调）
+    ↓
+SelectAdvisoryLeader：按权重抽氏族领袖
+  权重 = 氏族Tier×3 + 影响力/50 + 封地数
+  排除：雇佣兵、俘虏、逃亡、国王本人、玩家、上轮进谏者（同一人不连续）
+    ↓
+ProcessAdvisory（后台 Task，串行，不走事件队列）
+    → 提示词：读 personal_notes.txt（可选）→ 查世界局势 → submit_advisory(content) 工具提交
+    → 工具自动写 World/advisory/{王国}_{年}.txt（时间戳头 + 姓名 + 正文）
+    → 未调工具则兜底写 response.Content，空则标"（未发表公开谏言）"
+```
+
+要点：
+- `submit_advisory` 是 agent_tools.json 里的专用工具，归档格式由代码控制，agent 只需填内容
+- 私人笔记 `decisions/personal_notes.txt` 非强制；若 LLM 写成了别的文件名，`ProcessAdvisory` 会强制合并归位
+- 国王外交激活（`KingDiplomacy`）的提示词自动注入"先 read_file World/advisory/ 了解封臣谏言"，但国王决策权不受限
+- 事件队列积压 >3 时暂停生成新的国王外交/封臣谏言，先消化积压（Tick 中 `_eventQueue.Count <= 3` 门槛）
+- 历史（H 键）可读本国公开谏言；史官 `_readableWorldDirs` 含 `"advisory"` 可读取
+
 ### 历史系统（HistoryRecorder + 史官 Agent）
 
 历史系统由两部分组成：**事件记录器** 和 **史官 Agent**。
@@ -693,7 +726,7 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | dotnet CLI | `dotnet` | 编译、创建新项目 |
 | Rider | `C:\Program Files\JetBrains\JetBrains Rider 2026.2\bin\rider64.exe` | IDE |
 
-### 游戏工具（tools.json，41 个）
+### 游戏工具（tools.json，43 个）
 
 | 工具 | 类别 | 说明 |
 |------|------|------|
@@ -737,7 +770,7 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | `request_items` | 社交 | 向任意人物索要物品（NPC 直接划转，玩家弹确认框） |
 | `let_go` | 社交 | 遭遇战中放走玩家（仅当己方兵力占优时可用，含冷却期） |
 
-### 文件工具（agent_tools.json，10 个）
+### 文件工具（agent_tools.json，11 个）
 
 | 工具 | 说明 |
 |------|------|
@@ -751,6 +784,7 @@ OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异
 | `glob` | 按文件名模式匹配（如 `knowledge/*.txt`） |
 | `grep` | 按关键词搜索文件内容 |
 | `send_letter` | 给其他 Entity 写信 |
+| `submit_advisory` | 向国王提交公开谏言（封臣谏言专用，系统自动归档） |
 
 ## 故障排查
 

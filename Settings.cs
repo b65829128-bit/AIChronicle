@@ -276,42 +276,6 @@ namespace MyFirstMod
             }
         }
 
-        private int _maxAgentRounds = 5;
-
-        [SettingPropertyInteger("Agent 最大轮次", 1, 10, Order = 4, RequireRestart = false,
-            HintText = "Agent 工具调用循环的最大轮数。复杂 NPC 可能需要 4-5 轮。")]
-        [SettingPropertyGroup("游戏设置")]
-        public int MaxAgentRounds
-        {
-            get => _maxAgentRounds;
-            set
-            {
-                if (_maxAgentRounds != value)
-                {
-                    _maxAgentRounds = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
-
-        private bool _unlimitedAgentRounds = false;
-
-        [SettingPropertyBool("不限制 Agent 轮次", Order = 5, RequireRestart = false,
-            HintText = "开启后 Agent 的工具调用没有轮次上限（直到模型自然停止）。\n可能导致 token 消耗大幅增加，仅在复杂场景下开启。")]
-        [SettingPropertyGroup("游戏设置")]
-        public bool UnlimitedAgentRounds
-        {
-            get => _unlimitedAgentRounds;
-            set
-            {
-                if (_unlimitedAgentRounds != value)
-                {
-                    _unlimitedAgentRounds = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
-
         private int _chatHistoryLimit = 20;
 
         [SettingPropertyInteger("聊天历史上限（条）", 5, 100, Order = 5, RequireRestart = false,
@@ -456,9 +420,45 @@ namespace MyFirstMod
             }
         }
 
+        private bool _advisoryEnabled = true;
+
+        [SettingPropertyBool("启用封臣谏言", Order = 13, RequireRestart = false,
+            HintText = "开启后每天每王国有概率触发一位封臣进谏（仅氏族领袖，排除玩家和国王）。\n谏言公开写入 World/advisory/，国王外交激活时会阅读。\n关闭后封臣不再进谏。")]
+        [SettingPropertyGroup("游戏设置")]
+        public bool AdvisoryEnabled
+        {
+            get => _advisoryEnabled;
+            set
+            {
+                if (_advisoryEnabled != value)
+                {
+                    _advisoryEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private float _advisoryProbability = 0.1f;
+
+        [SettingPropertyFloatingInteger("封臣谏言概率/天", 0.01f, 0.5f, Order = 14, RequireRestart = false,
+            HintText = "每个王国每天有独立概率触发一位封臣进谏。\n0.1=平均十天一次，0.5=平均两天一次。\n同一封臣不会连续进谏。")]
+        [SettingPropertyGroup("游戏设置")]
+        public float AdvisoryProbability
+        {
+            get => _advisoryProbability;
+            set
+            {
+                if (Math.Abs(_advisoryProbability - value) > 0.001f)
+                {
+                    _advisoryProbability = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private bool _biographyAllNobles = true;
 
-        [SettingPropertyBool("所有贵族立传", Order = 14, RequireRestart = false,
+        [SettingPropertyBool("所有贵族立传", Order = 15, RequireRestart = false,
             HintText = "勾选：所有有氏族的贵族死后都立传。\n不勾选：仅氏族领袖和国王死后立传。")]
         [SettingPropertyGroup("游戏设置")]
         public bool BiographyAllNobles
@@ -492,10 +492,10 @@ namespace MyFirstMod
             }
         }
 
-        private int _maxTokens = 500;
+        private int _maxTokens = 4096;
 
-        [SettingPropertyInteger("最大 Token 数", 50, 4096, Order = 5, RequireRestart = false,
-            HintText = "AI 单次回复的最大 token 数。")]
+        [SettingPropertyInteger("最大 Token 数", 50, 8192, Order = 5, RequireRestart = false,
+            HintText = "AI 单次回复的最大 token 数。DeepSeek V4 最高支持 384K 输出。")]
         [SettingPropertyGroup("连接设置")]
         public int MaxTokens
         {
@@ -569,6 +569,14 @@ namespace MyFirstMod
         public Action ForceDiplomacy { get; set; } = () =>
         {
             AgentScheduler.ForceDiplomacyRound();
+        };
+
+        [SettingPropertyButton("强制封臣进谏", Content = "重置计时", Order = 17,
+            RequireRestart = false, HintText = "立即清除所有王国的封臣谏言计时器，\n使得下一刻起各王国封臣开始进谏。")]
+        [SettingPropertyGroup("游戏设置")]
+        public Action ForceAdvisory { get; set; } = () =>
+        {
+            AgentScheduler.ForceAdvisory();
         };
     }
 }

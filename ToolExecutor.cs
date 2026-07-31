@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -235,6 +236,9 @@ namespace MyFirstMod
 
                     case "send_letter":
                         return ExecuteSendLetter(args["recipient_entity_id"]?.ToString() ?? "", args["content"]?.ToString() ?? "");
+
+                    case "submit_advisory":
+                        return ExecuteSubmitAdvisory(args["content"]?.ToString() ?? "");
 
                     default:
                         return $"未知工具：{name}";
@@ -512,7 +516,7 @@ namespace MyFirstMod
             foreach (var (pathDist, _, _, s) in top)
             {
                 var ok = s.OwnerClan?.Kingdom;
-                if (ok != null && ok != myKingdom && pathDist <= 10000f)
+                if (ok != null && ok != myKingdom && pathDist <= 5000f)
                 {
                     isBorder = true;
                     if (pathDist < nearestOtherDist)
@@ -537,7 +541,16 @@ namespace MyFirstMod
             sb.AppendLine($"类型：{(settlement.IsTown ? "城镇" : "城堡")}");
             sb.AppendLine($"坐标位置：大陆{nsDir}{ewDir}部 · {myKingdom?.Name?.ToString() ?? "中立区"}");
             sb.AppendLine($"所属家族：{settlement.OwnerClan?.Name?.ToString() ?? "无主"}");
-            sb.AppendLine($"战略位置：{(isBorder ? $"边境前哨 — 距{nearestOtherKingdom}领土仅{(int)(nearestOtherDist/1000f)}km（寻路距离）" : "核心腹地")}");
+            if (isBorder)
+            {
+                var nearestKm = nearestOtherDist / 1000f;
+                var nearestText = nearestKm < 1f ? $"{nearestKm:F1}" : $"{nearestKm:F0}";
+                sb.AppendLine($"战略位置：边境前哨 — 距{nearestOtherKingdom}领土仅{nearestText}km（寻路距离）");
+            }
+            else
+            {
+                sb.AppendLine("战略位置：核心腹地");
+            }
 
             sb.AppendLine();
             sb.AppendLine("周边定居点（最近" + top.Count + "个，按寻路距离排序）：");
@@ -1563,6 +1576,39 @@ namespace MyFirstMod
                 Colors.Cyan));
 
             return $"信件已发送给 {recipientName}。{delayNote}";
+        }
+
+        private static string ExecuteSubmitAdvisory(string content)
+        {
+            if (string.IsNullOrWhiteSpace(content))
+                return "[错误] 谏言内容不能为空";
+            if (AIChatClient.CurrentHero == null)
+                return "[错误] 无当前领主";
+            if (string.IsNullOrEmpty(PromptManager.CampaignDir))
+                return "[错误] 战役目录未就绪";
+
+            var hero = AIChatClient.CurrentHero;
+            var kingdom = hero.MapFaction as Kingdom;
+            if (kingdom == null)
+                return "[错误] 你不属于任何王国，无法进谏";
+
+            var kingdomName = kingdom.Name.ToString();
+            var currentYear = CampaignTime.Now.GetYear;
+            var currentTime = PromptManager.GetCurrentTimeString();
+
+            var entity = EntityManager.GetOrCreateEntity(hero);
+            var name = entity?.Name ?? hero.Name?.ToString() ?? "?";
+            var title = entity?.Title ?? "?";
+
+            var advisoryDir = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "advisory");
+            Directory.CreateDirectory(advisoryDir);
+            var advisoryFile = Path.Combine(advisoryDir, $"{kingdomName}_{currentYear}.txt");
+
+            var header = $"\n[{currentTime}] {name}（{title}）谏言：\n";
+            File.AppendAllText(advisoryFile, header, Encoding.UTF8);
+            File.AppendAllText(advisoryFile, content.Trim() + "\n", Encoding.UTF8);
+
+            return "谏言已提交归档。";
         }
 
         private static float CalculateLetterDelay(Hero sender, Hero? recipient)

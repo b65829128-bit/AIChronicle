@@ -45,6 +45,8 @@ namespace MyFirstMod
         private static bool _historianInitialized;
         private static int _warmupFramesHistorian = 60;
         private static readonly Random _rng = new();
+        private static readonly Dictionary<Kingdom, string> _lastAdvisorySpeaker = new();
+        private static readonly Dictionary<Kingdom, CampaignTime> _lastAdvisoryCheck = new();
 
         public static bool IsProcessing => _currentTask != null && !_currentTask.IsCompleted;
         public static int CurrentProcessingDepth => _currentProcessingDepth;
@@ -66,6 +68,15 @@ namespace MyFirstMod
             }
             InformationManager.DisplayMessage(new InformationMessage(
                 "[MyFirstMod] 外交计时器已重置，所有国王将在接下来的游戏日中依次被激活。",
+                Colors.Cyan));
+        }
+
+        public static void ForceAdvisory()
+        {
+            _lastAdvisoryCheck.Clear();
+            _lastAdvisorySpeaker.Clear();
+            InformationManager.DisplayMessage(new InformationMessage(
+                "[MyFirstMod] 封臣谏言计时器已重置，封臣们将在接下来的游戏日中陆续进谏。",
                 Colors.Cyan));
         }
 
@@ -108,7 +119,11 @@ namespace MyFirstMod
             if (!_eventQueue.TryDequeue(out var evt))
             {
                 CheckYearAdvance();
-                CheckKingActivations();
+                if (_eventQueue.Count <= 3)
+                {
+                    CheckKingActivations();
+                    CheckAdvisoryActivations();
+                }
                 return;
             }
 
@@ -162,6 +177,7 @@ namespace MyFirstMod
 
                 var now = CampaignTime.Now;
                 var cooldownDays = MySettings.Instance?.KingCooldownDays ?? 3;
+
                 if (_lastKingActivation.TryGetValue(kingdom, out var lastActivation)
                     && (now - lastActivation).ToDays < cooldownDays)
                     continue;
@@ -186,11 +202,15 @@ namespace MyFirstMod
                     ? $"\n（提示：先调用 query_pending_proposals 查看 {pendingProposals.Count} 份待处理的外交提案）\n"
                     : "";
 
+                var currentYear = CampaignTime.Now.GetYear;
+                var advisoryNote = $"\n（提示：先用 read_file 阅读 World/advisory/{kingdom.Name}_{currentYear}.txt 了解封臣们的近期谏言。群臣意见是你的决策参考，但你的决定权至高无上。）\n";
+
                 var activationMsg =
                     $"你是{kingdom.Name}的至高统治者。审视你的王国局势，凭自己的判断做出外交决断。\n\n"
                     + $"步骤1：调用 query_pending_proposals 查看是否有待处理的提案，有则用 respond_to_diplomacy_proposal 逐一处理\n"
                     + $"步骤2：调用 query_war_status 了解当前所有战争的战况\n"
                     + proposalLines
+                    + advisoryNote
                     + $"\n（提示：你可以在 goals/strategy.txt 中记录你的长期战略方针，如交好谁、提防谁、扩张方向等。每次外交审视前，先 read_file 查看已有战略，据此做出连贯的决策；局势变化时可 edit_file 调整。）\n\n"
                     + $"然后依据你自己的判断采取行动——以下是你可用的外交工具：\n"
                     + "- propose_peace：结束一场战争（可附带赔款条件）\n"
@@ -321,8 +341,9 @@ namespace MyFirstMod
                 }
                 else if (evt.Type == ActivationEventType.PlanCheckIn)
                 {
+                    var shortContent = evt.Content.Length > 80 ? evt.Content.Substring(0, 77) + "..." : evt.Content;
                     InformationManager.DisplayMessage(new InformationMessage(
-                        $"{agentName} {evt.Content}，正在继续执行计划...",
+                        $"{agentName} {shortContent}，正在继续执行计划...",
                         Colors.Cyan));
                 }
                 else
@@ -572,6 +593,7 @@ namespace MyFirstMod
                     Colors.Red));
             }
         }
+
         private static int ExtractYearFromContent(string content)
         {
             if (string.IsNullOrEmpty(content)) return -1;
@@ -585,6 +607,225 @@ namespace MyFirstMod
             if (int.TryParse(content.Substring(start, end - start), out var year))
                 return year;
             return -1;
+        }
+
+        // ============ 封臣谏言系统 ============
+
+        private static void CheckAdvisoryActivations()
+        {
+            if (Campaign.Current == null) return;
+            if (_warmupFrames > 0) return;
+            if (_currentTask != null && !_currentTask.IsCompleted) return;
+            if (MySettings.Instance?.AdvisoryEnabled != true) return;
+
+            foreach (var kingdom in Kingdom.All)
+            {
+                if (kingdom.IsEliminated) continue;
+                if (kingdom.RulingClan?.Leader == null || !kingdom.RulingClan.Leader.IsAlive)
+                    continue;
+
+            if (!_lastAdvisoryCheck.TryGetValue(kingdom, out var lastCheck))
+            {
+                _lastAdvisoryCheck[kingdom] = CampaignTime.Now;
+                continue;
+            }
+
+            if ((CampaignTime.Now - lastCheck).ToDays < 1)
+                continue;
+
+            _lastAdvisoryCheck[kingdom] = CampaignTime.Now;
+
+                var probability = MySettings.Instance?.AdvisoryProbability ?? 0.1f;
+                if (_rng.NextDouble() > probability) continue;
+
+                var leader = SelectAdvisoryLeader(kingdom);
+                if (leader == null) continue;
+
+                _lastAdvisorySpeaker[kingdom] = leader.Id;
+
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"{leader.Name} 正在向{kingdom.Name}国王进谏...",
+                    Colors.Cyan));
+
+                _currentTask = Task.Run(() => ProcessAdvisory(leader, kingdom));
+                return;
+            }
+        }
+
+        private static Entity? SelectAdvisoryLeader(Kingdom kingdom)
+        {
+            var candidates = new List<(Entity entity, float weight)>();
+
+            foreach (var clan in kingdom.Clans)
+            {
+                if (clan.IsUnderMercenaryService) continue;
+
+                var leader = clan.Leader;
+                if (leader == null || !leader.IsAlive) continue;
+                if (leader.IsPrisoner || leader.IsFugitive) continue;
+
+                var entity = EntityManager.GetOrCreateEntity(leader);
+                if (entity == null) continue;
+
+                // Skip the king and player
+                if (leader == kingdom.RulingClan?.Leader) continue;
+                if (entity.Controller == EntityController.Human) continue;
+
+                // Skip if this leader spoke last time for this kingdom
+                if (_lastAdvisorySpeaker.TryGetValue(kingdom, out var lastId) && lastId == entity.Id)
+                    continue;
+
+                // Weight: Tier×3 + Influence/50 + FiefCount
+                var weight = clan.Tier * 3f + leader.Clan.Influence / 50f + clan.Fiefs.Count;
+                candidates.Add((entity, weight));
+            }
+
+            if (candidates.Count == 0)
+            {
+                // If cooldown excluded everyone, fall back to all eligible
+                foreach (var clan in kingdom.Clans)
+                {
+                    if (clan.IsUnderMercenaryService) continue;
+                    var leader = clan.Leader;
+                    if (leader == null || !leader.IsAlive || leader.IsPrisoner || leader.IsFugitive) continue;
+                    if (leader == kingdom.RulingClan?.Leader) continue;
+                    var entity = EntityManager.GetOrCreateEntity(leader);
+                    if (entity == null || entity.Controller == EntityController.Human) continue;
+                    var weight = clan.Tier * 3f + leader.Clan.Influence / 50f + clan.Fiefs.Count;
+                    candidates.Add((entity, weight));
+                }
+            }
+
+            if (candidates.Count == 0) return null;
+
+            var totalWeight = candidates.Sum(c => c.weight);
+            var roll = _rng.NextDouble() * totalWeight;
+            var cumulative = 0f;
+            foreach (var (entity, weight) in candidates)
+            {
+                cumulative += weight;
+                if (roll <= cumulative) return entity;
+            }
+
+            return candidates.Last().entity;
+        }
+
+        private static async Task ProcessAdvisory(Entity vassal, Kingdom kingdom)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(PromptManager.CampaignDir)) return;
+
+                var kingdomName = kingdom.Name.ToString();
+                var currentYear = CampaignTime.Now.GetYear;
+                var currentTime = PromptManager.GetCurrentTimeString();
+
+                var prevAgentId = EntityManager.ActiveAgentId;
+                var prevTargetId = EntityManager.ActiveTargetId;
+
+                try
+                {
+                    EntityManager.ActivateInteraction(vassal.HeroRef!, vassal.HeroRef!);
+
+                    var advisoryDir = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "advisory");
+                    Directory.CreateDirectory(advisoryDir);
+                    var advisoryFile = Path.Combine(advisoryDir, $"{kingdomName}_{currentYear}.txt");
+
+                    var advisoryContent =
+                        $"你是{vassal.Name}，{vassal.Title}，{kingdomName}的氏族领袖。\n\n"
+                        + $"当前时间：{currentTime}\n\n"
+                        + $"作为{kingdomName}的封臣，请审视王国当前的局势，向国王进谏。\n"
+                        + "步骤：\n"
+                        + "1. 如需回顾你之前的私人记录，可用 read_file 阅读 decisions/personal_notes.txt\n"
+                        + "2. 用 query_world_state、query_war_status 等工具了解当前局势\n"
+                        + "3. 用 submit_advisory 工具提交你的公开谏言（在 content 参数里直接写谏言正文）\n"
+                        + "\n注意：谏言正文直接填进 submit_advisory 的 content 参数，不要写在你的回复文本里。"
+                        + $"如有需要记录的私人想法，可用 write_file 写入 decisions/personal_notes.txt。";
+
+                    var charPrompt = new CharacterPrompt
+                    {
+                        HeroId = vassal.Id,
+                        HeroName = vassal.Name,
+                        ChatHistory = new List<ChatHistoryEntry>
+                        {
+                            new() { Role = "user", Content = advisoryContent }
+                        }
+                    };
+
+                    var response = await AIChatClient.SendMessage(
+                        charPrompt, vassal.HeroRef, includeTools: true, intent: "advisory");
+
+                    var submittedAdvisory = response.ToolCalls.Any(tc => tc.Name == "submit_advisory");
+
+                    if (submittedAdvisory)
+                    {
+                        // submit_advisory 工具已负责归档，不重复写入
+                        if (!string.IsNullOrEmpty(response.Content))
+                            PromptManager.AppendChatLogFor(vassal.Id, vassal.Id, "assistant", response.Content);
+                    }
+                    else
+                    {
+                        var content = response.Content?.Trim();
+                        if (content == "（已通过工具处理完毕）" || content == "（领主沉默不语）")
+                            content = "";
+
+                        if (!string.IsNullOrEmpty(content))
+                        {
+                            PromptManager.AppendChatLogFor(vassal.Id, vassal.Id, "assistant", content);
+                            var header = $"\n[{currentTime}] {vassal.Name}（{vassal.Title}）谏言：\n";
+                            File.AppendAllText(advisoryFile, header, Encoding.UTF8);
+                            File.AppendAllText(advisoryFile, content + "\n", Encoding.UTF8);
+                        }
+                        else
+                        {
+                            var header = $"\n[{currentTime}] {vassal.Name}（{vassal.Title}）谏言：\n";
+                            File.AppendAllText(advisoryFile, header, Encoding.UTF8);
+                            File.AppendAllText(advisoryFile, "（未发表公开谏言）\n", Encoding.UTF8);
+                        }
+                    }
+
+                    // 强制私人笔记命名：无论 LLM 写到哪里，统一归入 personal_notes.txt
+                    try
+                    {
+                        var decisionsDir = Path.Combine(PromptManager.CampaignDir, "NPCs", vassal.Id, "decisions");
+                        if (Directory.Exists(decisionsDir))
+                        {
+                            var notesPath = Path.Combine(decisionsDir, "personal_notes.txt");
+                            foreach (var legacyFile in Directory.GetFiles(decisionsDir, "advisory_*.txt"))
+                            {
+                                if (!File.Exists(notesPath))
+                                    File.Move(legacyFile, notesPath);
+                                else
+                                {
+                                    File.AppendAllText(notesPath, "\n" + File.ReadAllText(legacyFile), Encoding.UTF8);
+                                    File.Delete(legacyFile);
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"{vassal.Name} 已向{kingdomName}国王进谏完成。",
+                        Colors.Cyan));
+                }
+                finally
+                {
+                    if (prevAgentId != null && prevTargetId != null)
+                    {
+                        var prevAgent = EntityManager.GetEntityById(prevAgentId);
+                        var prevTarget = EntityManager.GetEntityById(prevTargetId);
+                        if (prevAgent?.HeroRef != null && prevTarget?.HeroRef != null)
+                            EntityManager.ActivateInteraction(prevAgent.HeroRef, prevTarget.HeroRef);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"[MyFirstMod] 封臣谏言处理异常：{ex.Message}",
+                    Colors.Red));
+            }
         }
     }
 }

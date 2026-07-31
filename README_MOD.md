@@ -101,6 +101,18 @@
 - 史官提示词（`historian_rules.txt`、`yearly_chronicle_prompt.txt`、`biography_prompt.txt`）全部热重载
 - 史料记录类型：war_declared / peace_made / siege_started / siege_failed / siege_abandoned / settlement_captured / kingdom_destroyed / kingdom_created / hero_killed / clan_changed_kingdom / clan_leader_changed / marriage
 
+### 封臣谏言
+
+- 每个王国每天有概率（MCM 可调，默认 10%）触发一位氏族领袖向国王进谏
+- 按权重随机选择谏言者（权重 = 氏族等级×3 + 影响力/50 + 封地数），排除雇佣兵、俘虏、逃亡者、玩家和国王本人；同一封臣不会连续进谏
+- 封臣激活后阅读自己的私人笔记（`decisions/personal_notes.txt`）、查询世界局势，然后调用 **`submit_advisory` 工具**提交公开谏言
+- 公开谏言由系统自动归档到 `World/advisory/{王国}_{年份}.txt`（含时间戳、姓名、头衔，按年分文件封存）
+- 私人笔记 `decisions/personal_notes.txt` 非强制，封臣可自行决定是否记录
+- 国王的外交提示词中自动注入"先阅读封臣谏言"的指引，但国王保留绝对决策权
+- 战役地图上按 **H 键**可查阅本国封臣的公开谏言
+- 史官可读取所有王国的公开谏言写入编年史
+- 提示词：`advisory_rules.txt` 支持热重载；`tools.json`/`agent_tools.json` 删除时自动回退内嵌最小工具集
+
 ### 工具分类系统
 
 所有工具按 8 个分类组织，Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁：
@@ -161,6 +173,7 @@ _Module/Prompts/
 ├── letter_rules.txt             # 书信规则
 ├── diplomacy_rules.txt          # 外交决策规则（玩家可编辑，热重载）
 ├── historian_rules.txt          # 史官编年史规则（玩家可编辑，热重载）
+├── advisory_rules.txt            # 封臣谏言规则（热重载）
 ├── yearly_chronicle_prompt.txt  # 年度编年史激活提示词（热重载）
 ├── biography_prompt.txt         # 人物列传激活提示词（热重载）
 ├── special_chronicle_prompt.txt # 专题史激活提示词（热重载）
@@ -226,15 +239,13 @@ _Module/Prompts/
 | API URL | LLM API 端点 | `https://api.deepseek.com/v1/chat/completions` |
 | Model | 模型名称 | `deepseek-chat` |
 | API Key | 你的 API 密钥 | 空（需自行填入） |
-| 最大 Token 数 | AI 单次回复的 token 上限 | `500` |
+| 最大 Token 数 | AI 单次回复的 token 上限 | `4096` |
 | 回复创造性 | Temperature 值，越低越稳定保守 | `0.8` |
 | API 超时（秒） | 请求超时时间 | `30` |
 | Test Connection | 测试按钮 | 验证连通性和 function calling 支持 |
 | 双倍声望 | 战斗中声望翻倍 | 关闭 |
 | 独立工具调用 | 仅在模型消极调用工具时开启（增加延迟和 token 消耗） | 关闭 |
 | 显示工具调用提示 | 左下角显示 Agent 的文件操作 | 开启 |
-| Agent 最大轮次 | 工具调用循环上限 | `5` |
-| 不限制 Agent 轮次 | 开启后无轮次上限，直到模型自然停止 | 关闭 |
 | 聊天历史上限（条） | 保留最近 N 条消息发给 AI | `20` |
 | 注入世界背景 | 是否在提示词中加入卡拉迪亚背景 | 开启 |
 | 最大好感变化 | Agent 单次修改好感度的上限 | `5` |
@@ -243,8 +254,12 @@ _Module/Prompts/
 | 禁止原版外交（Agent 主导） | 禁止原版 AI 外交，所有外交由国王 Agent 决策 | 开启 |
 | 国王激活间隔（天） | 国王 Agent 定期外交审视的间隔 | `30` |
 | 编年史间隔（年） | 史官编纂编年史的间隔（1=每年，3=每三年） | `1` |
+| 启用封臣谏言 | 开启后封臣按概率陆续进谏 | 开启 |
+| 封臣谏言概率/天 | 每个王国每天触发封臣进谏的概率 | `0.1` |
+| 所有贵族立传 | 死后立传范围：所有氏族贵族 或 仅氏族领袖和国王 | 开启 |
 | 史书字体大小 | 史书 UI 中编年史正文的字体大小 | `28` |
 | 强制开始外交 | 立即激活所有国王 Agent 进行外交审视，重置计时器（按钮） | — |
+| 强制封臣进谏 | 立即重置所有王国的封臣谏言计时器（按钮） | — |
 | 对话字体大小 | 聊天窗口中对话内容的字号 | `24` |
 | 角色名字体大小 | 聊天窗口中角色名称的字号 | `22` |
 | 时间戳字体大小 | 聊天窗口中时间戳的字号 | `22` |

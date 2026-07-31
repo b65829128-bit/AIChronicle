@@ -109,19 +109,59 @@ namespace MyFirstMod
         private void LoadChronicleList()
         {
             var chronicleDir = FindChronicleDir();
-            if (chronicleDir == null || !Directory.Exists(chronicleDir))
-                return;
+            if (chronicleDir != null && Directory.Exists(chronicleDir))
+            {
+                var files = Directory.GetFiles(chronicleDir, "*.txt");
+                Array.Sort(files, (a, b) => string.Compare(Path.GetFileName(a), Path.GetFileName(b), StringComparison.Ordinal));
+                Array.Reverse(files);
 
-            var files = Directory.GetFiles(chronicleDir, "*.txt");
+                foreach (var file in files)
+                {
+                    var fname = Path.GetFileNameWithoutExtension(file);
+                    var displayName = ParseChronicleName(fname);
+                    Chronicles.Add(new ChronicleEntryVM(displayName, file, this));
+                }
+            }
+
+            LoadAdvisoryList();
+        }
+
+        private void LoadAdvisoryList()
+        {
+            if (Campaign.Current == null) return;
+            if (Clan.PlayerClan?.IsUnderMercenaryService == true) return;
+
+            var playerKingdom = Clan.PlayerClan?.Kingdom;
+            if (playerKingdom == null) return;
+
+            var campaignDir = PromptManager.CampaignDir;
+            if (string.IsNullOrEmpty(campaignDir)) return;
+
+            var advisoryDir = Path.Combine(campaignDir, "NPCs", "World", "advisory");
+            if (!Directory.Exists(advisoryDir)) return;
+
+            var kingdomName = playerKingdom.Name.ToString();
+            var files = Directory.GetFiles(advisoryDir, $"{kingdomName}_*.txt");
             Array.Sort(files, (a, b) => string.Compare(Path.GetFileName(a), Path.GetFileName(b), StringComparison.Ordinal));
             Array.Reverse(files);
 
             foreach (var file in files)
             {
                 var fname = Path.GetFileNameWithoutExtension(file);
-                var displayName = ParseChronicleName(fname);
+                var displayName = ParseAdvisoryName(fname);
                 Chronicles.Add(new ChronicleEntryVM(displayName, file, this));
             }
+        }
+
+        private static string ParseAdvisoryName(string filename)
+        {
+            var parts = filename.Split('_');
+            if (parts.Length >= 2 && int.TryParse(parts[parts.Length - 1], out int year))
+            {
+                var kingdom = string.Join("_", parts, 0, parts.Length - 1);
+                return $"封臣谏言 · {kingdom} · 第{year}年";
+            }
+            return $"封臣谏言 · {filename}";
         }
 
         private static string ParseChronicleName(string filename)

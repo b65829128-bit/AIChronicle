@@ -121,6 +121,16 @@ namespace MyFirstMod
                 else
                     File.WriteAllText(destWorldInfo, "（卡拉迪亚大陆，一片充满纷争的土地。）", Encoding.UTF8);
             }
+            else
+            {
+                var defaultPath = Path.Combine(_promptsBaseDir, "world_info.txt");
+                try
+                {
+                    if (File.Exists(defaultPath) && File.GetLastWriteTimeUtc(defaultPath) > File.GetLastWriteTimeUtc(destWorldInfo))
+                        File.Copy(defaultPath, destWorldInfo, true);
+                }
+                catch { }
+            }
 
             var destSystemPrompt = Path.Combine(_campaignDir, "system_prompt.txt");
             if (!File.Exists(destSystemPrompt))
@@ -128,6 +138,16 @@ namespace MyFirstMod
                 var defaultPath = Path.Combine(_promptsBaseDir, "system_prompt.txt");
                 if (File.Exists(defaultPath))
                     File.Copy(defaultPath, destSystemPrompt);
+            }
+            else
+            {
+                var defaultPath = Path.Combine(_promptsBaseDir, "system_prompt.txt");
+                try
+                {
+                    if (File.Exists(defaultPath) && File.GetLastWriteTimeUtc(defaultPath) > File.GetLastWriteTimeUtc(destSystemPrompt))
+                        File.Copy(defaultPath, destSystemPrompt, true);
+                }
+                catch { }
             }
 
             var npcBase = Path.Combine(_campaignDir, "NPCs");
@@ -145,25 +165,45 @@ namespace MyFirstMod
             CopyPromptToCampaign("yearly_chronicle_prompt.txt");
             CopyPromptToCampaign("special_chronicle_prompt.txt");
             CopyPromptToCampaign("biography_prompt.txt");
+            CopyPromptToCampaign("advisory_rules.txt");
             CopyTemplateToCampaign("context_template.txt");
         }
 
         private static void CopyPromptToCampaign(string filename)
         {
             var dest = Path.Combine(_campaignDir, filename);
-            if (File.Exists(dest)) return;
             var src = Path.Combine(_promptsBaseDir, filename);
-            if (File.Exists(src))
+            if (!File.Exists(src)) return;
+            if (!File.Exists(dest))
+            {
                 File.Copy(src, dest);
+                return;
+            }
+            // 基础目录更新则覆盖战役副本（开发期热同步）；玩家在战役副本上的编辑仍会被保留
+            try
+            {
+                if (File.GetLastWriteTimeUtc(src) > File.GetLastWriteTimeUtc(dest))
+                    File.Copy(src, dest, true);
+            }
+            catch { }
         }
 
         private static void CopyTemplateToCampaign(string filename)
         {
             var dest = Path.Combine(_campaignDir, filename);
-            if (File.Exists(dest)) return;
             var src = Path.Combine(_promptsBaseDir, "Templates", filename);
-            if (File.Exists(src))
+            if (!File.Exists(src)) return;
+            if (!File.Exists(dest))
+            {
                 File.Copy(src, dest);
+                return;
+            }
+            try
+            {
+                if (File.GetLastWriteTimeUtc(src) > File.GetLastWriteTimeUtc(dest))
+                    File.Copy(src, dest, true);
+            }
+            catch { }
         }
 
         public static string BuildSystemPrompt(string lordName, CharacterPrompt charPrompt)
@@ -290,7 +330,7 @@ namespace MyFirstMod
         {
             var path = Path.Combine(_promptsBaseDir, "tools.json");
             if (!File.Exists(path))
-                return _cachedTools;
+                return GetFallbackTools();
 
             var lastWrite = File.GetLastWriteTimeUtc(path);
             if (_cachedTools.Count == 0 || lastWrite > _lastToolsCheck)
@@ -306,7 +346,7 @@ namespace MyFirstMod
         {
             var path = Path.Combine(_promptsBaseDir, "agent_tools.json");
             if (!File.Exists(path))
-                return new List<ToolDef>();
+                return GetFallbackAgentTools();
 
             var lastWrite = File.GetLastWriteTimeUtc(path);
             if (_cachedAgentTools.Count == 0 || lastWrite > _lastAgentToolsCheck)
@@ -318,11 +358,95 @@ namespace MyFirstMod
             return _cachedAgentTools;
         }
 
+        // tools.json 被删除时的最小兜底工具集（保证 Agent 仍能基本交互）
+        private static List<ToolDef> GetFallbackTools()
+        {
+            return new List<ToolDef>
+            {
+                new() { Name = "update_knowledge", Category = "universal",
+                    Description = "记录对方透露的新信息。",
+                    Parameters = new List<ToolParamDef> { new() { Name = "knowledge", Type = "string", Description = "新信息摘要" } } },
+                new() { Name = "cancel_action", Category = "universal",
+                    Description = "取消当前任务，回归自主行动。" },
+                new() { Name = "query_character", Category = "query",
+                    Description = "查询人物公开信息（身份/家族/王国/兵力/位置）。",
+                    Parameters = new List<ToolParamDef> { new() { Name = "name", Type = "string", Description = "人物名称" } } },
+                new() { Name = "query_world_state", Category = "query",
+                    Description = "查询世界局势（各王国兵力与交战状态）。" },
+                new() { Name = "query_settlement", Category = "query",
+                    Description = "查询定居点信息（所有者/繁荣度/类型）。",
+                    Parameters = new List<ToolParamDef> { new() { Name = "name", Type = "string", Description = "定居点名称" } } },
+                new() { Name = "change_relation", Category = "social",
+                    Description = "修改对任意人物的好感度。",
+                    Parameters = new List<ToolParamDef>
+                    {
+                        new() { Name = "target_entity_id", Type = "string", Description = "目标实体 ID 或名称" },
+                        new() { Name = "delta", Type = "integer", Description = "好感度变化量" }
+                    } },
+                new() { Name = "give_gold", Category = "social",
+                    Description = "赠予任意人物金币。",
+                    Parameters = new List<ToolParamDef>
+                    {
+                        new() { Name = "target_entity_id", Type = "string", Description = "目标实体 ID 或名称" },
+                        new() { Name = "amount", Type = "integer", Description = "金币数量" }
+                    } },
+                new() { Name = "move_to_settlement", Category = "movement",
+                    Description = "移动部队到指定定居点。",
+                    Parameters = new List<ToolParamDef> { new() { Name = "settlement_name", Type = "string", Description = "定居点名称" } } }
+            };
+        }
+
+        // agent_tools.json 被删除时的最小兜底工具集
+        private static List<ToolDef> GetFallbackAgentTools()
+        {
+            return new List<ToolDef>
+            {
+                new() { Name = "read_file", Category = "file",
+                    Description = "读取文件内容。",
+                    Parameters = new List<ToolParamDef> { new() { Name = "path", Type = "string", Description = "相对路径" } } },
+                new() { Name = "append_file", Category = "file",
+                    Description = "追加内容到文件末尾。",
+                    Parameters = new List<ToolParamDef>
+                    {
+                        new() { Name = "path", Type = "string", Description = "相对路径" },
+                        new() { Name = "content", Type = "string", Description = "要追加的内容" }
+                    } },
+                new() { Name = "write_file", Category = "file",
+                    Description = "写入/覆盖文件。",
+                    Parameters = new List<ToolParamDef>
+                    {
+                        new() { Name = "path", Type = "string", Description = "相对路径" },
+                        new() { Name = "content", Type = "string", Description = "内容" }
+                    } },
+                new() { Name = "list_dir", Category = "file",
+                    Description = "列出目录内容。",
+                    Parameters = new List<ToolParamDef> { new() { Name = "path", Type = "string", Description = "相对路径" } } },
+                new() { Name = "glob", Category = "file",
+                    Description = "按文件名模式匹配。",
+                    Parameters = new List<ToolParamDef> { new() { Name = "pattern", Type = "string", Description = "模式，如 knowledge/*.txt" } } },
+                new() { Name = "grep", Category = "file",
+                    Description = "按关键词搜索文件内容。",
+                    Parameters = new List<ToolParamDef> { new() { Name = "keyword", Type = "string", Description = "关键词" } } },
+                new() { Name = "send_letter", Category = "communication",
+                    Description = "给其他实体写信。",
+                    Parameters = new List<ToolParamDef>
+                    {
+                        new() { Name = "recipient_entity_id", Type = "string", Description = "收信人 ID 或名称" },
+                        new() { Name = "content", Type = "string", Description = "信件正文" }
+                    } },
+                new() { Name = "submit_advisory", Category = "communication",
+                    Description = "向国王提交公开谏言。",
+                    Parameters = new List<ToolParamDef> { new() { Name = "content", Type = "string", Description = "谏言正文" } } }
+            };
+        }
+
         private static string LoadWorldInfo()
         {
             var path = Path.Combine(_campaignDir, "world_info.txt");
             if (!File.Exists(path))
-                return "";
+                path = Path.Combine(_promptsBaseDir, "world_info.txt");
+            if (!File.Exists(path))
+                return "卡拉迪亚大陆，一片充满纷争与传奇的土地。众多王国与帝国征战不休，唯力量与智慧方能立足。";
 
             var lastWrite = File.GetLastWriteTimeUtc(path);
             if (_cachedWorldInfo == "" || lastWrite > _lastWorldInfoCheck)

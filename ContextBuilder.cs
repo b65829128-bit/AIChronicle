@@ -128,8 +128,12 @@ namespace MyFirstMod
                 "diplomacy" => BuildDiplomacyRules(),
                 "chancery" => BuildChanceryRules(),
                 "historian" => BuildHistorianRules(),
+                "advisory" => BuildAdvisoryRules(),
+                "chat" => BuildChatRules(),
                 _ => BuildConversationRules()
             };
+
+            var kingdomName = (agent.HeroRef?.MapFaction as Kingdom)?.Name?.ToString() ?? "?";
 
             var template = LoadContextTemplate();
             return template
@@ -137,6 +141,7 @@ namespace MyFirstMod
                 .Replace("{entity_id}", agent.Id)
                 .Replace("{name}", agent.Name)
                 .Replace("{title}", agent.Title)
+                .Replace("{kingdom}", kingdomName)
                 .Replace("{target_id}", target.Id)
                 .Replace("{target_name}", target.Name)
                 .Replace("{target_title}", target.Title)
@@ -241,7 +246,8 @@ namespace MyFirstMod
         {
             if (MySettings.Instance?.UseWorldInfo != true) return "";
             var path = PromptManager.GetWorldInfoPath();
-            if (path == null || !File.Exists(path)) return "";
+            if (path == null || !File.Exists(path))
+                return "卡拉迪亚大陆，一片充满纷争与传奇的土地。众多王国与帝国征战不休，唯力量与智慧方能立足。";
             return File.ReadAllText(path, Encoding.UTF8).Trim();
         }
 
@@ -314,6 +320,9 @@ namespace MyFirstMod
             }
             return cache;
         }
+
+        private static string _cachedAdvisoryRules = "";
+        private static DateTime _lastAdvisoryRulesCheck;
 
         private static string BuildDiplomacyRules()
         {
@@ -413,7 +422,27 @@ namespace MyFirstMod
             }
             return _cachedHistorianRules;
         }
-        
+
+        private static string BuildAdvisoryRules()
+        {
+            return LoadRulesFile("advisory_rules.txt", ref _cachedAdvisoryRules, ref _lastAdvisoryRulesCheck)
+                ?? "你是{name}，{title}，{kingdom}的氏族领袖。\n\n"
+                + "请审视王国当前的局势，写下你的公开谏言。\n"
+                + "你的谏言将被国王和史官看到。\n"
+                + "私人想法和隐秘计划请写入私有文件。";
+        }
+
+        private static string BuildChatRules()
+        {
+            return
+                "你就是{name}，{title}。你正在处理自己的事务。\n\n"
+                + "规则：\n"
+                + "- 说你要做什么就必须调用对应的 function——光说不做等于什么都没发生\n"
+                + "- 遇到不确定的事时，先用 glob/grep/read_file 查阅自己的记忆文件，再进行判断\n"
+                + "- 对方就是你自己（自省），你的输出是你自己的思考和决策，不是对别人说的话\n"
+                + "- 不需要角色扮演——这是你的私人思考，直接、务实即可";
+        }
+
         private static string BuildSelfStatus(Hero hero)
         {
             if (hero == null) return "未知。";

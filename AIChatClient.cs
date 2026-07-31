@@ -52,6 +52,8 @@ namespace MyFirstMod
             "letter" => new[] { "universal", "query", "file", "communication", "movement", "military", "diplomacy" },
             "diplomacy" => new[] { "universal", "query", "diplomacy" },
             "historian" => new[] { "universal", "query", "file" },
+            "advisory" => new[] { "universal", "query", "file", "communication" },
+            "chat" => new[] { "universal", "query", "file", "social", "communication" },
             _ => new[] { "universal", "query", "social", "military", "movement", "diplomacy", "file", "communication" },
         };
 
@@ -377,10 +379,13 @@ namespace MyFirstMod
             var allToolCalls = new List<ToolCallData>();
             var toolResults = new Dictionary<string, string>();
             var accumulatedText = "";
+            var lastMeaningfulText = "";
 
-            var maxRounds = settings.UnlimitedAgentRounds ? int.MaxValue : settings.MaxAgentRounds;
+            // 不再限制工具调用轮数——模型直到自然停止。
+            // 仅保留一个极高的安全阀（50 轮），防止病态死循环。
+            const int MaxSafetyRounds = 50;
 
-            for (int round = 0; round < maxRounds; round++)
+            for (int round = 0; round < MaxSafetyRounds; round++)
             {
                 object payload;
                 if (includeTools)
@@ -453,6 +458,8 @@ namespace MyFirstMod
                     {
                         roundText += deltaContent;
                         accumulatedText += deltaContent;
+                        if (!string.IsNullOrEmpty(roundText))
+                            lastMeaningfulText = roundText;
                     }
 
                     var deltaReasoning = delta["reasoning_content"]?.ToString();
@@ -499,9 +506,12 @@ namespace MyFirstMod
 
                 if (roundToolCalls.Count == 0)
                 {
+                    var finalContent = !string.IsNullOrEmpty(roundText) ? roundText
+                        : !string.IsNullOrEmpty(lastMeaningfulText) ? lastMeaningfulText
+                        : (allToolCalls.Count > 0 ? "（已通过工具处理完毕）" : "（领主沉默不语）");
                     return new ChatResponse
                     {
-                        Content = string.IsNullOrEmpty(accumulatedText) ? "（领主沉默不语）" : accumulatedText,
+                        Content = finalContent,
                         LearnedKnowledge = learnedKnowledge,
                         ToolCalls = allToolCalls,
                         ToolResults = toolResults
@@ -546,7 +556,9 @@ namespace MyFirstMod
 
             return new ChatResponse
             {
-                Content = string.IsNullOrEmpty(accumulatedText) ? "（领主沉默不语）" : accumulatedText,
+                Content = !string.IsNullOrEmpty(lastMeaningfulText) ? lastMeaningfulText
+                    : !string.IsNullOrEmpty(accumulatedText) ? accumulatedText
+                    : (allToolCalls.Count > 0 ? "（已通过工具处理完毕）" : "（领主沉默不语）"),
                 LearnedKnowledge = learnedKnowledge,
                 ToolCalls = allToolCalls,
                 ToolResults = toolResults

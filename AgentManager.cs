@@ -42,7 +42,7 @@ namespace MyFirstMod
 
         private static readonly HashSet<string> _readableWorldDirs = new()
         {
-            "history", "history/chronicles"
+            "history", "history/chronicles", "advisory"
         };
 
         public static string ActiveAgentId => _agentEntityId;

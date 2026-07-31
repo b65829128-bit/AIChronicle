@@ -209,18 +209,21 @@ namespace MyFirstMod
             }
             catch { }
 
-            var history = PromptManager.LoadChatLogFor(_agentId, _targetId);
-            _sessionMessages.AddRange(history);
-
-            var loadTime = PromptManager.GetCurrentTimeString();
-            foreach (var entry in _sessionMessages)
+            if (intent != "council_statement")
             {
+                var history = PromptManager.LoadChatLogFor(_agentId, _targetId);
+                _sessionMessages.AddRange(history);
+
+                var loadTime = PromptManager.GetCurrentTimeString();
+                foreach (var entry in _sessionMessages)
+                {
                 if (entry.Role == "tool") continue;
                 var sender = entry.Role == "user" ? "你" : _charPrompt.HeroName;
                 var color = entry.Role == "user" ? "#5DADE2FF" : "#F4D03FFF";
                 Messages.Add(new ChatMessageVM(sender, entry.Content, entry.Role, color, loadTime,
                     _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
                     _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
+            }
             }
         }
 
@@ -358,6 +361,7 @@ namespace MyFirstMod
                                     "propose_trade" => "提出了贸易协定",
                                     "respond_to_diplomacy_proposal" => "回复了外交提案",
                                     "gift_fief" => $"将 {set} 转让了",
+                                    "submit_advisory" => "向国王进谏了",
                                     _ => $"调用了 {tc.Name}"
                                 };
                             }
