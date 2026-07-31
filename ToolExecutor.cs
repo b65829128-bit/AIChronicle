@@ -299,6 +299,9 @@ namespace MyFirstMod
                     case "submit_advisory":
                         return ExecuteSubmitAdvisory(args["content"]?.ToString() ?? "");
 
+                    case "submit_secret_advisory":
+                        return ExecuteSubmitSecretAdvisory(args["content"]?.ToString() ?? "");
+
                     default:
                         return $"未知工具：{name}";
                 }
@@ -1704,6 +1707,42 @@ namespace MyFirstMod
             File.AppendAllText(advisoryFile, content.Trim() + "\n", Encoding.UTF8);
 
             return "谏言已提交归档。";
+        }
+
+        /// <summary>秘密谏言：只呈本国王，不入史册（史官无权读取）。写 World/secret_advisory/{王国}_{年}.txt。</summary>
+        private static string ExecuteSubmitSecretAdvisory(string content)
+        {
+            if (string.IsNullOrWhiteSpace(content))
+                return "[错误] 秘密谏言内容不能为空";
+            if (AIChatClient.CurrentHero == null)
+                return "[错误] 无当前领主";
+            if (string.IsNullOrEmpty(PromptManager.CampaignDir))
+                return "[错误] 战役目录未就绪";
+
+            var hero = AIChatClient.CurrentHero;
+            var kingdom = hero.MapFaction as Kingdom;
+            if (kingdom == null)
+                return "[错误] 你不属于任何王国，无法进谏";
+            if (hero.Clan?.IsUnderMercenaryService == true)
+                return "[错误] 雇佣兵无权进谏";
+
+            var kingdomName = kingdom.Name.ToString();
+            var currentYear = CampaignTime.Now.GetYear;
+            var currentTime = PromptManager.GetCurrentTimeString();
+
+            var entity = EntityManager.GetOrCreateEntity(hero);
+            var name = entity?.Name ?? hero.Name?.ToString() ?? "?";
+            var title = entity?.Title ?? "?";
+
+            var secretDir = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "secret_advisory");
+            Directory.CreateDirectory(secretDir);
+            var secretFile = Path.Combine(secretDir, $"{kingdomName}_{currentYear}.txt");
+
+            var header = $"\n[{currentTime}] {name}（{title}）密陈：\n";
+            File.AppendAllText(secretFile, header, Encoding.UTF8);
+            File.AppendAllText(secretFile, content.Trim() + "\n", Encoding.UTF8);
+
+            return "秘密谏言已密陈给国王。";
         }
 
         internal static float CalculateLetterDelay(Hero sender, Hero? recipient)

@@ -287,7 +287,7 @@ namespace MyFirstMod
                     : "";
 
                 var currentYear = CampaignTime.Now.GetYear;
-                var advisoryNote = $"\n（提示：先用 read_file 阅读 World/advisory/{kingdom.Name}_{currentYear}.txt 了解封臣们的近期谏言。群臣意见是你的决策参考，但你的决定权至高无上。）\n";
+                var advisoryNote = $"\n（提示：先用 read_file 阅读 advisory/{kingdom.Name}_{currentYear}.txt 了解封臣们的公开谏言，再用 read_file 阅读 secret_advisory/{kingdom.Name}_{currentYear}.txt 查看封臣们的秘密陈奏——后者仅你可见、不入史册。群臣意见是你的决策参考，但你的决定权至高无上。）\n";
 
                 var activationMsg =
                     $"你是{kingdom.Name}的至高统治者。审视你的王国局势，凭自己的判断做出外交决断。\n\n"
@@ -949,11 +949,11 @@ namespace MyFirstMod
             return candidates.Last().entity;
         }
 
-        /// <summary>是否算"已提交谏言"：仅当 submit_advisory 实际执行成功（结果非错误）。</summary>
+        /// <summary>是否算"已提交谏言"：submit_advisory（公开）或 submit_secret_advisory（密陈）实际执行成功。</summary>
         private static bool IsAdvisorySubmitted(ChatResponse response)
         {
             return response.ToolCalls.Any(tc =>
-                tc.Name == "submit_advisory"
+                (tc.Name == "submit_advisory" || tc.Name == "submit_secret_advisory")
                 && response.ToolResults.TryGetValue(tc.Id, out var r)
                 && !r.StartsWith("[错误]"));
         }
@@ -986,8 +986,8 @@ namespace MyFirstMod
                         + "步骤：\n"
                         + "1. 如需回顾你之前的私人记录，可用 read_file 阅读 decisions/personal_notes.txt\n"
                         + "2. 用 query_world_state、query_war_status 等工具了解当前局势\n"
-                        + "3. 用 submit_advisory 工具提交你的公开谏言（在 content 参数里直接写谏言正文）\n"
-                        + "\n注意：谏言正文直接填进 submit_advisory 的 content 参数，不要写在你的回复文本里。"
+                        + "3. 用 submit_advisory 工具提交你的公开谏言（在 content 参数里直接写谏言正文）；若有不便入史的内容，用 submit_secret_advisory 密陈给国王\n"
+                        + "\n注意：谏言正文直接填进 submit_advisory / submit_secret_advisory 的 content 参数，不要写在你的回复文本里。"
                         + $"如有需要记录的私人想法，可用 write_file 写入 decisions/personal_notes.txt。";
 
                     var charPrompt = new CharacterPrompt

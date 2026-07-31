@@ -1155,6 +1155,7 @@ namespace MyFirstMod
             {
                 if (_readableDirs.Contains(dirPart)) return true;
                 if (isWorldPath) return true;
+                if (IsSecretAdvisoryAllowed(relPath)) return true; // 本国王可读本国秘密谏言
             }
 
             if (write && _writableDirs.Contains(dirPart))
@@ -1185,12 +1186,32 @@ namespace MyFirstMod
             if (_readableWorldDirs.Any(d => relPath.StartsWith(d + "/") || relPath == d))
                 return Path.Combine(_baseDir, "World", relPath);
 
+            if (IsSecretAdvisoryAllowed(relPath))
+                return Path.Combine(_baseDir, "World", relPath);
+
             if (string.IsNullOrEmpty(_agentDir))
                 return null;
 
             var full = Path.GetFullPath(Path.Combine(_agentDir, relPath));
             var agentRoot = Path.GetFullPath(_agentDir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
             return full.StartsWith(agentRoot, StringComparison.Ordinal) ? full : null;
+        }
+
+        /// <summary>
+        /// 秘密谏言（World/secret_advisory/{王国}_{年}.txt）的读取授权：只有该王国的统治者可读。
+        /// 史官（__historian__，HeroRef 为 null）与异国君主天然无权。
+        /// </summary>
+        private static bool IsSecretAdvisoryAllowed(string relPath)
+        {
+            if (!relPath.StartsWith("secret_advisory/", StringComparison.Ordinal)) return false;
+            var fileName = Path.GetFileNameWithoutExtension(relPath); // 北帝国_1089
+            if (string.IsNullOrEmpty(fileName)) return false;
+            var idx = fileName.LastIndexOf('_');
+            if (idx > 0) fileName = fileName.Substring(0, idx); // 去掉末尾 _年份
+
+            var hero = EntityManager.GetEntityById(_agentEntityId.Value ?? "")?.HeroRef;
+            var kingdom = hero?.MapFaction as Kingdom;
+            return kingdom != null && string.Equals(kingdom.Name?.ToString(), fileName, StringComparison.Ordinal);
         }
 
         private static string SanitizeDir(string name)

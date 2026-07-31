@@ -389,6 +389,7 @@ namespace MyFirstMod
                                     "respond_to_diplomacy_proposal" => "回复了外交提案",
                                     "gift_fief" => $"将 {set} 转让了",
                                     "submit_advisory" => "向国王进谏了",
+                                    "submit_secret_advisory" => "向国王密陈了",
                                     _ => $"调用了 {tc.Name}"
                                 };
                             }

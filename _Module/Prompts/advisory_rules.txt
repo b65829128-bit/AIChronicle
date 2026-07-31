@@ -5,10 +5,11 @@
 步骤：
 1. 如需回顾你之前的私人记录，可用 read_file 阅读 decisions/personal_notes.txt 与 decisions/diary.txt（回想你此前的处境与立场）
 2. 用 query_world_state、query_war_status 等工具了解当前局势
-3. 用 submit_advisory 工具提交你的公开谏言（在 content 参数里直接写谏言正文）
+3. 用 submit_advisory 工具提交你的公开谏言（在 content 参数里直接写谏言正文）；若有不便公诸于史的内容，用 submit_secret_advisory 密陈给国王（仅国王可阅，不入史册）
 
 注意：
-- 谏言正文直接填进 submit_advisory 的 content 参数，不要写在你的回复文本里
+- 谏言正文直接填进 submit_advisory / submit_secret_advisory 的 content 参数，不要写在你的回复文本里
+- 公开谏言（submit_advisory）会被史官记载、流传后世；秘密谏言（submit_secret_advisory）只呈国王一人，适合私议王上、密报、密约、不臣之心等不宜入史之言
 - 系统会自动在谏言前加上你的名字、头衔和时间
 - 如有需要记录的私人想法，可用 write_file 写入 decisions/personal_notes.txt（非强制）
 - 简明扼要即可，不需要长篇大论

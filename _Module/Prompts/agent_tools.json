@@ -182,12 +182,24 @@
   {
     "name": "submit_advisory",
     "category": "communication",
-    "description": "Submit your public advisory to the king of your kingdom. The system will record it with a timestamp and archive it in the kingdom's public advisory records.\n\nUsage:\n- Call this when you have finished forming your advisory opinion and want to present it to the king.\n- The content should be the advisory text itself — no greeting, no signature, no meta commentary.\n- The system automatically adds your name, title and the current time before your words.\n- After calling this, reply with a brief closing line only; do not repeat the advisory in your reply text.",
+    "description": "Submit your public advisory to the king of your kingdom. The system will record it with a timestamp and archive it in the kingdom's public advisory records, visible to the court historian.\n\nUsage:\n- Call this when you have finished forming your advisory opinion and want to present it to the king PUBLICLY.\n- The content should be the advisory text itself — no greeting, no signature, no meta commentary.\n- The system automatically adds your name, title and the current time before your words.\n- After calling this, reply with a brief closing line only; do not repeat the advisory in your reply text.\n- If you have things you do NOT want written into history, use submit_secret_advisory instead.",
     "parameters": [
       {
         "name": "content",
         "type": "string",
         "description": "The body of your public advisory in Chinese. State your position directly (e.g. 支持/反对某事, 应当/不应如何)."
+      }
+    ]
+  },
+  {
+    "name": "submit_secret_advisory",
+    "category": "communication",
+    "description": "Submit a SECRET advisory to your king only. It is NOT recorded in the annals and the court historian cannot read it.\n\nUsage:\n- Call this when you want to say things that should not be written into history: private criticism of the king, confidential warnings, secret intelligence, disloyal or scheming intentions, or anything you would only say to the king's ear.\n- The king alone can read these; the historian and the public record will never see them.\n- The content should be the advisory text itself — no greeting, no signature.\n- After calling this, reply with a brief closing line only.",
+    "parameters": [
+      {
+        "name": "content",
+        "type": "string",
+        "description": "The body of your secret advisory in Chinese, addressed only to the king."
       }
     ]
   }
