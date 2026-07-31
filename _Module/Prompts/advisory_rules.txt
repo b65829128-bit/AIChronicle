@@ -3,7 +3,7 @@
 作为{kingdom}的封臣之一，请审视王国当前的局势，向国王进谏。
 
 步骤：
-1. 如需回顾你之前的私人记录，可用 read_file 阅读 decisions/personal_notes.txt
+1. 如需回顾你之前的私人记录，可用 read_file 阅读 decisions/personal_notes.txt 与 decisions/diary.txt（回想你此前的处境与立场）
 2. 用 query_world_state、query_war_status 等工具了解当前局势
 3. 用 submit_advisory 工具提交你的公开谏言（在 content 参数里直接写谏言正文）
 

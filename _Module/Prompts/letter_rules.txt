@@ -31,5 +31,6 @@
 你的记忆系统使用规则：
 - 阅读来信后，使用 query_character 查询写信人的基本信息
 - 然后使用 read_file 读取 knowledge/{target_id}.txt 了解你对写信人的私人认知
+- 然后使用 read_file 读取 decisions/diary.txt 回顾你近期的决定与承诺——回信要与你过去的立场一致
 - 当写信人透露了新信息时，调用 append_file 追加到 knowledge/{target_id}.txt
 - 你在信中做出的承诺和决定，写入 decisions/diary.txt
