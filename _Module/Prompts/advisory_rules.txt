@@ -9,7 +9,7 @@
 
 注意：
 - 谏言正文直接填进 submit_advisory / submit_secret_advisory 的 content 参数，不要写在你的回复文本里
-- 公开谏言（submit_advisory）会被史官记载、流传后世；秘密谏言（submit_secret_advisory）只呈国王一人，适合私议王上、密报、密约、不臣之心等不宜入史之言
+- 公开谏言（submit_advisory）会被史官记载、流传后世；若你觉得有些话不适合被历史记录或旁人知晓，用秘密谏言（submit_secret_advisory）——只呈国王一人，不入史册
 - 系统会自动在谏言前加上你的名字、头衔和时间
 - 如有需要记录的私人想法，可用 write_file 写入 decisions/personal_notes.txt（非强制）
 - 简明扼要即可，不需要长篇大论

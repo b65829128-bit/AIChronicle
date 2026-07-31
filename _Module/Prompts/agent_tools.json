@@ -194,7 +194,7 @@
   {
     "name": "submit_secret_advisory",
     "category": "communication",
-    "description": "Submit a SECRET advisory to your king only. It is NOT recorded in the annals and the court historian cannot read it.\n\nUsage:\n- Call this when you want to say things that should not be written into history: private criticism of the king, confidential warnings, secret intelligence, disloyal or scheming intentions, or anything you would only say to the king's ear.\n- The king alone can read these; the historian and the public record will never see them.\n- The content should be the advisory text itself — no greeting, no signature.\n- After calling this, reply with a brief closing line only.",
+    "description": "Submit a SECRET advisory to your king only. It is NOT recorded in the annals and the court historian cannot read it.\n\nUsage:\n- Call this when you think something should not be recorded in history or known by others — things only the king should hear.\n- The king alone can read these; the historian and the public record will never see them.\n- The content should be the advisory text itself — no greeting, no signature.\n- After calling this, reply with a brief closing line only.",
     "parameters": [
       {
         "name": "content",
