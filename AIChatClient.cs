@@ -19,15 +19,42 @@ namespace MyFirstMod
         public string? LearnedKnowledge { get; set; }
         public List<ToolCallData> ToolCalls { get; set; } = new();
         public Dictionary<string, string> ToolResults { get; set; } = new();
+
+        /// <summary>最终轮的思维链（reasoning_content）摘录，供调试日志复盘。</summary>
+        public string? LastReasoning { get; set; }
+
+        /// <summary>最终轮 finish_reason（"stop"=自然结束，"length"=被 max_tokens 截断）——用于区分主动沉默与被截断。</summary>
+        public string? FinishReason { get; set; }
     }
 
     public static class AIChatClient
     {
         private static readonly HttpClient _client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
 
-        internal static Hero? CurrentHero;
-        internal static string CurrentIntent = "conversation";
-        internal static HashSet<string> ActivatedCategories = new();
+        // 并发修复：聊天与后台事件（信件/谏言/外交）可同时跑 SendMessage，
+        // 静态字段会被互相覆盖导致工具作用到错误的 NPC。改用 AsyncLocal，
+        // 每个异步流程持有自己的上下文，互不干扰。
+        private static readonly AsyncLocal<Hero?> _currentHero = new();
+        private static readonly AsyncLocal<string?> _currentIntent = new();
+        private static readonly AsyncLocal<HashSet<string>?> _activatedCategories = new();
+
+        internal static Hero? CurrentHero
+        {
+            get => _currentHero.Value;
+            set => _currentHero.Value = value;
+        }
+
+        internal static string CurrentIntent
+        {
+            get => _currentIntent.Value ?? "conversation";
+            set => _currentIntent.Value = value;
+        }
+
+        internal static HashSet<string> ActivatedCategories
+        {
+            get => _activatedCategories.Value ?? new HashSet<string>();
+            set => _activatedCategories.Value = value;
+        }
 
         internal sealed class PendingInquiry
         {
@@ -39,11 +66,14 @@ namespace MyFirstMod
             public bool Result;
         }
 
-        private static PendingInquiry? _pendingInquiry;
+        // 修复：并发索要/请求改为队列逐个弹出——原单槽位在并发时后写覆盖先写，导致一次请求被静默吞掉
+        private static readonly System.Collections.Concurrent.ConcurrentQueue<PendingInquiry> _pendingInquiryQueue = new();
+        private static bool _inquiryShowing;
 
         internal static void SetPendingInquiry(PendingInquiry? inquiry)
         {
-            _pendingInquiry = inquiry;
+            if (inquiry != null)
+                _pendingInquiryQueue.Enqueue(inquiry);
         }
 
         private static string[] GetDefaultCategories(string intent) => intent switch
@@ -127,9 +157,9 @@ namespace MyFirstMod
 
         public static void CheckPendingInquiry()
         {
-            var inquiry = _pendingInquiry;
-            if (inquiry == null) return;
-            _pendingInquiry = null;
+            if (_inquiryShowing) return;
+            if (!_pendingInquiryQueue.TryDequeue(out var inquiry)) return;
+            _inquiryShowing = true;
 
             if (inquiry.Amount > 0)
             {
@@ -139,8 +169,8 @@ namespace MyFirstMod
                     $"{hero.Name} 向你索要金币",
                     $"{hero.Name} 向你要 {amount} 金币。\n你当前拥有 {Hero.MainHero.Gold} 金币。",
                     true, true, "同意", "拒绝",
-                    () => { inquiry.Result = true; inquiry.Event.Set(); },
-                    () => { inquiry.Result = false; inquiry.Event.Set(); }),
+                    () => { inquiry.Result = true; TrySignalInquiry(inquiry); },
+                    () => { inquiry.Result = false; TrySignalInquiry(inquiry); }),
                     pauseGameActiveState: true,
                     prioritize: true);
             }
@@ -165,126 +195,28 @@ namespace MyFirstMod
                                 if (item == null) continue;
                                 var name = item.Name?.ToString() ?? "";
                                 if (!name.Contains(itemName) && !itemName.Contains(name)) continue;
-                                if (ie.Amount < count) break;
+                                if (ie.Amount < count) continue; // 修复：该槽位数量不足时找下一槽，而非放弃整个转移
                                 myParty.ItemRoster.AddToCounts(item, -count);
                                 heroParty.ItemRoster.AddToCounts(item, count);
                                 break;
                             }
                         }
                         inquiry.Result = true;
-                        inquiry.Event.Set();
+                        TrySignalInquiry(inquiry);
                     },
-                    () => { inquiry.Result = false; inquiry.Event.Set(); }),
+                    () => { inquiry.Result = false; TrySignalInquiry(inquiry); }),
                     pauseGameActiveState: true,
                     prioritize: true);
             }
         }
 
-        public static async Task<ChatResponse> EvaluateToolCalls(CharacterPrompt charPrompt, string roleplayResponse)
+        /// <summary>弹窗回调统一出口：复位"正在展示"标记并唤醒等待线程。
+        /// 修复：后台线程 30s 超时已释放 mre 时，Set() 会抛 ObjectDisposedException——try 吞掉。</summary>
+        private static void TrySignalInquiry(PendingInquiry inquiry)
         {
-            var settings = MySettings.Instance!;
-            var systemPrompt = PromptManager.LoadToolCallPrompt();
-
-            var messageList = new List<object> { new { role = "system", content = systemPrompt } };
-
-            foreach (var entry in charPrompt.ChatHistory)
-            {
-                if (entry.Role == "tool")
-                {
-                    messageList.Add(new
-                    {
-                        role = "tool",
-                        tool_call_id = entry.ToolCallId ?? "",
-                        content = entry.Content
-                    });
-                }
-                else if (entry.ToolCalls != null && entry.ToolCalls.Count > 0)
-                {
-                    messageList.Add(new
-                    {
-                        role = entry.Role,
-                        content = entry.Content,
-                        tool_calls = entry.ToolCalls.Select(tc => new
-                        {
-                            id = tc.Id,
-                            type = "function",
-                            function = new { name = tc.Name, arguments = tc.Arguments }
-                        })
-                    });
-                }
-                else
-                {
-                    messageList.Add(new { role = entry.Role, content = entry.Content });
-                }
-            }
-
-            if (!string.IsNullOrEmpty(roleplayResponse))
-            {
-                messageList.Add(new { role = "assistant", content = roleplayResponse });
-            }
-
-            var payload = new
-            {
-                model = settings.Model,
-                messages = messageList,
-                tools = BuildTools(),
-                tool_choice = "auto",
-                max_tokens = 200,
-                temperature = 0.1f
-            };
-
-            var json = JsonConvert.SerializeObject(payload);
-            var request = new HttpRequestMessage(HttpMethod.Post, settings.ApiUrl)
-            {
-                Content = new StringContent(json, Encoding.UTF8, "application/json")
-            };
-            request.Headers.Add("Authorization", $"Bearer {settings.ApiKey}");
-
-            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
-            var response = await _client.SendAsync(request, cts.Token);
-            response.EnsureSuccessStatusCode();
-
-            var responseBody = await response.Content.ReadAsStringAsync();
-            var result = JObject.Parse(responseBody);
-            var message = result["choices"]?[0]?["message"];
-
-            string? learnedKnowledge = null;
-            var responseToolCalls = new List<ToolCallData>();
-
-            var toolCalls = message?["tool_calls"];
-            if (toolCalls != null)
-            {
-                foreach (var call in toolCalls)
-                {
-                    var callId = call["id"]?.ToString() ?? Guid.NewGuid().ToString("N");
-                    var funcName = call["function"]?["name"]?.ToString() ?? "";
-                    var argsStr = call["function"]?["arguments"]?.ToString() ?? "{}";
-
-                    responseToolCalls.Add(new ToolCallData
-                    {
-                        Id = callId,
-                        Name = funcName,
-                        Arguments = argsStr
-                    });
-
-                    if (funcName == "update_knowledge")
-                    {
-                        try
-                        {
-                            var args = JObject.Parse(argsStr);
-                            learnedKnowledge = args["knowledge"]?.ToString();
-                        }
-                        catch { }
-                    }
-                }
-            }
-
-            return new ChatResponse
-            {
-                Content = "",
-                LearnedKnowledge = learnedKnowledge,
-                ToolCalls = responseToolCalls
-            };
+            _inquiryShowing = false;
+            try { inquiry.Event.Set(); }
+            catch { }
         }
 
         public static async Task<ChatResponse> SendMessage(CharacterPrompt charPrompt, Hero? hero = null, bool includeTools = true, string intent = "conversation")
@@ -304,6 +236,10 @@ namespace MyFirstMod
             if (trimmedHistory.Count > historyLimit)
             {
                 trimmedHistory = trimmedHistory.Skip(trimmedHistory.Count - historyLimit).ToList();
+                // 修复：去掉开头被截断成孤儿的 tool 消息（其对应的 assistant(tool_calls) 已被裁掉），
+                // 否则发送给 API 的消息序列不合法（tool 必须引用前置 tool_call_id）→ 400。
+                while (trimmedHistory.Count > 0 && trimmedHistory[0].Role == "tool")
+                    trimmedHistory.RemoveAt(0);
             }
 
             var messageList = new List<object> { new { role = "system", content = systemPrompt } };
@@ -378,8 +314,9 @@ namespace MyFirstMod
             string? learnedKnowledge = null;
             var allToolCalls = new List<ToolCallData>();
             var toolResults = new Dictionary<string, string>();
-            var accumulatedText = "";
             var lastMeaningfulText = "";
+            var lastReasoning = "";
+            var lastFinishReason = "";
 
             // 不再限制工具调用轮数——模型直到自然停止。
             // 仅保留一个极高的安全阀（50 轮），防止病态死循环。
@@ -430,13 +367,25 @@ namespace MyFirstMod
                 var roundToolCalls = new List<JToken>();
                 var roundText = "";
                 var roundReasoning = "";
+                var roundFinishReason = "";
 
                 using var stream = await httpResponse.Content.ReadAsStreamAsync();
                 using var reader = new StreamReader(stream, Encoding.UTF8);
 
+                // 修复：流读取加超时——服务端卡流不再永久挂起聊天窗口和事件队列。
+                // 放宽到 TimeoutSeconds×3（至少 60s）：慢的思考模型可能长时间不吐新块，不能被误杀。
+                var readTimeout = TimeSpan.FromSeconds(Math.Max(settings.TimeoutSeconds * 3, 60));
+                var streamTimedOut = false;
+
                 while (!reader.EndOfStream)
                 {
-                    var line = await reader.ReadLineAsync();
+                    var readTask = reader.ReadLineAsync();
+                    if (await Task.WhenAny(readTask, Task.Delay(readTimeout)) != readTask)
+                    {
+                        streamTimedOut = true;
+                        break;
+                    }
+                    var line = await readTask;
                     if (string.IsNullOrEmpty(line)) continue;
                     if (!line.StartsWith("data: ")) continue;
 
@@ -453,13 +402,15 @@ namespace MyFirstMod
                     var delta = choices["delta"];
                     if (delta == null) continue;
 
+                    // 捕获 finish_reason：最后一帧非空（"stop"/"length"等），用于判断是否被 max_tokens 截断
+                    var fr = choices["finish_reason"]?.ToString();
+                    if (!string.IsNullOrEmpty(fr))
+                        roundFinishReason = fr;
+
                     var deltaContent = delta["content"]?.ToString();
                     if (deltaContent != null)
                     {
                         roundText += deltaContent;
-                        accumulatedText += deltaContent;
-                        if (!string.IsNullOrEmpty(roundText))
-                            lastMeaningfulText = roundText;
                     }
 
                     var deltaReasoning = delta["reasoning_content"]?.ToString();
@@ -504,17 +455,50 @@ namespace MyFirstMod
                     }
                 }
 
+                if (streamTimedOut)
+                {
+                    // 流读取超时：丢弃本轮的半成品工具调用（可能是不完整的 JSON），把已累积文本作为最终回复返回
+                    roundToolCalls.Clear();
+                    DebugLogger.Log($"LLM 流读取超时 intent={intent} agent={hero?.Name?.ToString() ?? "?"} round={round} textLen={roundText.Length}");
+                }
+
+                lastReasoning = roundReasoning;
+                lastFinishReason = roundFinishReason;
+
+                // 修复陈旧文本：带"游戏工具"的轮次文本多为过渡说明（如"让我进一步了解…"），
+                // 不该作为最终回复的回退值。仅无工具、或仅有维护工具(update_knowledge)的轮次文本
+                // 才算有效最终文本（模型常在说完回答后顺手调 update_knowledge 记认知）。
+                var hasGameTool = roundToolCalls.Any(rt =>
+                {
+                    var n = rt["function"]?["name"]?.ToString();
+                    return !string.IsNullOrEmpty(n) && n != "update_knowledge";
+                });
+                if (!string.IsNullOrEmpty(roundText) && !hasGameTool)
+                    lastMeaningfulText = roundText;
+
+                var toolNames = roundToolCalls
+                    .Select(rt => rt["function"]?["name"]?.ToString())
+                    .Where(n => !string.IsNullOrEmpty(n))
+                    .ToArray();
+                DebugLogger.Log($"LLM 轮次 intent={intent} agent={hero?.Name?.ToString() ?? "?"} round={round} textLen={roundText.Length} reasoningLen={roundReasoning.Length} tools=[{string.Join(",", toolNames)}]");
+
                 if (roundToolCalls.Count == 0)
                 {
                     var finalContent = !string.IsNullOrEmpty(roundText) ? roundText
                         : !string.IsNullOrEmpty(lastMeaningfulText) ? lastMeaningfulText
                         : (allToolCalls.Count > 0 ? "（已通过工具处理完毕）" : "（领主沉默不语）");
+                    // 记录"最终轮无文本"的思维链摘录——无论之前是否调过工具。
+                    // 覆盖两类：完全沉默（未调工具）、以及"调工具调查后无结语"（如国王评估后决定不行动）。
+                    if (string.IsNullOrEmpty(roundText) && !string.IsNullOrEmpty(roundReasoning))
+                        DebugLogger.Log($"LLM 静默结束 intent={intent} agent={hero?.Name?.ToString() ?? "?"} toolsCalled={allToolCalls.Count} reasoning={DebugLogger.Truncate(roundReasoning, 600)}");
                     return new ChatResponse
                     {
                         Content = finalContent,
                         LearnedKnowledge = learnedKnowledge,
                         ToolCalls = allToolCalls,
-                        ToolResults = toolResults
+                        ToolResults = toolResults,
+                        LastReasoning = roundReasoning,
+                        FinishReason = roundFinishReason
                     };
                 }
 
@@ -557,11 +541,12 @@ namespace MyFirstMod
             return new ChatResponse
             {
                 Content = !string.IsNullOrEmpty(lastMeaningfulText) ? lastMeaningfulText
-                    : !string.IsNullOrEmpty(accumulatedText) ? accumulatedText
                     : (allToolCalls.Count > 0 ? "（已通过工具处理完毕）" : "（领主沉默不语）"),
                 LearnedKnowledge = learnedKnowledge,
                 ToolCalls = allToolCalls,
-                ToolResults = toolResults
+                ToolResults = toolResults,
+                LastReasoning = lastReasoning,
+                FinishReason = lastFinishReason
             };
         }
 

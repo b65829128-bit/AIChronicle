@@ -219,8 +219,17 @@ namespace MyFirstMod
                 {
                 if (entry.Role == "tool") continue;
                 var sender = entry.Role == "user" ? "你" : _charPrompt.HeroName;
-                var color = entry.Role == "user" ? "#5DADE2FF" : "#F4D03FFF";
-                Messages.Add(new ChatMessageVM(sender, entry.Content, entry.Role, color, loadTime,
+                string color;
+                if (entry.IsLetter)
+                {
+                    // 信件消息：📜 前缀 + 古铜色，与面对面说话区分
+                    sender = "📜 " + sender;
+                    color = "#B8860BFF";
+                }
+                else
+                    color = entry.Role == "user" ? "#5DADE2FF" : "#F4D03FFF";
+                // 修复：历史消息显示原始时间戳（entry.Time），而不是打开窗口的当前时间
+                Messages.Add(new ChatMessageVM(sender, entry.Content, entry.Role, color, entry.Time ?? loadTime,
                     _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
                     _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
             }
@@ -253,37 +262,53 @@ namespace MyFirstMod
             Messages.Add(new ChatMessageVM("你", userMsg, "user", "#5DADE2FF", now,
                 _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
                 _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
-            _sessionMessages.Add(new ChatHistoryEntry { Role = "user", Content = userMsg });
-            PromptManager.AppendChatLogFor(_agentId, _targetId, "user", userMsg);
+            _sessionMessages.Add(new ChatHistoryEntry { Role = "user", Content = userMsg, IsLetter = true });
+            PromptManager.AppendChatLogFor(_agentId, _targetId, "user", userMsg, true);
+
+            if (_intent == "letter")
+            {
+                // 修复：写信 = 发送真实信件（带延时），回复稍后作为信件送达——而非直聊即时回复。
+                // 原实现把"写信"当直聊，无延时、也无记忆连续性。
+                var senderHero = Hero.MainHero;
+                var senderEntity = senderHero != null ? EntityManager.GetOrCreateEntity(senderHero) : null;
+                var delayHours = 0f;
+                if (senderHero != null && _hero != null)
+                    delayHours = ToolExecutor.CalculateLetterDelay(senderHero, _hero);
+
+                var evt = new ActivationEvent
+                {
+                    Type = ActivationEventType.LetterReceived,
+                    AgentId = _agentId,            // 收信人（对方）
+                    TargetId = senderEntity?.Id ?? _agentId, // 发信人（玩家）
+                    Content = userMsg,
+                    Depth = 0
+                };
+                if (delayHours > 0.1f)
+                    AgentScheduler.QueueDelayedEvent(evt, delayHours);
+                else
+                    AgentScheduler.QueueEvent(evt);
+
+                var delayNote = delayHours > 0.1f ? $"（预计{delayHours:F0}小时后送达）" : "";
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
+                    $"信件已寄出给 {_charPrompt.HeroName}{delayNote}", Colors.Cyan));
+                // ExecuteSend 本身就在主线程（UI 回调）——直接更新 UI，勿用 RunOnMainThread（主线程等自己处理会卡死）
+                Messages.Add(new ChatMessageVM("系统",
+                    $"信件已寄出{delayNote}，等待对方回信...",
+                    "system", "#E67E22FF", PromptManager.GetCurrentTimeString(),
+                    _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
+                    _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
+                IsLoading = false;
+                SendButtonText = "发送";
+                return;
+            }
 
             Task.Run(async () =>
             {
                 try
                 {
                     _charPrompt.ChatHistory = _sessionMessages;
-                    var useIndependent = MySettings.Instance?.IndependentToolCalling == true;
-                    var chatResponse = await AIChatClient.SendMessage(_charPrompt, _hero, !useIndependent, _intent);
+                    var chatResponse = await AIChatClient.SendMessage(_charPrompt, _hero, true, _intent);
                     var displayText = chatResponse.Content;
-
-                    if (useIndependent)
-                    {
-                        try
-                        {
-                            var toolResponse = await AIChatClient.EvaluateToolCalls(_charPrompt, displayText);
-                            chatResponse = new ChatResponse
-                            {
-                                Content = displayText,
-                                LearnedKnowledge = toolResponse.LearnedKnowledge,
-                                ToolCalls = toolResponse.ToolCalls
-                            };
-                        }
-                        catch (Exception ex)
-                        {
-                            InformationManager.DisplayMessage(new InformationMessage(
-                                $"[MyFirstMod] 工具调用评估失败：{ex.Message}",
-                                Colors.Red));
-                        }
-                    }
 
                     _sessionMessages.Add(new ChatHistoryEntry
                     {
@@ -370,7 +395,7 @@ namespace MyFirstMod
                                 toolDesc = $"调用了 {tc.Name}";
                             }
 
-                            InformationManager.DisplayMessage(new InformationMessage(
+                            MainThreadExecutor.DisplayMessage(new InformationMessage(
                                 $"[MyFirstMod] {_charPrompt.HeroName} {toolDesc}", Colors.Cyan));
                         }
                     }
@@ -378,31 +403,42 @@ namespace MyFirstMod
                     if (chatResponse.LearnedKnowledge != null)
                     {
                         PromptManager.UpdateTargetKnowledge(chatResponse.LearnedKnowledge);
-                        InformationManager.DisplayMessage(new InformationMessage(
+                        MainThreadExecutor.DisplayMessage(new InformationMessage(
                             $"[MyFirstMod] {_charPrompt.HeroName} 更新了对你的认知",
                             Colors.Cyan));
                     }
 
-                    Messages.Add(new ChatMessageVM(_charPrompt.HeroName, displayText,
-                        "assistant", "#F4D03FFF", now,
-                        MySettings.Instance?.ChatFontSize ?? 24,
-                        MySettings.Instance?.ChatSenderFontSize ?? 22,
-                        MySettings.Instance?.ChatTimeFontSize ?? 22,
-                        MySettings.Instance?.MessageSpacing ?? 60,
-                        MySettings.Instance?.ContentIndent ?? 15,
-                        MySettings.Instance?.SenderTopGap ?? 6,
-                        MySettings.Instance?.ContentTopGap ?? 6));
+                    // 修复：UI 绑定集合/属性只在主线程修改——原实现从后台线程直接改 MBBindingList，跨线程竞态
+                    MainThreadExecutor.RunOnMainThread(() =>
+                    {
+                        // 修复：assistant 消息时间戳用"回复时刻"而非发送时捕获的 now（信件/慢回复时曾显示错误时间）
+                        Messages.Add(new ChatMessageVM(_charPrompt.HeroName, displayText,
+                            "assistant", "#F4D03FFF", PromptManager.GetCurrentTimeString(),
+                            MySettings.Instance?.ChatFontSize ?? 24,
+                            MySettings.Instance?.ChatSenderFontSize ?? 22,
+                            MySettings.Instance?.ChatTimeFontSize ?? 22,
+                            MySettings.Instance?.MessageSpacing ?? 60,
+                            MySettings.Instance?.ContentIndent ?? 15,
+                            MySettings.Instance?.SenderTopGap ?? 6,
+                            MySettings.Instance?.ContentTopGap ?? 6));
+                    });
                 }
                 catch (Exception ex)
                 {
-                    Messages.Add(new ChatMessageVM("系统", $"错误：{ex.Message}",
-                        "system", "#E74C3CFF", PromptManager.GetCurrentTimeString(),
-                        24, 22, 22, 60, 15, 6, 6));
+                    MainThreadExecutor.RunOnMainThread(() =>
+                    {
+                        Messages.Add(new ChatMessageVM("系统", $"错误：{ex.Message}",
+                            "system", "#E74C3CFF", PromptManager.GetCurrentTimeString(),
+                            24, 22, 22, 60, 15, 6, 6));
+                    });
                 }
                 finally
                 {
-                    IsLoading = false;
-                    SendButtonText = "发送";
+                    MainThreadExecutor.RunOnMainThread(() =>
+                    {
+                        IsLoading = false;
+                        SendButtonText = "发送";
+                    });
                 }
             });
         }

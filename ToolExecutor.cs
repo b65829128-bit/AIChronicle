@@ -21,7 +21,56 @@ namespace MyFirstMod
 {
     public static class ToolExecutor
     {
+        /// <summary>
+        /// 工具入口。Bannerlord 游戏对象是主线程独占的，而 LLM 工具循环跑在后台线程——
+        /// 除需要阻塞等待玩家弹窗确认的工具外，全部经 MainThreadExecutor 分发到主线程执行。
+        /// </summary>
         public static string ExecuteToolCall(string name, string arguments)
+        {
+            // request_gold / request_items 需要主线程每帧显示确认弹窗，必须留在后台线程
+            // 等待玩家决定（内部对最终资金/物品划转做主线程分发）。
+            // browse_tools 要修改本流程的 ActivatedCategories，也必须留在本流程上下文执行。
+            if (name == "request_gold" || name == "request_items" || name == "browse_tools")
+                return ExecuteToolCallCore(name, arguments);
+
+            // 捕获本后台流程的上下文，带到主线程执行时套用，执行完恢复主线程原值。
+            var hero = AIChatClient.CurrentHero;
+            var intent = AIChatClient.CurrentIntent;
+            var categories = AIChatClient.ActivatedCategories;
+            var agentId = AgentManager.ActiveAgentId;
+            var targetId = AgentManager.ActiveTargetId;
+            var depth = AgentScheduler.CurrentProcessingDepth; // 并发下信件级联深度按任务隔离
+
+            return MainThreadExecutor.RunOnMainThread(() =>
+            {
+                var prevHero = AIChatClient.CurrentHero;
+                var prevIntent = AIChatClient.CurrentIntent;
+                var prevCategories = AIChatClient.ActivatedCategories;
+                var prevAgentId = AgentManager.ActiveAgentId;
+                var prevTargetId = AgentManager.ActiveTargetId;
+                var prevDepth = AgentScheduler.CurrentProcessingDepth;
+
+                AIChatClient.CurrentHero = hero;
+                AIChatClient.CurrentIntent = intent;
+                AIChatClient.ActivatedCategories = categories;
+                AgentManager.SetContextOnly(agentId, targetId);
+                AgentScheduler.CurrentProcessingDepth = depth;
+                try
+                {
+                    return ExecuteToolCallCore(name, arguments);
+                }
+                finally
+                {
+                    AIChatClient.CurrentHero = prevHero;
+                    AIChatClient.CurrentIntent = prevIntent;
+                    AIChatClient.ActivatedCategories = prevCategories;
+                    AgentManager.SetContextOnly(prevAgentId, prevTargetId);
+                    AgentScheduler.CurrentProcessingDepth = prevDepth;
+                }
+            });
+        }
+
+        private static string ExecuteToolCallCore(string name, string arguments)
         {
             try
             {
@@ -250,22 +299,45 @@ namespace MyFirstMod
             }
         }
 
+        /// <summary>枚举查询用英雄：所有氏族成员（Clan.Heroes 含已故，供史官立传查死人）+ 所有在世英雄。</summary>
+        private static IEnumerable<Hero> AllHeroesForQuery()
+        {
+            var seen = new HashSet<Hero>();
+            foreach (var clan in Clan.All)
+            {
+                if (clan == null) continue;
+                foreach (var h in clan.Heroes)
+                    if (h != null && seen.Add(h))
+                        yield return h;
+            }
+            foreach (var h in Hero.AllAliveHeroes)
+                if (h != null && seen.Add(h))
+                    yield return h;
+        }
+
         private static string ExecuteQueryCharacter(string name)
         {
             if (string.IsNullOrEmpty(name))
                 return "[错误] 请提供人物名称";
 
-            foreach (var hero in Hero.AllAliveHeroes)
+            // 修复：用"所有氏族成员（含已故）+ 所有在世英雄"枚举——史官立传需要查询已死人物；原 AllAliveHeroes 查不到死人
+            foreach (var hero in AllHeroesForQuery())
             {
                 var heroName = hero.Name?.ToString() ?? "";
                 if (!heroName.Contains(name) && !name.Contains(heroName)) continue;
 
                 var sb = new StringBuilder();
                 sb.AppendLine("【系统公开档案 — 以下信息为卡拉迪亚公认事实，不容质疑】");
-                sb.AppendLine("===== 该人物：" + heroName + " =====");
+                sb.AppendLine("===== 该人物：" + heroName + (hero.IsDead ? "（已故）" : "") + " =====");
 
                 sb.AppendLine("性别：" + (hero.IsFemale ? "女" : "男"));
                 sb.AppendLine("文化：" + (hero.Culture?.Name?.ToString() ?? "未知"));
+
+                // 生卒年：史官立传所需；出生日期有效时输出，已故则输出卒年
+                if (hero.BirthDay != CampaignTime.Zero)
+                    sb.AppendLine("出生：" + hero.BirthDay.GetYear + "年");
+                if (hero.IsDead && hero.DeathDay != CampaignTime.Zero)
+                    sb.AppendLine("卒于：" + hero.DeathDay.GetYear + "年");
 
                 var statuses = new List<string>();
                 if (hero.Clan?.Kingdom?.RulingClan?.Leader == hero)
@@ -439,27 +511,52 @@ namespace MyFirstMod
             return "[未找到] 名为 \"" + kingdomName + "\" 的王国";
         }
 
-        private static bool IsBorderSettlement(Settlement s)
+        /// <summary>
+        /// 边境判据（尺度无关，修复原绝对距离阈值过大导致几乎所有定居点被判边境）：
+        /// 最近的"他国定居点"比最近的"本国定居点"更近或相当（≤1.5×）→ 本城处于国土边缘，暴露于敌；
+        /// 孤立定居点（无本国邻居）也视为边境。返回边境标记 + 最近他国距离/名称。
+        /// </summary>
+        private static (bool isBorder, float nearestOtherDist, string nearestOtherName) ComputeBorderInfo(Settlement s)
         {
-            if (!s.IsTown && !s.IsCastle) return false;
-            var pos = s.GatePosition.ToVec2();
             var myKingdom = s.OwnerClan?.Kingdom;
-            if (myKingdom == null) return false;
+            if (myKingdom == null || (!s.IsTown && !s.IsCastle))
+                return (false, float.MaxValue, "");
+
+            var pos = s.GatePosition.ToVec2();
+            float nearestOwn = float.MaxValue;
+            float nearestOther = float.MaxValue;
+            Kingdom? nearestOtherKingdom = null;
 
             foreach (var other in Settlement.All)
             {
                 if (!other.IsTown && !other.IsCastle) continue;
                 if (other == s) continue;
                 var otherKingdom = other.OwnerClan?.Kingdom;
-                if (otherKingdom == null || otherKingdom == myKingdom) continue;
+                if (otherKingdom == null) continue;
 
                 var oPos = other.GatePosition.ToVec2();
                 var dx = pos.X - oPos.X;
                 var dy = pos.Y - oPos.Y;
                 var dist = (float)Math.Sqrt(dx * dx + dy * dy);
-                if (dist <= 15000f) return true; // 15km
+
+                if (otherKingdom == myKingdom)
+                {
+                    if (dist < nearestOwn) nearestOwn = dist;
+                }
+                else
+                {
+                    if (dist < nearestOther) { nearestOther = dist; nearestOtherKingdom = otherKingdom; }
+                }
             }
-            return false;
+
+            var isBorder = nearestOther < float.MaxValue
+                && (nearestOwn == float.MaxValue || nearestOther <= nearestOwn * 1.5f);
+            return (isBorder, nearestOther, nearestOtherKingdom?.Name?.ToString() ?? "");
+        }
+
+        private static bool IsBorderSettlement(Settlement s)
+        {
+            return ComputeBorderInfo(s).isBorder;
         }
 
         private static string ExecuteQuerySettlementGeography(string settlementName)
@@ -510,22 +607,11 @@ namespace MyFirstMod
             neighbors.Sort((a, b) => a.pathDist.CompareTo(b.pathDist));
             var top = neighbors.Take(8).ToList();
 
-            var isBorder = false;
-            string nearestOtherKingdom = "";
-            float nearestOtherDist = float.MaxValue;
-            foreach (var (pathDist, _, _, s) in top)
-            {
-                var ok = s.OwnerClan?.Kingdom;
-                if (ok != null && ok != myKingdom && pathDist <= 5000f)
-                {
-                    isBorder = true;
-                    if (pathDist < nearestOtherDist)
-                    {
-                        nearestOtherDist = pathDist;
-                        nearestOtherKingdom = ok.Name?.ToString() ?? "?";
-                    }
-                }
-            }
+            // 修复：尺度无关的相对边境判据（原 `pathDist <= 5000f` 阈值大于典型城间距，导致城镇动辄被判边境）
+            var borderInfo = ComputeBorderInfo(settlement);
+            var isBorder = borderInfo.isBorder;
+            var nearestOtherDist = borderInfo.nearestOtherDist;
+            var nearestOtherKingdom = borderInfo.nearestOtherName;
 
             string FactionTag(Settlement s)
             {
@@ -545,7 +631,7 @@ namespace MyFirstMod
             {
                 var nearestKm = nearestOtherDist / 1000f;
                 var nearestText = nearestKm < 1f ? $"{nearestKm:F1}" : $"{nearestKm:F0}";
-                sb.AppendLine($"战略位置：边境前哨 — 距{nearestOtherKingdom}领土仅{nearestText}km（寻路距离）");
+                sb.AppendLine($"战略位置：边境前哨 — 距{nearestOtherKingdom}领土仅{nearestText}km（直线距离）");
             }
             else
             {
@@ -1271,14 +1357,16 @@ namespace MyFirstMod
             if (AIChatClient.CurrentHero == null)
                 return "[错误] 无当前部队指挥官";
 
-            PartyBehaviorManager.RemoveAction(AIChatClient.CurrentHero);
-            return "当前任务已取消，部队恢复自主行动。";
+            var hero = AIChatClient.CurrentHero;
+            PartyBehaviorManager.RemoveAction(hero);
 
-            // Note: _pendingActions.Remove was called directly before - now via RemoveAction.
-            // The old code returned different messages for found/not-found. Let's match:
-            // Old: if _pendingActions.Remove(key) → "已取消", else → "无待执行任务"
-            // New RemoveAction doesn't return bool so we always say 已取消. But actually the old
-            // logic had that check. Let me fix this...
+            // 修复：复位部队当前命令——原实现只删跟踪动作，DefaultBehavior 仍指向原目标，
+            // 部队会继续围城/行军/劫掠。SetMoveModeHold 把行为置为 Hold 并清空移动参数，交由原版 AI 接管。
+            var party = hero.PartyBelongedTo;
+            if (party != null && party.IsActive)
+                party.SetMoveModeHold();
+
+            return "当前任务已取消，部队恢复自主行动。";
         }
 
         private static string ExecuteChangeRelation(int delta, string? targetEntityId)
@@ -1340,7 +1428,8 @@ namespace MyFirstMod
 
             if (target != Hero.MainHero)
             {
-                GiveGoldAction.ApplyBetweenCharacters(target, AIChatClient.CurrentHero, amount);
+                var currentHero = AIChatClient.CurrentHero;
+                MainThreadExecutor.RunOnMainThread(() => GiveGoldAction.ApplyBetweenCharacters(target, currentHero, amount));
                 return $"{target.Name} 支付了 {amount} 金币。";
             }
 
@@ -1358,7 +1447,8 @@ namespace MyFirstMod
 
             if (inquiry.Result)
             {
-                GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, AIChatClient.CurrentHero, amount);
+                var currentHero = AIChatClient.CurrentHero;
+                MainThreadExecutor.RunOnMainThread(() => GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, currentHero, amount));
                 return $"对方同意支付 {amount} 金币。";
             }
             return $"对方拒绝了支付 {amount} 金币的请求。";
@@ -1413,9 +1503,10 @@ namespace MyFirstMod
                 var itemNameStr = elem.Item.Name?.ToString() ?? "";
                 if (!itemNameStr.Contains(itemName) && !itemName.Contains(itemNameStr)) continue;
 
+                // 刻意的设计：允许"脱下装备给对方"——装备栏每槽 1 件，脱下即移交，是否脱装由 LLM 自行判断。
                 eq[slot] = EquipmentElement.Invalid;
                 targetParty.ItemRoster.AddToCounts(elem.Item, 1);
-                return $"已将身上的 {itemNameStr} 交给 {target.Name}。";
+                return $"已将装备栏中的 {itemNameStr} 脱下并交给 {target.Name}。";
             }
 
             return $"[未找到] 部队和装备栏中都没有 \"{itemName}\"。使用 query_party_troops 查看详情。";
@@ -1454,15 +1545,20 @@ namespace MyFirstMod
                     if (ie.Amount < count)
                         return $"[错误] {target.Name} 只有 {ie.Amount} 个 {name}";
 
-                    targetParty.ItemRoster.AddToCounts(item, -count);
-                    myParty.ItemRoster.AddToCounts(item, count);
+                    MainThreadExecutor.RunOnMainThread(() =>
+                    {
+                        targetParty.ItemRoster.AddToCounts(item, -count);
+                        myParty.ItemRoster.AddToCounts(item, count);
+                    });
                     return $"{target.Name} 给出了 {count} 个 {name}。";
                 }
                 return $"[未找到] {target.Name} 身上没有 \"{itemName}\"。";
             }
 
+            // 修复：只检查"对方（玩家）"是否持有该物品——原实现还检查请求方自己的部队，
+            // 导致物品在请求方背包时 hasItem=true 弹出确认框，但回调只搜玩家背包 → 假成功。
             var hasItem = false;
-            foreach (var ie in myParty.ItemRoster)
+            foreach (var ie in target.PartyBelongedTo?.ItemRoster ?? Enumerable.Empty<ItemRosterElement>())
             {
                 var item = ie.EquipmentElement.Item;
                 if (item == null) continue;
@@ -1471,20 +1567,6 @@ namespace MyFirstMod
                 {
                     hasItem = true;
                     break;
-                }
-            }
-            if (!hasItem)
-            {
-                foreach (var ie in target.PartyBelongedTo?.ItemRoster ?? Enumerable.Empty<ItemRosterElement>())
-                {
-                    var item = ie.EquipmentElement.Item;
-                    if (item == null) continue;
-                    var name = item.Name?.ToString() ?? "";
-                    if (name.Contains(itemName) || itemName.Contains(name))
-                    {
-                        hasItem = true;
-                        break;
-                    }
                 }
             }
             if (!hasItem)
@@ -1503,7 +1585,7 @@ namespace MyFirstMod
                 }
             }
             if (!hasItem)
-                return $"[错误] 你和对方都没有 \"{itemName}\"。";
+                return $"[错误] 对方身上没有 \"{itemName}\"。";
 
             using var mre = new ManualResetEventSlim(false);
             var inquiry = new AIChatClient.PendingInquiry
@@ -1539,7 +1621,6 @@ namespace MyFirstMod
                 if (!known.Contains(resolvedId))
                     return $"[错误] 你还没有和 {recipientId} 交谈过，无法给陌生人写信。请先与对方进行 AI 聊天。";
             }
-            AgentManager.StoreOutgoingLetter(senderEntity.Id, resolvedId, content);
             var recipientEntity = EntityManager.GetEntityById(resolvedId);
             var recipientName = recipientEntity?.Name ?? resolvedId;
             var recipientHero = recipientEntity?.HeroRef;
@@ -1549,6 +1630,8 @@ namespace MyFirstMod
                 if (recipientHero.IsFugitive) return $"[错误] {recipientName} 正在逃亡中，无法收信";
                 if (recipientHero.IsDisabled) return $"[错误] {recipientName} 处于不可用状态，无法收信";
             }
+            // 修复：先校验收信人可收信，再落盘发件箱——避免"已发出但永远不送达"脏记录
+            AgentManager.StoreOutgoingLetter(senderEntity.Id, resolvedId, content);
 
             var nextDepth = AgentScheduler.IsProcessing
                 ? AgentScheduler.CurrentProcessingDepth + 1
@@ -1613,7 +1696,7 @@ namespace MyFirstMod
             return "谏言已提交归档。";
         }
 
-        private static float CalculateLetterDelay(Hero sender, Hero? recipient)
+        internal static float CalculateLetterDelay(Hero sender, Hero? recipient)
         {
             if (sender == null || recipient == null) return 0f;
             var senderParty = sender.PartyBelongedTo;
@@ -1636,7 +1719,9 @@ namespace MyFirstMod
 
             var dist = senderPos.Distance(recipientPos);
             var km = dist / 1000f;
-            return Math.Max(1f, km / 4f);
+            // 信使送信延时：地图单位尺度偏小（全图约 2-3"公里"），原公式 km/4 几乎恒 <1 被钳到 1h，等于无延时。
+            // 改为按距离线性放大（km*4h）+ 最低 3h，让信件往返有可感知的时间差（跨图约半天）。
+            return Math.Max(3f, km * 4f);
         }
 
         private static string ExecuteBrowseTools(string category)
@@ -2022,10 +2107,22 @@ namespace MyFirstMod
 
                     var costPer = (int)Campaign.Current.Models.PartyWageModel
                         .GetTroopRecruitmentCost(troop, recruiter, false).ResultNumber;
-                    var totalCost = costPer * count;
+
+                    // 修复：int 溢出防护（原 costPer*count 溢出为负可绕过金币检查并反向加钱）+ 部队上限检查
+                    if (count > 10000)
+                        return "[错误] 单次招募数量过大（上限 10000）";
+                    long totalCostL = (long)costPer * count;
+                    if (totalCostL > int.MaxValue)
+                        return "[错误] 招募总花费超出范围";
+                    var totalCost = (int)totalCostL;
 
                     if (recruiter.Gold < totalCost)
                         return $"[错误] 金币不足。需要 {totalCost} 金，当前只有 {recruiter.Gold} 金。";
+
+                    var newSize = party.Party.NumberOfAllMembers + count;
+                    var sizeLimit = party.Party.PartySizeLimit;
+                    if (newSize > sizeLimit)
+                        return $"[错误] 招募后会超过部队上限（当前 {party.Party.NumberOfAllMembers}/{sizeLimit}，需 {newSize}）。";
 
                     party.AddElementToMemberRoster(troop, count);
                     recruiter.ChangeHeroGold(-totalCost);
@@ -2111,6 +2208,27 @@ namespace MyFirstMod
 
                 if (hero.Gold < totalGold)
                     return $"[错误] 金币不足。需要 {totalGold} 金，当前只有 {hero.Gold} 金。";
+
+                // 修复：扣除升级所需物品（战马等）——原版 PartyScreenLogic 会真正移除，此前只检查不扣除
+                var requiredCategory = target.UpgradeRequiresItemFromCategory;
+                if (requiredCategory != null)
+                {
+                    var itemsRemoved = 0;
+                    for (int i = 0; i < party.ItemRoster.Count && itemsRemoved < count; i++)
+                    {
+                        var ie = party.ItemRoster[i];
+                        var item = ie.EquipmentElement.Item;
+                        if (item == null) continue;
+                        if (item.ItemCategory == requiredCategory)
+                        {
+                            var toRemove = Math.Min(ie.Amount, count - itemsRemoved);
+                            party.ItemRoster.AddToCounts(item, -toRemove);
+                            itemsRemoved += toRemove;
+                        }
+                    }
+                    if (itemsRemoved < count)
+                        return $"[错误] 缺少升级所需的 {requiredCategory.GetName()}（需要 {count}，实际可扣除 {itemsRemoved}）。";
+                }
 
                 var oldXp = elem.Xp;
                 roster.AddToCounts(troop, -count, false, 0, -(xpCost * count));
@@ -2290,7 +2408,10 @@ namespace MyFirstMod
         private static MobileParty? FindPartyByEntityId(string? targetEntityId)
         {
             if (string.IsNullOrEmpty(targetEntityId))
-                return MobileParty.MainParty;
+            {
+                // 修复：空参 = 查自己部队（tools.json "Omit to inspect your own party"），不再默认返回玩家部队
+                return AIChatClient.CurrentHero?.PartyBelongedTo;
+            }
 
             var entityId = EntityManager.ResolveEntityId(targetEntityId!);
             if (entityId == null)
@@ -2312,7 +2433,14 @@ namespace MyFirstMod
         private static Hero? ResolveTargetHero(string? targetEntityId)
         {
             if (string.IsNullOrEmpty(targetEntityId))
-                return Hero.MainHero;
+            {
+                // 修复：空参优先取当前对话对方；无对方或对方是自己时取自己。
+                // 原实现固定返回玩家（MainHero），导致 NPC 省略参数时误作用于玩家。
+                var target = EntityManager.ActiveTarget?.HeroRef;
+                if (target != null && target != AIChatClient.CurrentHero)
+                    return target;
+                return AIChatClient.CurrentHero;
+            }
 
             var entityId = EntityManager.ResolveEntityId(targetEntityId!);
             if (entityId == null) return null;
@@ -2430,8 +2558,11 @@ namespace MyFirstMod
             var myParty = hero.PartyBelongedTo;
             if (myParty == null) return "[错误] 你没有带领部队";
 
-            if (encounteredParty.LeaderHero != Hero.MainHero && encounteredParty != MobileParty.MainParty)
-                return "[错误] 对方不是玩家，此工具仅供对玩家放行使用";
+            // 修复：PlayerEncounter.EncounteredMobileParty 恒为"非玩家一侧"（即 NPC 自己的部队），
+            // 原判断 `encounteredParty.LeaderHero != MainHero` 恒真导致永远报"对方不是玩家"。
+            // 正确语义：遭遇对象是自己的部队即代表对方是玩家，允许放行。
+            if (encounteredParty != myParty)
+                return "[错误] 遭遇对象不是你的部队，此工具仅供对玩家放行使用";
 
             PlayerEncounter.LeaveEncounter = true;
 

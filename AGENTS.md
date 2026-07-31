@@ -111,8 +111,10 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
 | **工具定义文件化** | 54 个工具定义在 `tools.json`（43 个游戏工具）和 `agent_tools.json`（11 个文件/通信工具，含 `submit_advisory`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
 | **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁 |
-| **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`tool_call_prompt.txt`、`persona_generation.txt`、`context_template.txt`、`chancery_rules.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
+| **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`persona_generation.txt`、`context_template.txt`、`chancery_rules.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环，模型调用工具 → 执行 → 追加结果 → 重请求，直到模型自然停止（无轮数限制，仅保留极高安全阀防死循环） |
+| **主线程分发** | LLM 工具循环跑在后台线程，但**所有修改游戏状态的工具**经 `MainThreadExecutor` 排队到主线程 `OnApplicationTick` 执行（后台线程阻塞等待结果）；仅 `request_gold`/`request_items`/`browse_tools` 留在后台线程（前两者需主线程弹窗等待玩家，后者改本流程上下文）。背景：Bannerlord 游戏对象（MobileParty/Hero/Kingdom）是主线程独占的 |
+| **上下文隔离（AsyncLocal）** | `CurrentHero`/`CurrentIntent`/`ActivatedCategories`（AIChatClient）、`_agentEntityId`/`_targetEntityId`（AgentManager）、`_activeAgentId`/`_activeTargetId`（EntityManager）均为 `AsyncLocal`——聊天与后台信件/谏言/外交多个流程并发时上下文互不覆盖；实体缓存用 `ConcurrentDictionary`（线程安全） |
 | **秘书处** | M 键打开，玩家的个人行政助手。固定 persona（无条件服从），不读玩家 persona。国王/封臣/平民均可使用，可用工具取决于玩家当前身份。玩家可经秘书处调 `submit_advisory` 提交公开谏言（雇佣兵除外） |
 | **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
 
@@ -176,7 +178,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 - 「该人物」= `query_character` 返回结果的前缀（如"该人物：拉盖娅"）
 - 禁止出现「TA」、「他/她」、「其」等模糊指代
 
-此约定适用于 `context_template.txt`、`agent_system.txt`、`tool_call_prompt.txt` 以及所有新增的工具返回格式。
+此约定适用于 `context_template.txt`、`agent_system.txt` 以及所有新增的工具返回格式。
 
 ---
 
@@ -215,6 +217,10 @@ C:\Users\yangui\BLMods\MyFirstMod\
 ├── LetterListScreen.cs        ← 书信收信人列表屏幕
 ├── AgentScheduler.cs          ← 信件异步事件驱动调度器
 ├── HistoryRecorder.cs         ← 历史记录器（监听游戏事件写入原始史料）
+├── MainThreadExecutor.cs      ← 主线程分发器（后台线程的工具执行排队回主线程，防跨线程崩溃）
+├── DebugLogger.cs             ← 调试日志（LLM 调用摘要/思维链摘录 → 战役 debug_logs/）
+├── SafeFileIO.cs              ← 带重试的文件 IO（并发读写同一文件时避免"文件正被使用"异常）
+├── CLAUDE.md                  ← Claude Code 入口文档（指向本文件与 README_MOD.md）
 ├── _Module/
 │   ├── SubModule.xml         ← 模组元数据（ID、依赖、DLL路径）
 │   ├── GUI/
@@ -227,7 +233,6 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │       ├── tools.json         ← 游戏工具定义（热重载）
 │       ├── agent_system.txt   ← Agent 系统提示词模板
 │       ├── agent_tools.json   ← Agent 文件工具定义（热重载）
-│       ├── tool_call_prompt.txt ← 独立工具调用代理提示词（热重载）
 │       ├── persona_generation.txt ← NPC性格生成提示词（玩家可编辑，热重载）
 │       ├── advisory_rules.txt  ← 封臣谏言规则（热重载）
 │       ├── Templates/         ← NPC 目录模板
@@ -237,7 +242,6 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │               ├── system_prompt.txt    ← 本战役系统提示词（可独立编辑，热重载）
 │               ├── world_info.txt       ← 本战役世界背景（可独立编辑，热重载）
 │               ├── agent_system.txt     ← 本战役 Agent 提示词（热重载）
-│               ├── tool_call_prompt.txt ← 本战役工具调用提示词（热重载）
 │               ├── persona_generation.txt ← 本战役性格生成提示词（热重载）
 │               ├── context_template.txt ← 本战役 Context 模板（热重载）
 │               └── NPCs/          ← Agent 管理的 NPC 文件系统
@@ -346,6 +350,8 @@ namespace MyFirstMod
 补丁在 `SubModule.OnSubModuleLoad()` 中通过 `harmony.PatchAll()` 自动激活。
 
 > **⚠️ 重要发现（v0.5）**：`harmony.PatchAll()` 在 `OnSubModuleLoad` 时执行，此时部分游戏类型（特别是 `TaleWorlds.CampaignSystem.CampaignBehaviors` 命名空间下的类，如 `KingdomDecisionProposalBehavior`）**尚未完成运行时初始化**，导致这些 `[HarmonyPatch]` 属性静默跳过——补丁既不生效也不报错。**解决方案**：对于这类补丁，在 `OnGameStart` 中用 `Type.GetType("FullName, Assembly")` 获取类型，再用 `harmony.Patch(method, prefix/postfix)` **手动注册**。之前多位 agent 尝试修复原版外交拦截失败，根因均在此。
+>
+> **⚠️ 重要发现（v1.1，PatchAll 中止之谜）**：`DoubleRenownPatch`（双倍声望）曾写 `Postfix(ref float __result)`，但 `DefaultBattleRewardModel.CalculateRenownGain` 返回 `ExplainedNumber`——**`__result` 参数类型必须与原方法返回类型完全一致**，否则 `PatchAll()` 抛 `HarmonyException` 并**中止其后所有 `[HarmonyPatch]` 补丁的注册**（这是"补丁静默丢失"的另一个根因，也是 AGENTS.md 早期 KDPB 补丁失效的元凶之一）。已修复为 `ref TaleWorlds.CampaignSystem.ExplainedNumber __result`（双倍用 `__result.Add(__result.ResultNumber)`）。
 
 ### 常见操作：访问游戏内的游戏数据
 
@@ -548,21 +554,11 @@ Usage:
 
 ### 工具调用模式
 
-本模组支持两种工具调用模式，通过 MCM 中的「独立工具调用」开关控制：
-
-**正常模式（默认，关闭）：**
-角色扮演和工具调用在同一次 API 请求中完成。模型同时输出文本回复和 tool_calls。
+当前为**单一模式**：角色扮演和工具调用在同一次 API 请求中完成，模型同时输出文本回复和 tool_calls。
 - 对强模型效果好，延迟低，token 消耗少
-- 弱模型可能在角色扮演中遗忘工具调用
+- 弱模型可能在角色扮演中遗忘工具调用（可在工具描述里加一行简短提醒缓解）
 
-**独立模式（开启「独立工具调用」）：**
-```
-第 1 次 API 请求：纯角色扮演（不含 tools）
-第 2 次 API 请求：纯工具决策（opencode 风格提示词，专门判断是否调用工具）
-```
-- `AIChatClient.EvaluateToolCalls()` 负责第 2 次请求
-- 系统提示词极简（"Only call functions or stay silent. Do NOT roleplay."）
-- 延迟和 token 消耗翻倍，但对弱模型更可靠
+> 注：早期的「独立工具调用」模式（两次 API 请求分离角色扮演与工具决策）已在 v1.1 移除——它诞生于最初的非 Agent 驱动设计，且工具调用只被解析不执行（设计残留）。
 
 ### 工具调用反馈闭环
 
@@ -602,21 +598,31 @@ Usage:
 
 ### 信件激活机制（AgentScheduler）
 
-信件系统采用异步事件驱动模型：
+信件系统采用异步事件驱动模型。**v1.1 起为"有限并行 + 优先级调度"**：最多 `MaxAgentConcurrency`（MCM 可调，默认 5，范围 1-8）个 Agent 任务同时在飞（`_inFlightCount` 计数），事件按优先级从 5 个分队列中取最高者出队。**文件读写并发防护**：史料/谏言/聊天记录等共享文件经 `SafeFileIO` 带重试写入，避免"文件正被使用"异常（主线程写史料若撞上史官后台读，重试而非崩游戏）。
 
 ```
 send_letter → StoreOutgoingLetter(文件) → AgentScheduler.QueueEvent(LetterReceived)
                                                       ↓
-OnApplicationTick → AgentScheduler.Tick() → 取出1个事件 → Task.Run异步处理
+OnApplicationTick → AgentScheduler.Tick() → 若并发槽未满 → 取最高优先级事件 → SpawnTask 异步处理
 ```
 
-- 每帧消费一个激活事件（`ConcurrentQueue`，线程安全）
-- `ActivationEvent.Depth` 控制级联深度，MCM 可调（默认 5）
-- 支持三种事件类型：`LetterReceived`（来信）、`BehaviorCheckIn`（定时签到）、`KingDiplomacy`（国王外交审视）
+**优先级（P0 最高）：**
+| P | 事件类型 | 说明 |
+|---|---------|------|
+| 0 | YearlyChronicle / SpecialChronicle（史官） | 最高，**永不跳过**（生成不受队列门槛限制，永远先出队） |
+| 1 | KingDiplomacy（国王外交/提案） | 高优先，外交提案不积压 |
+| 2 | LetterReceived | 中 |
+| 3 | BehaviorCheckIn / PlanCheckIn（签到） | 低 |
+| 4 | Advisory（概率激活的谏言） | 最低，只在无更高优先工作时处理 |
+
+- 并发安全：每任务上下文（`CurrentHero`/agent/深度等）经 `AsyncLocal` 隔离，工具仍统一回主线程串行执行
+- `ActivationEvent.Depth` 控制级联深度（`AsyncLocal` 按任务隔离，MCM 可调默认 5）
+- 支持事件类型：`LetterReceived`（来信）、`BehaviorCheckIn`（签到）、`KingDiplomacy`（国王外交）、`PlanCheckIn`（计划）、`YearlyChronicle`/`SpecialChronicle`（史官）、`Advisory`（谏言）
 - 被俘/逃亡的国王统治者现在也会被激活（仅跳过已死亡和 null 的），`BuildSelfStatus` 中会提示"你仍是王国统治者"
 - 玩家可见：左下角弹 `xxx 给 xxx 写了一封信` / `xxx 正在思考下一步行动...` / `xxx 正在处理外交事务...`
 - 防递归：书信规则强调"除非必要不回信" + 深度硬上限
 - 聊天记录使用显式路径（`GetChatLogPathFor`）防线程竞态
+- **信件记忆连续性**：信件处理（`ProcessEvent`）会先 `LoadChatLogFor` 注入双方此前聊天记录，再追加信件内容——对方能记得过去见过面/聊过什么（原实现只给信件文本，导致跨信"不认得你"）
 - 外交提案感知：`LetterReceived` 处理时自动检测双方是否有待处理的外交提案（`AgentManager.GetProposalsBetween`），如有则将提案摘要注入上下文提示 Agent
 
 ### 封臣谏言机制（AgentScheduler）
@@ -632,7 +638,7 @@ SelectAdvisoryLeader：按权重抽氏族领袖
   权重 = 氏族Tier×3 + 影响力/50 + 封地数
   排除：雇佣兵、俘虏、逃亡、国王本人、玩家、上轮进谏者（同一人不连续）
     ↓
-ProcessAdvisory（后台 Task，串行，不走事件队列）
+ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先）
     → 提示词：读 personal_notes.txt（可选）→ 查世界局势 → submit_advisory(content) 工具提交
     → 工具自动写 World/advisory/{王国}_{年}.txt（时间戳头 + 姓名 + 正文）
     → 未调工具则兜底写 response.Content，空则标"（未发表公开谏言）"
@@ -642,7 +648,8 @@ ProcessAdvisory（后台 Task，串行，不走事件队列）
 - `submit_advisory` 是 agent_tools.json 里的专用工具，归档格式由代码控制，agent 只需填内容
 - 私人笔记 `decisions/personal_notes.txt` 非强制；若 LLM 写成了别的文件名，`ProcessAdvisory` 会强制合并归位
 - 国王外交激活（`KingDiplomacy`）的提示词自动注入"先 read_file World/advisory/ 了解封臣谏言"，但国王决策权不受限
-- 事件队列积压 >3 时暂停生成新的国王外交/封臣谏言，先消化积压（Tick 中 `_eventQueue.Count <= 3` 门槛）
+- 事件队列积压 >3 时暂停生成新的国王外交/封臣谏言，先消化积压（Tick 中 `PendingEventCount() <= 3` 门槛）
+- **token 截断重试**：`SendMessage` 捕获 `finish_reason`（`"length"`=被 `max_tokens` 截断）。谏言若被截断且未提交 → 自动重试一次（更坚决的提示直接进谏）；主动沉默（`finish_reason="stop"`）不重试。MCM「最大 Token 数」默认 8192（后端单轮上限），基本不会截断——勿调低，思考模型 + 工具循环需要大量输出 token
 - 历史（H 键）可读本国公开谏言；史官 `_readableWorldDirs` 含 `"advisory"` 可读取
 - **玩家谏言**：秘书处（M 键）的 chancery 提示词引导使用 `submit_advisory`（玩家封臣/国王均可，雇佣兵被工具拒绝）——玩家谏言与 AI 谏言同一归档，可被史官写入编年史
 - **史官联动**：`historian_rules.txt` 和 `yearly_chronicle_prompt.txt` 引导史官可选读 `advisory/` 作为补充视角（补充事实背后的观点和史料未载细节）；原始史料仍为权威，引用须注明"某封臣当时的谏言"
@@ -661,10 +668,10 @@ ProcessAdvisory（后台 Task，串行，不走事件队列）
 | 议和 | `MakePeace` | `peace_made` |
 | 城镇/城堡易主 | `OnSettlementOwnerChangedEvent`（过滤 IsTown/IsCastle） | `settlement_captured` |
 | 王国灭亡 | `KingdomDestroyedEvent` | `kingdom_destroyed` |
-| 新王国建立 | `OnKingdomCreatedEvent`（反射注册） | `kingdom_created` |
+| 新王国建立 | 无独立事件，从 `OnClanChangedKingdomEvent` 的 `CreateKingdom` 详情补记 | `kingdom_created` |
 | 贵族死亡 | `HeroKilledEvent`（过滤有 clan 的） | `hero_killed` |
 | 氏族叛变 | `OnClanChangedKingdomEvent` | `clan_changed_kingdom` |
-| 贵族婚嫁 | `MarriageOfferedToPlayerEvent` 等（反射注册） | `marriage` |
+| 贵族婚嫁 | `OnMarriageOfferedToPlayerEvent`（直接注册） | `marriage` |
 
 每条事件以 JSONL 格式追加到 `World/history/events_{year}.txt`：
 ```json
@@ -675,6 +682,8 @@ ProcessAdvisory（后台 Task，串行，不走事件队列）
 
 - **触发时机**：每年年终（年份推进时），`AgentScheduler.CheckYearAdvance()` 检测年份变化并队列 `YearlyChronicle` 事件
 - **专题触发**：灭国/新王国建立时，`HistoryRecorder` 调用 `AgentScheduler.QueueSpecialChronicle()` 即时队列 `SpecialChronicle` 事件
+- **专题合并（防杀人潮）**：`QueueSpecialChronicle` 会先写入合并缓冲——若已有一个待处理专题史事件，后续事件只追加不新开；处理时一次史官激活合并全部（如玩家连杀十几人 → 只生成一次传记专题，而非连环激活）
+- **传记质量**：`query_character` 现可查已故人物（枚举所有氏族成员含已故 + 在世英雄）并返回出生/卒年；传记提示词要求开头点明身份（统治者/族长/成员）与生卒年。成功判定改为"chronicles 目录出现新文件"（传记是自命名文件，原只查 `chronicle_*.txt` 会误报"未生成"）
 - **Entity**：史官是虚拟 Entity（ID: `__historian__`，`HeroRef = null`），不映射任何游戏 NPC
 - **工具**：`query` + `file` 分类的工具（`ActivatedCategories = {"universal", "query", "file"}`）
 - **权限**：可读 `World/history/` 目录，可写 `World/history/chronicles/` 目录
@@ -708,6 +717,8 @@ ProcessAdvisory（后台 Task，串行，不走事件队列）
    ```
 
 3. **dnSpy 调试**：打开 `C:\Users\yangui\Tools\dnSpy\dnSpy-net-win64\dnSpy.exe`，附加到 Bannerlord 进程，可在任意游戏方法上设断点
+
+4. **DebugLogger 调试日志**（推荐优先）：战役目录 `debug_logs/debug_*.log` 记录每次 LLM 调用的轮次/推理长度/工具名；**最终轮无文本时记录思维链摘录**（600 字）。排查"Agent 为什么这么干/没干"首选此日志。受 MCM「调试日志」开关控制（默认开）。注意：`SendMessage` 返回的 `Content` 若回退到"（已通过工具处理完毕）"表示 Agent 调了工具但没输出结语（如国王评估后决定不行动）
 
 ## 注意事项
 
@@ -824,6 +835,7 @@ Bannerlord 的模组加载有严格的初始化顺序。**在错误的阶段调�
         → OnBeforeInitialModuleScreenSetAsRoot()  ← UI 系统就绪，可以调用 DisplayMessage
         → 主菜单显示 →
         → 新游戏/读档 → OnGameStart()             ← 战役系统就绪
+        → 战役结束（切档/回主菜单/关游戏）→ OnGameEnd()  ← 必须清空跨档静态状态
 ```
 
 | 阶段 | 可以做什么 | 不能做什么 |
@@ -831,6 +843,7 @@ Bannerlord 的模组加载有严格的初始化顺序。**在错误的阶段调�
 | `OnSubModuleLoad` | `Harmony.PatchAll()`（仅对已完成的类型生效）、初始化纯数据结构 | 调用 `InformationManager`、访问 `Campaign`、打补丁到未初始化的类型 |
 | `OnBeforeInitialModuleScreenSetAsRoot` | 显示欢迎消息、修改主菜单 | 访问战役数据（还没进游戏） |
 | `OnGameStart` | 注册 CampaignBehavior、显示消息、访问战役数据、**用 Type.GetType + harmony.Patch 手动补丁未初始化的类型** | - |
+| `OnGameEnd` | 清空跨档静态状态（`EntityManager.ResetForNewCampaign`/`PartyBehaviorManager`/`AgentScheduler`/`DebugLogger`）——避免新档用到旧档的实体缓存、计时器、编年史年份 | 访问战役数据（已结束） |
 
 **常见崩溃码：**
 

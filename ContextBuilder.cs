@@ -13,7 +13,7 @@ namespace MyFirstMod
     {
         private static readonly Dictionary<EntityCapability, string[]> CapabilityToolMap = new()
         {
-            [EntityCapability.FileSystem] = new[] { "read_file", "append_file", "write_file", "edit_file", "delete_file", "list_dir", "glob" },
+            [EntityCapability.FileSystem] = new[] { "read_file", "append_file", "write_file", "edit_file", "delete_file", "list_dir", "glob", "grep", "move_file" },
             [EntityCapability.MoveParty] = new[] { "move_to_settlement", "raid_settlement", "besiege_settlement", "engage_party", "defend_settlement", "patrol_settlement", "escort_party", "go_around_party" },
             [EntityCapability.WaitAtSettlement] = new[] { "wait_at_settlement" },
             [EntityCapability.GiveGold] = new[] { "give_gold" },

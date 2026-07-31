@@ -40,6 +40,9 @@ namespace MyFirstMod
             var modulePath = ModuleHelper.GetModuleFullPath("MyFirstMod");
             PromptManager.Initialize(modulePath);
 
+            // OnSubModuleLoad 在游戏主线程执行——绑定主线程 ID，供工具主线程分发判断。
+            MainThreadExecutor.Initialize();
+
             var harmony = new Harmony("MyFirstMod");
             harmony.PatchAll();
         }
@@ -109,10 +112,21 @@ namespace MyFirstMod
             }
         }
 
+        /// <summary>战役结束（切档/退回主菜单/关游戏）时清空跨档残留状态，避免新档用到旧档的实体/计时器。</summary>
+        public override void OnGameEnd(Game game)
+        {
+            base.OnGameEnd(game);
+            EntityManager.ResetForNewCampaign();
+            PartyBehaviorManager.ResetForNewCampaign();
+            AgentScheduler.ResetForNewCampaign();
+            DebugLogger.Reset();
+        }
+
         protected override void OnApplicationTick(float dt)
         {
             base.OnApplicationTick(dt);
 
+            MainThreadExecutor.Tick();
             PartyBehaviorManager.Tick();
             AIChatClient.CheckPendingInquiry();
             AgentScheduler.Tick();
@@ -260,11 +274,13 @@ namespace MyFirstMod
                   "CalculateRenownGain")]
     public static class DoubleRenownPatch
     {
-        public static void Postfix(ref float __result)
+        // 修复：CalculateRenownGain 返回 ExplainedNumber 而非 float，
+        // 原 `ref float __result` 类型不匹配会让 PatchAll 抛 HarmonyException 并中止后续补丁注册。
+        public static void Postfix(ref TaleWorlds.CampaignSystem.ExplainedNumber __result)
         {
             if (MySettings.Instance?.DoubleRenownEnabled == true)
             {
-                __result *= 2f;
+                __result.Add(__result.ResultNumber);
             }
         }
     }

@@ -240,24 +240,6 @@ namespace MyFirstMod
             }
         }
 
-        private bool _independentToolCalling = false;
-
-        [SettingPropertyBool("独立工具调用", Order = 2, RequireRestart = false,
-            HintText = "仅在模型消极调用工具时开启。\n开启后角色扮演和工具调用分离为两次 API 请求。\n会增加延迟和 token 消耗，不建议长期开启。")]
-        [SettingPropertyGroup("游戏设置")]
-        public bool IndependentToolCalling
-        {
-            get => _independentToolCalling;
-            set
-            {
-                if (_independentToolCalling != value)
-                {
-                    _independentToolCalling = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
-
         private bool _showToolCalls = true;
 
         [SettingPropertyBool("显示工具调用提示", Order = 3, RequireRestart = false,
@@ -271,6 +253,42 @@ namespace MyFirstMod
                 if (_showToolCalls != value)
                 {
                     _showToolCalls = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private bool _debugLogging = true;
+
+        [SettingPropertyBool("调试日志", Order = 4, RequireRestart = false,
+            HintText = "将 LLM 调用摘要、思维链摘录、谏言/信件结果写入战役目录 debug_logs/，便于排查 agent 行为。")]
+        [SettingPropertyGroup("游戏设置")]
+        public bool DebugLogging
+        {
+            get => _debugLogging;
+            set
+            {
+                if (_debugLogging != value)
+                {
+                    _debugLogging = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _maxAgentConcurrency = 5;
+
+        [SettingPropertyInteger("Agent 并发数", 1, 8, Order = 5, RequireRestart = false,
+            HintText = "同时运行的 Agent 任务数上限。越大吞吐越高，但工具在主线程串行执行，过大会造成帧卡顿。")]
+        [SettingPropertyGroup("游戏设置")]
+        public int MaxAgentConcurrency
+        {
+            get => _maxAgentConcurrency;
+            set
+            {
+                if (_maxAgentConcurrency != value)
+                {
+                    _maxAgentConcurrency = value;
                     OnPropertyChanged();
                 }
             }
@@ -492,7 +510,7 @@ namespace MyFirstMod
             }
         }
 
-        private int _maxTokens = 4096;
+        private int _maxTokens = 8192;
 
         [SettingPropertyInteger("最大 Token 数", 50, 8192, Order = 5, RequireRestart = false,
             HintText = "AI 单次回复的最大 token 数。DeepSeek V4 最高支持 384K 输出。")]

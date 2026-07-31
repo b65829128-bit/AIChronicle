@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
 
@@ -10,16 +12,34 @@ namespace MyFirstMod
     public static class EntityManager
     {
         private static string _npcBaseDir = "";
-        private static readonly Dictionary<string, Entity> _entityCache = new();
-        private static readonly Dictionary<Hero, Entity> _heroToEntity = new();
+        // 并发修复：后台 Agent 任务与主线程聊天会同时读写实体缓存，普通 Dictionary 并发访问会抛异常。
+        private static readonly ConcurrentDictionary<string, Entity> _entityCache = new();
+        private static readonly ConcurrentDictionary<Hero, Entity> _heroToEntity = new();
 
-        private static string? _activeAgentId;
-        private static string? _activeTargetId;
+        // 并发修复：活动交互上下文改为 AsyncLocal，每个异步流程持有自己的值，互不覆盖。
+        private static readonly AsyncLocal<string?> _activeAgentId = new();
+        private static readonly AsyncLocal<string?> _activeTargetId = new();
 
-        public static Entity? ActiveAgent => _activeAgentId != null && _entityCache.TryGetValue(_activeAgentId, out var e) ? e : null;
-        public static Entity? ActiveTarget => _activeTargetId != null && _entityCache.TryGetValue(_activeTargetId, out var e) ? e : null;
-        public static string? ActiveAgentId => _activeAgentId;
-        public static string? ActiveTargetId => _activeTargetId;
+        public static Entity? ActiveAgent
+        {
+            get
+            {
+                var id = _activeAgentId.Value;
+                return id != null && _entityCache.TryGetValue(id, out var e) ? e : null;
+            }
+        }
+
+        public static Entity? ActiveTarget
+        {
+            get
+            {
+                var id = _activeTargetId.Value;
+                return id != null && _entityCache.TryGetValue(id, out var e) ? e : null;
+            }
+        }
+
+        public static string? ActiveAgentId => _activeAgentId.Value;
+        public static string? ActiveTargetId => _activeTargetId.Value;
 
         public static void Initialize(string npcBaseDir)
         {
@@ -27,12 +47,22 @@ namespace MyFirstMod
             Directory.CreateDirectory(_npcBaseDir);
         }
 
+        /// <summary>战役结束/切档时清空跨档残留，避免新档命中旧档的实体缓存（旧 Hero 引用/陈旧能力）。</summary>
+        public static void ResetForNewCampaign()
+        {
+            _entityCache.Clear();
+            _heroToEntity.Clear();
+            _activeAgentId.Value = null;
+            _activeTargetId.Value = null;
+            _npcBaseDir = "";
+        }
+
         public static void ActivateInteraction(Hero agentHero, Hero targetHero)
         {
             var agent = GetOrCreateEntity(agentHero);
             var target = GetOrCreateEntity(targetHero);
-            _activeAgentId = agent.Id;
-            _activeTargetId = target.Id;
+            _activeAgentId.Value = agent.Id;
+            _activeTargetId.Value = target.Id;
             AgentManager.Activate(agent.Id, target.Id);
         }
 
@@ -58,8 +88,8 @@ namespace MyFirstMod
                 _entityCache[historianId] = historian;
             }
 
-            _activeAgentId = historianId;
-            _activeTargetId = historianId;
+            _activeAgentId.Value = historianId;
+            _activeTargetId.Value = historianId;
             AgentManager.Activate(historianId, historianId);
         }
 

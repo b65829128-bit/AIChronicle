@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
@@ -17,7 +18,8 @@ namespace MyFirstMod
         KingDiplomacy,
         PlanCheckIn,
         YearlyChronicle,
-        SpecialChronicle
+        SpecialChronicle,
+        Advisory
     }
 
     public class ActivationEvent
@@ -27,20 +29,40 @@ namespace MyFirstMod
         public string TargetId { get; set; } = "";
         public string Content { get; set; } = "";
         public int Depth { get; set; }
+
+        /// <summary>调度优先级：0 最高（史官，永不跳过），4 最低（概率激活的谏言）。</summary>
+        public int Priority => Type switch
+        {
+            ActivationEventType.YearlyChronicle or ActivationEventType.SpecialChronicle => 0,
+            ActivationEventType.KingDiplomacy => 1,
+            ActivationEventType.LetterReceived => 2,
+            ActivationEventType.BehaviorCheckIn or ActivationEventType.PlanCheckIn => 3,
+            _ => 4
+        };
     }
 
     public static class AgentScheduler
     {
-        private static readonly ConcurrentQueue<ActivationEvent> _eventQueue = new();
+        // 有限并行 + 优先级：5 个按优先级分队列（P0 最高），最多 MaxConcurrent 个任务同时在飞
+        private static readonly ConcurrentQueue<ActivationEvent>[] _priorityQueues = new ConcurrentQueue<ActivationEvent>[5];
         private static readonly List<(CampaignTime DueTime, ActivationEvent Event)> _delayedEvents = new();
-        private static Task? _currentTask;
-        private static int _currentProcessingDepth = -1;
+        private static int _inFlightCount;
+        private static int MaxConcurrent => Math.Max(1, MySettings.Instance?.MaxAgentConcurrency ?? 5);
+        private static readonly AsyncLocal<int> _currentProcessingDepth = new();
+
+        static AgentScheduler()
+        {
+            for (int i = 0; i < _priorityQueues.Length; i++)
+                _priorityQueues[i] = new ConcurrentQueue<ActivationEvent>();
+        }
         private static readonly Dictionary<Kingdom, CampaignTime> _lastKingActivation = new();
         private static readonly Dictionary<Kingdom, CampaignTime> _lastKingDailyCheck = new();
         private static int _warmupFrames = 120;
         private static int _nextKingIndex = 0;
         private static readonly Dictionary<string, CampaignTime> _lastProposalActivation = new();
-        private static ActivationEvent? _pendingPlayerProposal;
+        // 修复：玩家外交提案改为队列逐个弹出——单槽位在并发时第二个王国覆盖第一个，提案被吞
+        private static readonly System.Collections.Concurrent.ConcurrentQueue<ActivationEvent> _pendingPlayerProposals = new();
+        private static bool _playerProposalShowing;
         private static int _lastChronicleYear;
         private static bool _historianInitialized;
         private static int _warmupFramesHistorian = 60;
@@ -48,8 +70,39 @@ namespace MyFirstMod
         private static readonly Dictionary<Kingdom, string> _lastAdvisorySpeaker = new();
         private static readonly Dictionary<Kingdom, CampaignTime> _lastAdvisoryCheck = new();
 
-        public static bool IsProcessing => _currentTask != null && !_currentTask.IsCompleted;
-        public static int CurrentProcessingDepth => _currentProcessingDepth;
+        public static bool IsProcessing => _inFlightCount > 0;
+        public static int CurrentProcessingDepth
+        {
+            get => _currentProcessingDepth.Value;
+            set => _currentProcessingDepth.Value = value;
+        }
+
+        /// <summary>战役结束/切档时清空调度器跨档状态，避免新档残留旧档的计时器/事件/编年史年份。</summary>
+        public static void ResetForNewCampaign()
+        {
+            for (int p = 0; p < _priorityQueues.Length; p++)
+                while (_priorityQueues[p].TryDequeue(out _)) { }
+            _delayedEvents.Clear();
+            Interlocked.Exchange(ref _inFlightCount, 0);
+            _currentProcessingDepth.Value = -1;
+            lock (_specialChronicleLock)
+            {
+                _pendingSpecialSummaries.Clear();
+                _specialQueued = false;
+            }
+            _lastKingActivation.Clear();
+            _lastKingDailyCheck.Clear();
+            _lastProposalActivation.Clear();
+            while (_pendingPlayerProposals.TryDequeue(out _)) { }
+            _playerProposalShowing = false;
+            _lastChronicleYear = 0;
+            _historianInitialized = false;
+            _lastAdvisorySpeaker.Clear();
+            _lastAdvisoryCheck.Clear();
+            _nextKingIndex = 0;
+            _warmupFrames = 120;
+            _warmupFramesHistorian = 60;
+        }
 
         public static void RecordProposalActivation(string entityId)
         {
@@ -66,7 +119,7 @@ namespace MyFirstMod
                 if (!k.IsEliminated)
                     _lastKingActivation[k] = CampaignTime.Zero;
             }
-            InformationManager.DisplayMessage(new InformationMessage(
+            MainThreadExecutor.DisplayMessage(new InformationMessage(
                 "[MyFirstMod] 外交计时器已重置，所有国王将在接下来的游戏日中依次被激活。",
                 Colors.Cyan));
         }
@@ -75,14 +128,15 @@ namespace MyFirstMod
         {
             _lastAdvisoryCheck.Clear();
             _lastAdvisorySpeaker.Clear();
-            InformationManager.DisplayMessage(new InformationMessage(
+            MainThreadExecutor.DisplayMessage(new InformationMessage(
                 "[MyFirstMod] 封臣谏言计时器已重置，封臣们将在接下来的游戏日中陆续进谏。",
                 Colors.Cyan));
         }
 
         public static void QueueEvent(ActivationEvent evt)
         {
-            _eventQueue.Enqueue(evt);
+            var p = Math.Max(0, Math.Min(4, evt.Priority));
+            _priorityQueues[p].Enqueue(evt);
         }
 
         public static void QueueDelayedEvent(ActivationEvent evt, float delayHours)
@@ -102,24 +156,54 @@ namespace MyFirstMod
                 {
                     if (_delayedEvents[i].DueTime.IsPast)
                     {
-                        _eventQueue.Enqueue(_delayedEvents[i].Event);
+                        QueueEvent(_delayedEvents[i].Event);
                         _delayedEvents.RemoveAt(i);
                     }
                 }
             }
         }
 
+        /// <summary>取最高优先级队列的事件（P0 优先）。</summary>
+        private static bool TryDequeueHighestPriority(out ActivationEvent evt)
+        {
+            for (int p = 0; p < _priorityQueues.Length; p++)
+            {
+                if (_priorityQueues[p].TryDequeue(out evt!))
+                    return true;
+            }
+            evt = null!;
+            return false;
+        }
+
+        private static int PendingEventCount()
+        {
+            int count = 0;
+            for (int p = 0; p < _priorityQueues.Length; p++)
+                count += _priorityQueues[p].Count;
+            return count;
+        }
+
+        /// <summary>占用一个并发槽位执行处理函数，完成后释放（线程安全计数）。</summary>
+        private static void SpawnTask(Func<Task> processor)
+        {
+            Interlocked.Increment(ref _inFlightCount);
+            _ = Task.Run(async () =>
+            {
+                try { await processor(); }
+                finally { Interlocked.Decrement(ref _inFlightCount); }
+            });
+        }
+
         public static void Tick()
         {
-            if (_currentTask != null && !_currentTask.IsCompleted) return;
-            _currentTask = null;
+            if (_inFlightCount >= MaxConcurrent) return;
 
             CheckDelayedEvents();
 
-            if (!_eventQueue.TryDequeue(out var evt))
+            if (!TryDequeueHighestPriority(out var evt))
             {
                 CheckYearAdvance();
-                if (_eventQueue.Count <= 3)
+                if (PendingEventCount() <= 3)
                 {
                     CheckKingActivations();
                     CheckAdvisoryActivations();
@@ -130,14 +214,13 @@ namespace MyFirstMod
             var maxDepth = MySettings.Instance?.MaxLetterChainDepth ?? 5;
             if (evt.Depth > maxDepth)
             {
-                InformationManager.DisplayMessage(new InformationMessage(
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
                     $"[MyFirstMod] 信件级联已达上限({maxDepth}+)，剩余信件已存档不再处理。",
                     Colors.Yellow));
                 return;
             }
 
-            _currentProcessingDepth = evt.Depth;
-            _currentTask = Task.Run(() => ProcessEvent(evt));
+            SpawnTask(() => ProcessEvent(evt));
         }
 
         private static void CheckKingActivations()
@@ -278,36 +361,91 @@ namespace MyFirstMod
             _lastChronicleYear = currentYear;
         }
 
+        // 史官合并缓冲：短时间内的多起专题事件（如玩家大屠杀触发连串"重要人物之死"）合并成一次史官激活，
+        // 避免杀人潮导致史官被疯狂激活、P0 队列被连环编年史事件淹没。
+        private static readonly object _specialChronicleLock = new();
+        private static readonly List<string> _pendingSpecialSummaries = new();
+        private static bool _specialQueued;
+
         public static void QueueSpecialChronicle(string eventSummary)
         {
             if (string.IsNullOrEmpty(PromptManager.CampaignDir)) return;
 
-            var isBiography = eventSummary.StartsWith("重要人物之死");
-            var prompt = isBiography
-                ? PromptManager.LoadBiographyPrompt()
-                : PromptManager.LoadSpecialChroniclePrompt();
-            var content = prompt.Replace("{event_summary}", eventSummary);
+            lock (_specialChronicleLock)
+            {
+                _pendingSpecialSummaries.Add(eventSummary);
+                if (_specialQueued) return; // 已有一个待处理专题史事件，追加到缓冲即可
+                _specialQueued = true;
+            }
 
             QueueEvent(new ActivationEvent
             {
                 Type = ActivationEventType.SpecialChronicle,
                 AgentId = "__historian__",
                 TargetId = "__historian__",
-                Content = content,
+                Content = "", // 真实内容在处理时从缓冲取（合并多起事件）
                 Depth = 0
             });
+        }
+
+        /// <summary>取走并清空合并缓冲，构建史官提示词（传记 vs 专题史按首条判断）。</summary>
+        private static string ConsumeSpecialChronicleContent()
+        {
+            lock (_specialChronicleLock)
+            {
+                if (_pendingSpecialSummaries.Count == 0) return "";
+                var summaries = new List<string>(_pendingSpecialSummaries);
+                _pendingSpecialSummaries.Clear();
+                _specialQueued = false;
+
+                var isBiography = summaries[0].StartsWith("重要人物之死");
+                var prompt = isBiography
+                    ? PromptManager.LoadBiographyPrompt()
+                    : PromptManager.LoadSpecialChroniclePrompt();
+                var joined = string.Join("\n", summaries);
+                return prompt.Replace("{event_summary}", joined);
+            }
+        }
+
+        /// <summary>构建事件处理的对话上下文：信件处理带上双方此前聊天记录，保证对方记得你（跨信记忆连续性）。
+        /// 若最后一条日志已是同内容 user 消息（信件可能已入日志），跳过重复追加。</summary>
+        private static List<ChatHistoryEntry> BuildEventChatHistory(ActivationEvent evt)
+        {
+            var history = new List<ChatHistoryEntry>();
+            if (evt.Type == ActivationEventType.LetterReceived)
+            {
+                var prior = PromptManager.LoadChatLogFor(evt.AgentId, evt.TargetId);
+                if (prior != null) history.AddRange(prior);
+            }
+            if (history.Count == 0
+                || !(history[history.Count - 1].Role == "user" && history[history.Count - 1].Content == evt.Content))
+            {
+                history.Add(new() { Role = "user", Content = evt.Content });
+            }
+            return history;
         }
 
         private static async Task ProcessEvent(ActivationEvent evt)
         {
             var prevAgentId = EntityManager.ActiveAgentId;
             var prevTargetId = EntityManager.ActiveTargetId;
+            // 有限并行：信件级联深度按任务隔离（AsyncLocal），避免并发任务互相覆盖
+            _currentProcessingDepth.Value = evt.Depth;
 
             try
             {
                 if (evt.Type == ActivationEventType.YearlyChronicle || evt.Type == ActivationEventType.SpecialChronicle)
                 {
                     await ProcessHistorianEvent(evt);
+                    return;
+                }
+
+                if (evt.Type == ActivationEventType.Advisory)
+                {
+                    var vassal = EntityManager.GetEntityById(evt.AgentId);
+                    var kingdom = vassal?.HeroRef?.Clan?.Kingdom;
+                    if (vassal != null && kingdom != null)
+                        await ProcessAdvisory(vassal, kingdom);
                     return;
                 }
 
@@ -329,26 +467,26 @@ namespace MyFirstMod
 
                 if (evt.Type == ActivationEventType.BehaviorCheckIn)
                 {
-                    InformationManager.DisplayMessage(new InformationMessage(
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
                         $"{agentName} 正在重新评估当前任务...",
                         Colors.Cyan));
                 }
                 else if (evt.Type == ActivationEventType.KingDiplomacy)
                 {
-                    InformationManager.DisplayMessage(new InformationMessage(
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
                         $"{agentName} 正在处理外交事务...",
                         Colors.Cyan));
                 }
                 else if (evt.Type == ActivationEventType.PlanCheckIn)
                 {
                     var shortContent = evt.Content.Length > 80 ? evt.Content.Substring(0, 77) + "..." : evt.Content;
-                    InformationManager.DisplayMessage(new InformationMessage(
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
                         $"{agentName} {shortContent}，正在继续执行计划...",
                         Colors.Cyan));
                 }
                 else
                 {
-                    InformationManager.DisplayMessage(new InformationMessage(
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
                         $"{targetName} 给 {agentName} 写了一封信",
                         Colors.Cyan));
 
@@ -394,10 +532,7 @@ namespace MyFirstMod
                 {
                     HeroId = agentEntity.Id,
                     HeroName = agentEntity.Name,
-                    ChatHistory = new List<ChatHistoryEntry>
-                    {
-                        new() { Role = "user", Content = evt.Content }
-                    }
+                    ChatHistory = BuildEventChatHistory(evt)
                 };
 
                 var intent = evt.Type switch
@@ -412,16 +547,27 @@ namespace MyFirstMod
 
                 if (!string.IsNullOrEmpty(response.Content))
                 {
-                    PromptManager.AppendChatLogFor(evt.AgentId, evt.TargetId, "assistant", response.Content);
+                    // 方案A：回信只进聊天线程（标记为信件📜），不再投递信箱收件箱——信箱退化为线程入口
+                    var isLetterReply = evt.Type == ActivationEventType.LetterReceived;
+                    PromptManager.AppendChatLogFor(evt.AgentId, evt.TargetId, "assistant", response.Content, isLetterReply);
+
+                    if (isLetterReply && Hero.MainHero != null
+                        && evt.TargetId == EntityManager.GetOrCreateEntity(Hero.MainHero).Id)
+                    {
+                        var replySenderName = EntityManager.GetEntityById(evt.AgentId)?.Name ?? "对方";
+                        MainThreadExecutor.DisplayMessage(new InformationMessage(
+                            $"你收到了{replySenderName}的回信，按 O 键打开信箱查看。", Colors.Green));
+                    }
                 }
             }
             catch (Exception ex)
             {
-                InformationManager.DisplayMessage(new InformationMessage(
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
                     $"[MyFirstMod] 信件处理异常：{ex.Message}", Colors.Red));
             }
             finally
             {
+                _currentProcessingDepth.Value = -1;
                 if (prevAgentId != null && prevTargetId != null)
                 {
                     var prevAgent = EntityManager.GetOrCreateEntityById(prevAgentId);
@@ -436,13 +582,13 @@ namespace MyFirstMod
         {
             if (evt.Type == ActivationEventType.KingDiplomacy)
             {
-                _pendingPlayerProposal = evt;
+                _pendingPlayerProposals.Enqueue(evt);
                 return;
             }
 
             if (evt.Type == ActivationEventType.LetterReceived)
             {
-                InformationManager.DisplayMessage(new InformationMessage(
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
                     $"你收到了来自 {senderEntity.Name} 的一封信。按 O 键打开信箱查看。",
                     Colors.Cyan));
                 return;
@@ -451,9 +597,9 @@ namespace MyFirstMod
 
         public static void CheckPlayerProposal()
         {
-            var evt = _pendingPlayerProposal;
-            if (evt == null) return;
-            _pendingPlayerProposal = null;
+            if (_playerProposalShowing) return;
+            if (!_pendingPlayerProposals.TryDequeue(out var evt)) return;
+            _playerProposalShowing = true;
 
             var playerEntity = EntityManager.GetOrCreateEntityById(evt.AgentId);
             if (playerEntity?.HeroRef == null) return;
@@ -478,7 +624,7 @@ namespace MyFirstMod
 
             if (relevantProposals.Count == 0)
             {
-                InformationManager.DisplayMessage(new InformationMessage(
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
                     $"{senderName} 向你发送了外交提案，但提案文件已丢失。",
                     Colors.Yellow));
                 return;
@@ -500,24 +646,26 @@ namespace MyFirstMod
                 true, true, "接受", "拒绝",
                 () =>
                 {
+                    _playerProposalShowing = false;
                     var savedHero = AIChatClient.CurrentHero;
                     AIChatClient.CurrentHero = null;
                     try
                     {
                         var result = DiplomacyService.ExecuteRespondToProposal(proposalId, true);
-                        InformationManager.DisplayMessage(new InformationMessage(
+                        MainThreadExecutor.DisplayMessage(new InformationMessage(
                             $"[外交] {result}", Colors.Green));
                     }
                     finally { AIChatClient.CurrentHero = savedHero; }
                 },
                 () =>
                 {
+                    _playerProposalShowing = false;
                     var savedHero = AIChatClient.CurrentHero;
                     AIChatClient.CurrentHero = null;
                     try
                     {
                         var result = DiplomacyService.ExecuteRespondToProposal(proposalId, false);
-                        InformationManager.DisplayMessage(new InformationMessage(
+                        MainThreadExecutor.DisplayMessage(new InformationMessage(
                             $"[外交] {result}", Colors.Yellow));
                     }
                     finally { AIChatClient.CurrentHero = savedHero; }
@@ -535,11 +683,22 @@ namespace MyFirstMod
             try
             {
                 var eventLabel = evt.Type == ActivationEventType.YearlyChronicle ? "编年史" : "专题史";
-                InformationManager.DisplayMessage(new InformationMessage(
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
                     $"史官正在编纂{eventLabel}...",
                     Colors.Cyan));
 
                 EntityManager.ActivateHistorian();
+
+                // 专题史：从合并缓冲取全部事件（一次史官激活处理一批）；年度编年史直接用 evt.Content
+                var evtContent = evt.Type == ActivationEventType.SpecialChronicle
+                    ? ConsumeSpecialChronicleContent()
+                    : evt.Content;
+                if (string.IsNullOrEmpty(evtContent))
+                {
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
+                        "[MyFirstMod] 史官专题史缓冲为空，跳过。", Colors.Yellow));
+                    return;
+                }
 
                 var charPrompt = new CharacterPrompt
                 {
@@ -547,48 +706,67 @@ namespace MyFirstMod
                     HeroName = "史官",
                     ChatHistory = new List<ChatHistoryEntry>
                     {
-                        new() { Role = "user", Content = evt.Content }
+                        new() { Role = "user", Content = evtContent }
                     }
                 };
+
+                // 记录 chronicles 目录现有文件，结束后对比是否有新文件/被修改（用于判定史官是否真写出编年史）
+                var chronicleDir = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "history", "chronicles");
+                var beforeFiles = new HashSet<string>();
+                var beforeTimes = new Dictionary<string, DateTime>();
+                try
+                {
+                    Directory.CreateDirectory(chronicleDir);
+                    foreach (var f in Directory.GetFiles(chronicleDir))
+                    {
+                        beforeFiles.Add(f);
+                        beforeTimes[f] = File.GetLastWriteTimeUtc(f);
+                    }
+                }
+                catch { }
 
                 var response = await AIChatClient.SendMessage(
                     charPrompt, hero: null, includeTools: true, intent: "historian");
 
-                var expectedYear = ExtractYearFromContent(evt.Content);
-                var chronicleDir = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "history", "chronicles");
-                var fileExists = false;
-                if (expectedYear > 0 && Directory.Exists(chronicleDir))
+                // 修复：成功判定改为"出现新文件或文件被修改"——传记是自命名文件（不叫 chronicle_*），
+                // 原检查只找 chronicle_*.txt 会把已成功写入的传记误报为"未生成"。
+                var wroteFile = false;
+                try
                 {
-                    var expectedFile = Path.Combine(chronicleDir, $"chronicle_{expectedYear}.txt");
-                    fileExists = File.Exists(expectedFile);
+                    foreach (var f in Directory.GetFiles(chronicleDir))
+                    {
+                        if (!beforeFiles.Contains(f)
+                            || (beforeTimes.TryGetValue(f, out var t) && File.GetLastWriteTimeUtc(f) > t))
+                        {
+                            wroteFile = true;
+                            break;
+                        }
+                    }
                 }
-                else if (Directory.Exists(chronicleDir))
-                {
-                    fileExists = Directory.GetFiles(chronicleDir, "chronicle_*.txt").Length > 0;
-                }
+                catch { }
 
-                if (fileExists)
+                if (wroteFile)
                 {
-                    InformationManager.DisplayMessage(new InformationMessage(
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
                         $"史官已完成{eventLabel}的编纂。",
                         Colors.Green));
                 }
                 else if (!string.IsNullOrEmpty(response.Content))
                 {
-                    InformationManager.DisplayMessage(new InformationMessage(
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
                         $"史官{eventLabel}编纂已结束，但编年史文件未生成（可能读取史料失败）。",
                         Colors.Yellow));
                 }
                 else
                 {
-                    InformationManager.DisplayMessage(new InformationMessage(
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
                         $"史官{eventLabel}编纂未产生文本输出。",
                         Colors.Yellow));
                 }
             }
             catch (Exception ex)
             {
-                InformationManager.DisplayMessage(new InformationMessage(
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
                     $"[MyFirstMod] 史官处理异常：{ex.Message}",
                     Colors.Red));
             }
@@ -615,7 +793,6 @@ namespace MyFirstMod
         {
             if (Campaign.Current == null) return;
             if (_warmupFrames > 0) return;
-            if (_currentTask != null && !_currentTask.IsCompleted) return;
             if (MySettings.Instance?.AdvisoryEnabled != true) return;
 
             foreach (var kingdom in Kingdom.All)
@@ -643,11 +820,19 @@ namespace MyFirstMod
 
                 _lastAdvisorySpeaker[kingdom] = leader.Id;
 
-                InformationManager.DisplayMessage(new InformationMessage(
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
                     $"{leader.Name} 正在向{kingdom.Name}国王进谏...",
                     Colors.Cyan));
 
-                _currentTask = Task.Run(() => ProcessAdvisory(leader, kingdom));
+                // 有限并行：谏言入队（P4 最低优先），由槽位调度器处理
+                QueueEvent(new ActivationEvent
+                {
+                    Type = ActivationEventType.Advisory,
+                    AgentId = leader.Id,
+                    TargetId = leader.Id,
+                    Content = "",
+                    Depth = 0
+                });
                 return;
             }
         }
@@ -710,6 +895,15 @@ namespace MyFirstMod
             return candidates.Last().entity;
         }
 
+        /// <summary>是否算"已提交谏言"：仅当 submit_advisory 实际执行成功（结果非错误）。</summary>
+        private static bool IsAdvisorySubmitted(ChatResponse response)
+        {
+            return response.ToolCalls.Any(tc =>
+                tc.Name == "submit_advisory"
+                && response.ToolResults.TryGetValue(tc.Id, out var r)
+                && !r.StartsWith("[错误]"));
+        }
+
         private static async Task ProcessAdvisory(Entity vassal, Kingdom kingdom)
         {
             try
@@ -754,8 +948,29 @@ namespace MyFirstMod
 
                     var response = await AIChatClient.SendMessage(
                         charPrompt, vassal.HeroRef, includeTools: true, intent: "advisory");
+                    var submittedAdvisory = IsAdvisorySubmitted(response);
 
-                    var submittedAdvisory = response.ToolCalls.Any(tc => tc.Name == "submit_advisory");
+                    // 修复：finish_reason="length"（被 max_tokens 截断）且未提交/无文本 → 重试一次。
+                    // 区分"被截断"（推理被掐断，非主动沉默）与"主动沉默"（finish_reason=stop，不重试）。
+                    if (!submittedAdvisory && string.IsNullOrEmpty(response.Content?.Trim())
+                        && response.FinishReason == "length")
+                    {
+                        DebugLogger.Log($"谏言因 token 截断重试 agent={vassal.Id} kingdom={kingdomName}");
+                        var retryCharPrompt = new CharacterPrompt
+                        {
+                            HeroId = vassal.Id,
+                            HeroName = vassal.Name,
+                            ChatHistory = new List<ChatHistoryEntry>
+                            {
+                                new() { Role = "user", Content = "你上一轮思考到一半被截断，未能发表谏言。现在请直接审视局势并调用 submit_advisory 提交你的谏言——不要做冗长调查，直接进谏。" }
+                            }
+                        };
+                        response = await AIChatClient.SendMessage(
+                            retryCharPrompt, vassal.HeroRef, includeTools: true, intent: "advisory");
+                        submittedAdvisory = IsAdvisorySubmitted(response);
+                    }
+
+                    DebugLogger.Log($"谏言 agent={vassal.Id} kingdom={kingdomName} submitted={submittedAdvisory} contentLen={response.Content?.Length ?? 0} reasoning={DebugLogger.Truncate(response.LastReasoning, 400)}");
 
                     if (submittedAdvisory)
                     {
@@ -772,15 +987,14 @@ namespace MyFirstMod
                         if (!string.IsNullOrEmpty(content))
                         {
                             PromptManager.AppendChatLogFor(vassal.Id, vassal.Id, "assistant", content);
-                            var header = $"\n[{currentTime}] {vassal.Name}（{vassal.Title}）谏言：\n";
-                            File.AppendAllText(advisoryFile, header, Encoding.UTF8);
-                            File.AppendAllText(advisoryFile, content + "\n", Encoding.UTF8);
+                            // 一次写入（表头+正文）：避免分两次追加导致读者卡在只有表头的半条
+                            SafeFileIO.AppendAllText(advisoryFile,
+                                $"\n[{currentTime}] {vassal.Name}（{vassal.Title}）谏言：\n{content}\n");
                         }
                         else
                         {
-                            var header = $"\n[{currentTime}] {vassal.Name}（{vassal.Title}）谏言：\n";
-                            File.AppendAllText(advisoryFile, header, Encoding.UTF8);
-                            File.AppendAllText(advisoryFile, "（未发表公开谏言）\n", Encoding.UTF8);
+                            SafeFileIO.AppendAllText(advisoryFile,
+                                $"\n[{currentTime}] {vassal.Name}（{vassal.Title}）谏言：\n（未发表公开谏言）\n");
                         }
                     }
 
@@ -805,7 +1019,7 @@ namespace MyFirstMod
                     }
                     catch { }
 
-                    InformationManager.DisplayMessage(new InformationMessage(
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
                         $"{vassal.Name} 已向{kingdomName}国王进谏完成。",
                         Colors.Cyan));
                 }
@@ -822,7 +1036,7 @@ namespace MyFirstMod
             }
             catch (Exception ex)
             {
-                InformationManager.DisplayMessage(new InformationMessage(
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
                     $"[MyFirstMod] 封臣谏言处理异常：{ex.Message}",
                     Colors.Red));
             }

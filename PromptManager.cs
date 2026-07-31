@@ -24,6 +24,12 @@ namespace MyFirstMod
         public List<ToolCallData>? ToolCalls { get; set; }
         public string? ReasoningContent { get; set; }
 
+        /// <summary>原始时间戳（如"第1088年，秋季第10日，上午"）——加载聊天记录时保留，UI 显示原始发送/回复时间。</summary>
+        public string? Time { get; set; }
+
+        /// <summary>是否为信件消息（区别于面对面说话），UI 用 📜 标记。</summary>
+        public bool IsLetter { get; set; }
+
         public static string SerializeList(List<ChatHistoryEntry> entries)
         {
             var sb = new StringBuilder();
@@ -42,6 +48,12 @@ namespace MyFirstMod
             }
             return sb.ToString();
         }
+    }
+
+    public static class ChatLog
+    {
+        /// <summary>信件消息在聊天记录中的内容前缀标记——加载时剥掉（不污染给 LLM 的内容），仅用于 UI 识别信件。</summary>
+        public const string LetterMarker = "【信】";
     }
 
     public class CharacterPrompt
@@ -78,8 +90,6 @@ namespace MyFirstMod
         private static DateTime _lastSystemPromptCheck;
         private static string _cachedWorldInfo = "";
         private static DateTime _lastWorldInfoCheck;
-        private static string _cachedToolCallPrompt = "";
-        private static DateTime _lastToolCallPromptCheck;
         private static List<ToolDef> _cachedTools = new();
         private static DateTime _lastToolsCheck;
         private static List<ToolDef> _cachedAgentTools = new();
@@ -153,9 +163,9 @@ namespace MyFirstMod
             var npcBase = Path.Combine(_campaignDir, "NPCs");
             AgentManager.Initialize(npcBase);
             EntityManager.Initialize(npcBase);
+            DebugLogger.Init(_campaignDir);
 
             CopyPromptToCampaign("agent_system.txt");
-            CopyPromptToCampaign("tool_call_prompt.txt");
             CopyPromptToCampaign("persona_generation.txt");
             CopyPromptToCampaign("diplomacy_rules.txt");
             CopyPromptToCampaign("chancery_rules.txt");
@@ -307,23 +317,6 @@ namespace MyFirstMod
                 _lastAgentPromptCheck = lastWrite;
             }
             return _cachedAgentPrompt;
-        }
-
-        public static string LoadToolCallPrompt()
-        {
-            var path = Path.Combine(_campaignDir, "tool_call_prompt.txt");
-            if (!File.Exists(path))
-                path = Path.Combine(_promptsBaseDir, "tool_call_prompt.txt");
-            if (!File.Exists(path))
-                return "你是工具调用代理。根据以下对话，判断是否需要调用函数。如果没有新信息，不要调用。";
-
-            var lastWrite = File.GetLastWriteTimeUtc(path);
-            if (_cachedToolCallPrompt == "" || lastWrite > _lastToolCallPromptCheck)
-            {
-                _cachedToolCallPrompt = File.ReadAllText(path, Encoding.UTF8);
-                _lastToolCallPromptCheck = lastWrite;
-            }
-            return _cachedToolCallPrompt;
         }
 
         public static List<ToolDef> LoadTools()
@@ -508,20 +501,25 @@ namespace MyFirstMod
                 return new List<ChatHistoryEntry>();
 
             var entries = new List<ChatHistoryEntry>();
-            var lines = File.ReadAllLines(path, Encoding.UTF8);
+            var lines = SafeFileIO.ReadAllLines(path); // 带重试：并发追加同一 chat_log 时读可能撞"文件正被使用"
             foreach (var line in lines)
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
 
                 string role;
                 string content;
+                string? time = null;
                 var colonIdx = line.IndexOf(": ");
 
                 if (line.StartsWith("[") && colonIdx > 0)
                 {
                     var bracketEnd = line.IndexOf("] ");
                     if (bracketEnd > 0 && bracketEnd < colonIdx)
+                    {
+                        // 保留原始时间戳，供 UI 显示"消息发出的时刻"而非加载时的当前时间
+                        time = line.Substring(1, bracketEnd - 1);
                         role = line.Substring(bracketEnd + 2, colonIdx - bracketEnd - 2);
+                    }
                     else
                         role = line.Substring(0, colonIdx);
                 }
@@ -535,7 +533,10 @@ namespace MyFirstMod
                 }
 
                 content = line.Substring(colonIdx + 2).Replace("\\n", "\n");
-                entries.Add(new ChatHistoryEntry { Role = role, Content = content });
+                var isLetter = content.StartsWith(ChatLog.LetterMarker);
+                if (isLetter)
+                    content = content.Substring(ChatLog.LetterMarker.Length);
+                entries.Add(new ChatHistoryEntry { Role = role, Content = content, Time = time, IsLetter = isLetter });
             }
             return entries;
         }
@@ -545,13 +546,15 @@ namespace MyFirstMod
             AppendChatLogFor(EntityManager.ActiveAgentId ?? "", EntityManager.ActiveTargetId ?? "", role, content);
         }
 
-        public static void AppendChatLogFor(string agentId, string targetId, string role, string content)
+        public static void AppendChatLogFor(string agentId, string targetId, string role, string content, bool isLetter = false)
         {
             var path = AgentManager.GetChatLogPathFor(agentId, targetId);
             if (path == null) return;
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var timestamp = GetCurrentTimeString();
-            File.AppendAllText(path, $"[{timestamp}] {role}: " + content.Replace("\n", "\\n") + Environment.NewLine, Encoding.UTF8);
+            // 带重试：同一 chat_log 可能被该 agent 的两个并发事件同时追加（文件正被使用），重试而非报错
+            // 信件消息加标记前缀，加载时剥掉用于 UI 区分（不污染给 LLM 的内容）
+            var text = (isLetter ? ChatLog.LetterMarker : "") + content.Replace("\n", "\\n");
+            SafeFileIO.AppendAllText(path, $"[{timestamp}] {role}: " + text + Environment.NewLine);
         }
 
         public static string? ExtractLearnedTag(string response, out string cleanedResponse)

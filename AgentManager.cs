@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TaleWorlds.CampaignSystem;
@@ -15,9 +16,10 @@ namespace MyFirstMod
     public static class AgentManager
     {
         private static string _baseDir = "";
-        private static string _agentEntityId = "";
-        private static string _targetEntityId = "";
-        private static string _agentDir => Path.Combine(_baseDir, _agentEntityId);
+        // 并发修复：活动 Agent 上下文改为 AsyncLocal，每个异步流程独立持有，互不覆盖。
+        private static readonly AsyncLocal<string> _agentEntityId = new();
+        private static readonly AsyncLocal<string> _targetEntityId = new();
+        private static string _agentDir => Path.Combine(_baseDir, _agentEntityId.Value ?? "");
         private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
         private static readonly Random _rng = new();
 
@@ -45,8 +47,8 @@ namespace MyFirstMod
             "history", "history/chronicles", "advisory"
         };
 
-        public static string ActiveAgentId => _agentEntityId;
-        public static string ActiveTargetId => _targetEntityId;
+        public static string ActiveAgentId => _agentEntityId.Value ?? "";
+        public static string ActiveTargetId => _targetEntityId.Value ?? "";
 
         public static void Initialize(string baseDir)
         {
@@ -56,9 +58,16 @@ namespace MyFirstMod
 
         public static void Activate(string agentEntityId, string targetEntityId)
         {
-            _agentEntityId = SanitizeDir(agentEntityId);
-            _targetEntityId = SanitizeDir(targetEntityId);
+            _agentEntityId.Value = SanitizeDir(agentEntityId);
+            _targetEntityId.Value = SanitizeDir(targetEntityId);
             InitAgentDirectory();
+        }
+
+        /// <summary>仅切换活动上下文，不做目录初始化（用于主线程分发工具执行时临时套用/恢复上下文）。</summary>
+        internal static void SetContextOnly(string agentEntityId, string targetEntityId)
+        {
+            _agentEntityId.Value = SanitizeDir(agentEntityId);
+            _targetEntityId.Value = SanitizeDir(targetEntityId);
         }
 
         [Obsolete("Use Activate(agentEntityId, targetEntityId) instead.")]
@@ -69,7 +78,7 @@ namespace MyFirstMod
 
         public static string? GetAgentDir()
         {
-            if (string.IsNullOrEmpty(_agentEntityId)) return null;
+            if (string.IsNullOrEmpty(_agentEntityId.Value)) return null;
             return _agentDir;
         }
 
@@ -81,7 +90,7 @@ namespace MyFirstMod
 
         public static string? GetChatLogPath()
         {
-            return GetChatLogPathFor(_agentEntityId, _targetEntityId);
+            return GetChatLogPathFor(_agentEntityId.Value ?? "", _targetEntityId.Value ?? "");
         }
 
         public static string? GetChatLogPathFor(string agentEntityId, string targetEntityId)
@@ -94,7 +103,7 @@ namespace MyFirstMod
         public static string? GetTargetKnowledgePath()
         {
             if (string.IsNullOrEmpty(_agentDir)) return null;
-            return Path.Combine(_agentDir, "knowledge", SanitizeFile(_targetEntityId) + ".txt");
+            return Path.Combine(_agentDir, "knowledge", SanitizeFile(_targetEntityId.Value ?? "") + ".txt");
         }
 
         [Obsolete("Use GetTargetKnowledgePath() instead.")]
@@ -382,7 +391,7 @@ namespace MyFirstMod
             if (!File.Exists(fullPath))
                 return "[不存在] " + path;
 
-            var lines = File.ReadAllLines(fullPath, Encoding.UTF8);
+            var lines = SafeFileIO.ReadAllLines(fullPath);
 
             var start = (lineStart ?? 1) - 1;
             if (start < 0) start = 0;
@@ -403,6 +412,12 @@ namespace MyFirstMod
             if (!IsPathAllowed(path, read: true, write: true))
                 return "[拒绝] 没有写入权限：" + path;
 
+            var cleanPath = path.Replace('\\', '/').Trim('/');
+            if (cleanPath.StartsWith("chat_logs/") || cleanPath == "chat_logs")
+                return "[拒绝] 聊天记录不可修改";
+            if (_immutableFiles.Contains(Path.GetFileName(cleanPath)))
+                return "[拒绝] 此文件不可修改：" + path;
+
             var fullPath = ResolvePath(path);
             if (fullPath == null)
                 return "[错误] 路径解析失败";
@@ -410,7 +425,7 @@ namespace MyFirstMod
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
             var line = content.Replace("\r", "").Replace("\n", " ").Trim();
-            File.AppendAllText(fullPath, line + Environment.NewLine, Encoding.UTF8);
+            SafeFileIO.AppendAllText(fullPath, line + Environment.NewLine);
             return "已写入。";
         }
 
@@ -433,6 +448,9 @@ namespace MyFirstMod
             }
             else
             {
+                if (!IsPathAllowed(path, read: true))
+                    return "[拒绝] 没有读取权限：" + path;
+
                 var searchDir = ResolvePath(path);
                 if (searchDir == null || string.IsNullOrEmpty(_agentDir))
                     return "[错误] 路径解析失败";
@@ -464,7 +482,7 @@ namespace MyFirstMod
             if (!string.IsNullOrEmpty(prefix))
                 relPath = prefix + "/" + relPath;
 
-            var lines = File.ReadAllLines(filePath, Encoding.UTF8);
+            var lines = SafeFileIO.ReadAllLines(filePath);
             for (int i = 0; i < lines.Length; i++)
             {
                 if (lines[i].IndexOf(pattern, comparison) >= 0)
@@ -495,7 +513,7 @@ namespace MyFirstMod
             if (!File.Exists(fullPath))
                 return "[不存在] " + path;
 
-            var content = File.ReadAllText(fullPath, Encoding.UTF8);
+            var content = SafeFileIO.ReadAllText(fullPath);
             var count = 0;
             var idx = 0;
             while ((idx = content.IndexOf(oldString, idx, StringComparison.Ordinal)) >= 0)
@@ -510,7 +528,7 @@ namespace MyFirstMod
                 return $"[冲突] 找到 {count} 处匹配，请提供更多上下文使其唯一。";
 
             var newContent = content.Replace(oldString, newString);
-            File.WriteAllText(fullPath, newContent, Encoding.UTF8);
+            SafeFileIO.WriteAllText(fullPath, newContent);
             return "已修改。";
         }
 
@@ -581,7 +599,7 @@ namespace MyFirstMod
                 return "[错误] 路径解析失败：" + path;
 
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-            File.WriteAllText(fullPath, content.Trim(), Encoding.UTF8);
+            SafeFileIO.WriteAllText(fullPath, content.Trim());
             return "已写入。";
         }
 
@@ -1054,9 +1072,26 @@ namespace MyFirstMod
             }
         }
 
+        /// <summary>
+        /// 规范化相对路径：统一分隔符、去首尾斜杠。
+        /// 安全修复：拒绝任何 `..` 路径穿越段，拒绝盘符/根路径等绝对路径。
+        /// </summary>
+        private static string? NormalizeRelPath(string relPath)
+        {
+            if (string.IsNullOrEmpty(relPath)) return null;
+            var normalized = relPath.Replace('\\', '/').Trim('/');
+            if (normalized.Length == 0) return null;
+            if (normalized.Split('/').Any(seg => seg == "..")) return null;
+            if (normalized.Contains(':')) return null;
+            if (normalized.StartsWith("/")) return null;
+            return normalized;
+        }
+
         private static bool IsPathAllowed(string relPath, bool read, bool write = false)
         {
-            relPath = relPath.Replace('\\', '/').Trim('/');
+            relPath = NormalizeRelPath(relPath) ?? "";
+            if (relPath.Length == 0) return false;
+
             var dirPart = Path.GetDirectoryName(relPath)?.Replace('\\', '/') ?? "";
 
             var isWorldPath = _readableWorldFiles.Contains(relPath)
@@ -1071,7 +1106,7 @@ namespace MyFirstMod
             if (write && _writableDirs.Contains(dirPart))
                 return true;
 
-            if (write && _agentEntityId == "__historian__")
+            if (write && _agentEntityId.Value == "__historian__")
             {
                 if (relPath.StartsWith("history/chronicles/") || relPath == "history/chronicles")
                     return true;
@@ -1082,7 +1117,13 @@ namespace MyFirstMod
 
         private static string? ResolvePath(string relPath)
         {
-            relPath = relPath.Replace('\\', '/').Trim('/');
+            relPath = NormalizeRelPath(relPath) ?? "";
+            // 空路径 = Agent 自己的根目录（如 list_dir("")）
+            if (relPath.Length == 0)
+            {
+                if (string.IsNullOrEmpty(_agentDir)) return null;
+                return Path.GetFullPath(_agentDir);
+            }
 
             if (_readableWorldFiles.Contains(relPath))
                 return Path.Combine(_baseDir, "World", relPath);
@@ -1093,8 +1134,9 @@ namespace MyFirstMod
             if (string.IsNullOrEmpty(_agentDir))
                 return null;
 
-            var full = Path.Combine(_agentDir, relPath);
-            return full.StartsWith(_agentDir) ? full : null;
+            var full = Path.GetFullPath(Path.Combine(_agentDir, relPath));
+            var agentRoot = Path.GetFullPath(_agentDir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            return full.StartsWith(agentRoot, StringComparison.Ordinal) ? full : null;
         }
 
         private static string SanitizeDir(string name)

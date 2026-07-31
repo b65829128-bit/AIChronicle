@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.MapEvents;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
 using TaleWorlds.Library;
 
 namespace MyFirstMod
@@ -24,32 +27,57 @@ namespace MyFirstMod
 
     public static class PartyBehaviorManager
     {
+        // 并发修复：工具在后台线程注册/移除动作，Tick 在主线程遍历——
+        // 普通 Dictionary 枚举中被修改会抛 "Collection was modified"。加锁 + 快照遍历。
+        private static readonly object _pendingLock = new();
         private static readonly Dictionary<string, PendingAction> _pendingActions = new();
 
         internal static PendingAction GetOrCreateAction(Hero hero)
         {
             var key = hero.Id.ToString();
-            if (!_pendingActions.TryGetValue(key, out var action))
+            lock (_pendingLock)
             {
-                action = new PendingAction { Hero = hero };
-                _pendingActions[key] = action;
+                if (!_pendingActions.TryGetValue(key, out var action))
+                {
+                    action = new PendingAction { Hero = hero };
+                    _pendingActions[key] = action;
+                }
+                return action;
             }
-            return action;
         }
 
         internal static void RemoveAction(Hero hero)
         {
-            _pendingActions.Remove(hero.Id.ToString());
+            lock (_pendingLock)
+            {
+                _pendingActions.Remove(hero.Id.ToString());
+            }
+        }
+
+        /// <summary>战役结束/切档时清空待执行动作。</summary>
+        public static void ResetForNewCampaign()
+        {
+            lock (_pendingLock)
+            {
+                _pendingActions.Clear();
+            }
         }
 
         public static void Tick()
         {
-            if (_pendingActions.Count == 0 || Campaign.Current == null)
+            if (Campaign.Current == null)
                 return;
+
+            List<KeyValuePair<string, PendingAction>> snapshot;
+            lock (_pendingLock)
+            {
+                if (_pendingActions.Count == 0) return;
+                snapshot = _pendingActions.ToList();
+            }
 
             var keysToRemove = new List<string>();
 
-            foreach (var kv in _pendingActions)
+            foreach (var kv in snapshot)
             {
                 try
                 {
@@ -89,7 +117,11 @@ namespace MyFirstMod
                     if (action.ArrivedAt != null)
                     {
                         var elapsed = (CampaignTime.Now - action.ArrivedAt.Value).ToHours;
-                        if (action.WaitHours <= 0 || elapsed >= action.WaitHours)
+                        // 修复：持续性行为（驻防/巡逻/护送，CheckInHours>0）到达岗位后保留动作，
+                        // 让下方 CheckInHours 分支到期触发签到——原逻辑 WaitHours<=0 立即删除，
+                        // 使定时签到成为死代码、中断后也不再重发。
+                        var isPersistent = action.CheckInHours > 0f;
+                        if (!isPersistent && (action.WaitHours <= 0 || elapsed >= action.WaitHours))
                         {
                             keysToRemove.Add(kv.Key);
                             if (action.TargetSettlement != null)
@@ -101,7 +133,9 @@ namespace MyFirstMod
                             QueuePlanCheckIn(action);
                             continue;
                         }
-                        continue;
+                        if (!isPersistent)
+                            continue; // 非持续性等待未到期：保持等待
+                        // 持续性行为：继续往下走，CheckInHours 到期时由下方分支触发签到
                     }
 
                     if (action.TargetSettlement == null && action.TargetParty == null)
@@ -117,8 +151,15 @@ namespace MyFirstMod
                             action.TargetReached = party.BesiegedSettlement == action.TargetSettlement;
                         else if (action.Behavior == AiBehavior.DefendSettlement
                             || action.Behavior == AiBehavior.PatrolAroundPoint)
-                            action.TargetReached = party.DefaultBehavior == action.Behavior
-                                && party.TargetSettlement == action.TargetSettlement;
+                        {
+                            // 修复：用距离判定真实到达——原 DefaultBehavior 判定在发令瞬间即真，
+                            // 导致签到从"下令时刻"而非"实际到达"开始计时
+                            var myPos = party.GetPosition2D;
+                            var targetPos = action.TargetSettlement!.GatePosition.ToVec2();
+                            var dx = myPos.X - targetPos.X;
+                            var dy = myPos.Y - targetPos.Y;
+                            action.TargetReached = (dx * dx + dy * dy) < 25f;
+                        }
                         else if (action.Behavior == AiBehavior.GoToSettlement)
                         {
                             if (party.CurrentSettlement == action.TargetSettlement)
@@ -142,7 +183,10 @@ namespace MyFirstMod
                     if (!action.TargetReached && action.TargetParty != null)
                     {
                         if (action.Behavior == AiBehavior.EngageParty)
-                            action.TargetReached = party.MapEvent != null;
+                        {
+                            // 修复：只有"卷入的战斗包含追击目标"才算到达——原 `MapEvent != null` 会因卷入无关战斗（被伏击/救援）而误终结追击
+                            action.TargetReached = party.MapEvent != null && IsPartyInMapEvent(party.MapEvent, action.TargetParty);
+                        }
                         else if (action.Behavior == AiBehavior.EscortParty)
                             action.TargetReached = party.DefaultBehavior == AiBehavior.EscortParty
                                 && party.TargetParty == action.TargetParty;
@@ -248,8 +292,25 @@ namespace MyFirstMod
                 }
             }
 
-            foreach (var key in keysToRemove)
-                _pendingActions.Remove(key);
+            lock (_pendingLock)
+            {
+                foreach (var key in keysToRemove)
+                    _pendingActions.Remove(key);
+            }
+        }
+
+        private static bool IsPartyInMapEvent(MapEvent mapEvent, MobileParty? targetParty)
+        {
+            if (mapEvent == null || targetParty == null) return false;
+            foreach (var side in new[] { BattleSideEnum.Attacker, BattleSideEnum.Defender })
+            {
+                foreach (var mep in mapEvent.PartiesOnSide(side))
+                {
+                    if (mep.Party?.MobileParty == targetParty)
+                        return true;
+                }
+            }
+            return false;
         }
 
         private static void QueuePlanCheckIn(PendingAction action)

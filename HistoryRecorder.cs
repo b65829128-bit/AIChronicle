@@ -43,68 +43,33 @@ namespace MyFirstMod
             CampaignEvents.OnSiegeEventStartedEvent.AddNonSerializedListener(this,
                 new Action<SiegeEvent>(OnSiegeStarted));
 
-            try
-            {
-                var siegeEndedEvent = typeof(CampaignEvents).GetEvent("OnSiegeEventEndedEvent");
-                if (siegeEndedEvent != null)
-                {
-                    var actionType = typeof(Action<>).MakeGenericType(typeof(SiegeEvent));
-                    var handler = Delegate.CreateDelegate(actionType, this, nameof(OnSiegeEnded));
-                    siegeEndedEvent.AddEventHandler(null, handler);
-                }
-            }
-            catch { }
-
-            try
-            {
-                var clanLeaderEvent = typeof(CampaignEvents).GetEvent("OnClanLeaderChangedEvent");
-                if (clanLeaderEvent != null)
-                {
-                    var actionType = typeof(Action<,>).MakeGenericType(typeof(Hero), typeof(Hero));
-                    var handler = Delegate.CreateDelegate(actionType, this, nameof(OnClanLeaderChanged));
-                    clanLeaderEvent.AddEventHandler(null, handler);
-                }
-            }
-            catch { }
-
-            try
-            {
-                var kingdomCreatedEvent = typeof(CampaignEvents).GetEvent("OnKingdomCreatedEvent");
-                if (kingdomCreatedEvent != null)
-                {
-                    var actionType = typeof(Action<>).MakeGenericType(typeof(Kingdom));
-                    var handler = Delegate.CreateDelegate(actionType, this, nameof(OnKingdomCreated));
-                    kingdomCreatedEvent.AddEventHandler(null, handler);
-                }
-            }
-            catch { }
-
-            try
-            {
-                var marriageEvent = typeof(CampaignEvents).GetEvent("MarriageOfferedToPlayerEvent");
-                if (marriageEvent == null) marriageEvent = typeof(CampaignEvents).GetEvent("OnMarriageOfferedToPlayerEvent");
-                if (marriageEvent != null)
-                {
-                    var actionType = typeof(Action<,>).MakeGenericType(typeof(Hero), typeof(Hero));
-                    var handler = Delegate.CreateDelegate(actionType, this, nameof(OnMarriage));
-                    marriageEvent.AddEventHandler(null, handler);
-                }
-                else
-                {
-                    var onMarriageEvent = typeof(CampaignEvents).GetEvent("OnMarriageEvent");
-                    if (onMarriageEvent != null)
-                    {
-                        var actionType = typeof(Action<,>).MakeGenericType(typeof(Hero), typeof(Hero));
-                        var handler = Delegate.CreateDelegate(actionType, this, nameof(OnMarriage));
-                        onMarriageEvent.AddEventHandler(null, handler);
-                    }
-                }
-            }
-            catch { }
+            // 修复：直接用 AddNonSerializedListener 注册——CampaignEvents 成员是 CampaignEvent<T> 静态属性而非 CLR event，
+            // 原反射 GetEvent 恒返回 null，导致 siege_abandoned/clan_leader_changed/kingdom_created/marriage 四种史料从不记录。
+            CampaignEvents.OnSiegeEventEndedEvent.AddNonSerializedListener(this,
+                new Action<SiegeEvent>(OnSiegeEnded));
+            CampaignEvents.OnClanLeaderChangedEvent.AddNonSerializedListener(this,
+                new Action<Hero, Hero>(OnClanLeaderChanged));
+            CampaignEvents.OnMarriageOfferedToPlayerEvent.AddNonSerializedListener(this,
+                new Action<Hero, Hero>(OnMarriage));
+            // kingdom_created 游戏无独立事件：在 OnClanChangedKingdom 中按 CreateKingdom 详情补记
         }
 
         public override void SyncData(IDataStore dataStore)
         {
+            // 修复：保存前先重建序列化列表——原实现在 SyncData 之后才重建，导致围城兵力数据滞后一次存档
+            if (dataStore.IsSaving)
+            {
+                _serializedSiegeIds = new List<string>();
+                _serializedSiegeAttackers = new List<int>();
+                _serializedSiegeDefenders = new List<int>();
+                foreach (var kv in _siegeStartTroops)
+                {
+                    _serializedSiegeIds.Add(kv.Key.StringId);
+                    _serializedSiegeAttackers.Add(kv.Value.Attackers);
+                    _serializedSiegeDefenders.Add(kv.Value.Defenders);
+                }
+            }
+
             if (dataStore.SyncData("mfm_siege_ids", ref _serializedSiegeIds)
                 && dataStore.SyncData("mfm_siege_attackers", ref _serializedSiegeAttackers)
                 && dataStore.SyncData("mfm_siege_defenders", ref _serializedSiegeDefenders))
@@ -129,16 +94,6 @@ namespace MyFirstMod
                     }
                 }
                 return;
-            }
-
-            _serializedSiegeIds = new List<string>();
-            _serializedSiegeAttackers = new List<int>();
-            _serializedSiegeDefenders = new List<int>();
-            foreach (var kv in _siegeStartTroops)
-            {
-                _serializedSiegeIds.Add(kv.Key.StringId);
-                _serializedSiegeAttackers.Add(kv.Value.Attackers);
-                _serializedSiegeDefenders.Add(kv.Value.Defenders);
             }
         }
 
@@ -172,7 +127,15 @@ namespace MyFirstMod
             if (string.IsNullOrEmpty(dir)) return;
 
             var filePath = Path.Combine(dir, $"events_{year}.txt");
-            File.AppendAllText(filePath, line + Environment.NewLine, Encoding.UTF8);
+            try
+            {
+                // 带重试写入：史官后台读史料时若撞上"文件正被使用"，重试而非崩游戏；仍失败则丢弃该事件（记日志）
+                SafeFileIO.AppendAllText(filePath, line + Environment.NewLine);
+            }
+            catch (Exception e)
+            {
+                DebugLogger.Log($"史料写入失败（可能文件被占用）：{filePath} → {e.Message}");
+            }
         }
 
         private static string GetSeasonName(CampaignTime.Seasons s) => s switch
@@ -307,7 +270,8 @@ namespace MyFirstMod
         private void OnHeroKilled(Hero victim, Hero killer, KillCharacterAction.KillCharacterActionDetail detail, bool showNotifications = true)
         {
             if (victim == null) return;
-            if (victim.Clan == null && !victim.IsLord) return;
+            // 修复：主角（无氏族冒险者）放行——原守卫把无氏族非领主全部拦下，导致主角死亡列传分支永不可达
+            if (victim.Clan == null && !victim.IsLord && victim != Hero.MainHero) return;
 
             var name = victim.Name?.ToString() ?? "未知";
             var clan = victim.Clan?.Name?.ToString() ?? "";
@@ -361,6 +325,12 @@ namespace MyFirstMod
 
             var summary = $"{clanName}脱离{oldName}，加入{newName}";
             RecordEvent("clan_changed_kingdom", summary);
+
+            // 修复：游戏无 kingdom_created 独立事件——王国创建走 ChangeKingdomAction.CreateKingdom 详情，在此补记"新王国建立"
+            if (detail == ChangeKingdomAction.ChangeKingdomActionDetail.CreateKingdom && newKingdom != null)
+            {
+                RecordEvent("kingdom_created", $"{clanName}建立了新王国 {newKingdom.Name}");
+            }
         }
 
         private void OnClanLeaderChanged(Hero oldLeader, Hero newLeader)
