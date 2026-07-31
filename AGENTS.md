@@ -782,6 +782,8 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | `propose_peace` | 外交 | 向另一王国提议议和（双向，附赔偿方案，国王专属） |
 | `propose_alliance` | 外交 | 向另一王国提议结盟（双向，国王专属） |
 | `propose_trade` | 外交 | 向另一王国提议贸易协定（双向，国王专属） |
+| `end_alliance` | 外交 | 单方面终止与盟友的盟约（无需对方确认，国王专属） |
+| `end_trade_agreement` | 外交 | 单方面终止与另一王国的贸易协定（无需对方确认，国王专属） |
 | `respond_to_diplomacy_proposal` | 外交 | 接受或拒绝收到的外交提案（国王专属） |
 | `gift_fief` | 外交 | 国王敕令将封地直接转让给指定封臣家族领袖（国王专属，不经过选举） |
 | `cancel_action` | 控制 | 取消当前任务，回归自主 AI |

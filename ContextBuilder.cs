@@ -21,7 +21,7 @@ namespace MyFirstMod
             [EntityCapability.RequestGold] = new[] { "request_gold" },
             [EntityCapability.ChangeRelation] = new[] { "change_relation" },
             [EntityCapability.SendLetter] = new[] { "send_letter" },
-            [EntityCapability.Diplomat] = new[] { "declare_war", "propose_peace", "propose_alliance", "propose_trade", "respond_to_diplomacy_proposal", "gift_fief", "query_pending_proposals" },
+            [EntityCapability.Diplomat] = new[] { "declare_war", "propose_peace", "propose_alliance", "propose_trade", "end_alliance", "end_trade_agreement", "respond_to_diplomacy_proposal", "gift_fief", "query_pending_proposals" },
         };
 
         private static readonly Dictionary<string, string> CategoryNames = new()
@@ -357,7 +357,7 @@ namespace MyFirstMod
                     + "- 没有待处理提案且你不想采取新行动时，可以说「暂无需要处理的外交事务」\n"
                     + "- 不要虚构数据——所有统计来自 query_war_status 的返回值\n"
                     + "- 你是国王，你的决断就是王国的决断，不需要征求任何人同意\n"
-                    + "- 绝对不要用 send_letter 处理外交事务。send_letter 只能用于私人通信。外交提案只能用 propose_peace / propose_alliance / propose_trade / declare_war / respond_to_diplomacy_proposal";
+                    + "- 绝对不要用 send_letter 处理外交事务。send_letter 只能用于私人通信。外交提案只能用 propose_peace / propose_alliance / propose_trade / declare_war / respond_to_diplomacy_proposal；盟约/贸易可单方面终止（end_alliance / end_trade_agreement）";
 
             var lastWrite = File.GetLastWriteTimeUtc(path);
             if (_cachedDiplomacyRules == "" || lastWrite > _lastDiplomacyRulesCheck)
@@ -377,7 +377,7 @@ namespace MyFirstMod
                 return
                     "你就是{name}，{title}。你正在处理政务和个人事务。\n\n"
                     + "你可用的工具取决于你的身份和能力：\n"
-                    + "- 如果你是国王，你拥有全套外交工具（declare_war/propose_peace/propose_alliance/propose_trade/respond_to_diplomacy_proposal）\n"
+                    + "- 如果你是国王，你拥有全套外交工具（declare_war/propose_peace/propose_alliance/propose_trade/end_alliance/end_trade_agreement/respond_to_diplomacy_proposal）\n"
                     + "- 你也可以调用 query_war_status 查看战况、query_surroundings 查看周围环境\n"
                     + "- 你可以用 send_letter 给任何你认识的人写信\n\n"
                     + "规则：\n"

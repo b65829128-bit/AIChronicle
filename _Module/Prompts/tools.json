@@ -405,6 +405,30 @@
     ]
   },
   {
+    "name": "end_alliance",
+    "category": "diplomacy",
+    "description": "Unilaterally end an alliance with another kingdom. No confirmation from the other ruler is needed.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- The target must currently be your ally.\n- This is a unilateral sovereign decision — it takes effect immediately.\n- Use this when an alliance has outlived its purpose, is no longer trustworthy, or you no longer want to be bound to the ally's wars.\n- Consider the 名分 (justification): ending an alliance is a serious diplomatic act that may be seen as betraying a friend.",
+    "parameters": [
+      {
+        "name": "target_kingdom",
+        "type": "string",
+        "description": "Name of the allied kingdom to end the alliance with, in Chinese or English."
+      }
+    ]
+  },
+  {
+    "name": "end_trade_agreement",
+    "category": "diplomacy",
+    "description": "Unilaterally end a trade agreement with another kingdom. No confirmation from the other ruler is needed.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- The target must currently have a trade agreement with you.\n- This is a unilateral sovereign decision — it takes effect immediately.\n- Use this when you no longer wish to trade with the target (e.g., hostility, relations soured, or wartime interests).",
+    "parameters": [
+      {
+        "name": "target_kingdom",
+        "type": "string",
+        "description": "Name of the kingdom to end the trade agreement with, in Chinese or English."
+      }
+    ]
+  },
+  {
     "name": "query_pending_proposals",
     "category": "diplomacy",
     "description": "List all pending diplomatic proposals addressed to YOUR kingdom. This is how you discover what other rulers are asking of you.\n\nUsage:\n- Call this FIRST when making diplomatic decisions, before query_war_status.\n- No parameters needed — automatically returns only proposals where YOUR kingdom is the recipient.\n- Returns: proposal ID, type (peace/alliance/trade), proposer's name, and any attached message.\n- If the list is empty, there are no pending proposals to respond to.\n- You can then respond to each proposal individually with respond_to_diplomacy_proposal.",

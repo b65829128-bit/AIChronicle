@@ -170,6 +170,12 @@ namespace MyFirstMod
                     case "propose_trade":
                         return DiplomacyService.ExecuteProposeTrade(args["target_kingdom"]?.ToString() ?? "", args["message"]?.ToString());
 
+                    case "end_alliance":
+                        return DiplomacyService.ExecuteEndAlliance(args["target_kingdom"]?.ToString() ?? "");
+
+                    case "end_trade_agreement":
+                        return DiplomacyService.ExecuteEndTradeAgreement(args["target_kingdom"]?.ToString() ?? "");
+
                     case "respond_to_diplomacy_proposal":
                         return DiplomacyService.ExecuteRespondToProposal(
                             args["proposal_id"]?.ToString() ?? "",

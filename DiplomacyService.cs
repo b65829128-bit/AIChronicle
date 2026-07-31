@@ -195,6 +195,46 @@ namespace MyFirstMod
             return $"贸易协定提案已发送给{target.Name}的统治者{targetRuler.Name}，等待回复。";
         }
 
+        internal static string ExecuteEndAlliance(string targetKingdomName)
+        {
+            var actingHero = GetDiplomacyHero();
+            if (actingHero == null) return "[错误] 只有王国统治者才能终止盟约";
+            var myKingdom = actingHero.MapFaction as Kingdom;
+            if (myKingdom == null) return "[错误] 你当前不属于任何王国";
+            var target = FindKingdom(targetKingdomName);
+            if (target == null) return $"[错误] 未找到王国：{targetKingdomName}";
+            if (target == myKingdom) return "[错误] 不能和自己终止盟约";
+
+            var allianceBehavior = Campaign.Current?.GetCampaignBehavior<IAllianceCampaignBehavior>();
+            if (allianceBehavior == null || !allianceBehavior.IsAllyWithKingdom(myKingdom, target))
+                return $"[错误] {target.Name} 与你的王国没有盟约";
+
+            allianceBehavior.EndAlliance(myKingdom, target); // 单向终止，无需对方确认
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"{myKingdom.Name} 终止了与 {target.Name} 的盟约", Colors.Cyan));
+            return $"你单方面终止了与 {target.Name} 的盟约。";
+        }
+
+        internal static string ExecuteEndTradeAgreement(string targetKingdomName)
+        {
+            var actingHero = GetDiplomacyHero();
+            if (actingHero == null) return "[错误] 只有王国统治者才能终止贸易协定";
+            var myKingdom = actingHero.MapFaction as Kingdom;
+            if (myKingdom == null) return "[错误] 你当前不属于任何王国";
+            var target = FindKingdom(targetKingdomName);
+            if (target == null) return $"[错误] 未找到王国：{targetKingdomName}";
+            if (target == myKingdom) return "[错误] 不能和自己终止贸易协定";
+
+            var tradeBehavior = Campaign.Current?.GetCampaignBehavior<ITradeAgreementsCampaignBehavior>();
+            if (tradeBehavior == null || !tradeBehavior.HasTradeAgreement(myKingdom, target, out _))
+                return $"[错误] {target.Name} 与你的王国没有贸易协定";
+
+            tradeBehavior.EndTradeAgreement(myKingdom, target); // 单向终止，无需对方确认
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"{myKingdom.Name} 终止了与 {target.Name} 的贸易协定", Colors.Cyan));
+            return $"你单方面终止了与 {target.Name} 的贸易协定。";
+        }
+
         internal static string ExecuteTransferFief(string settlementName, string targetEntityId, string reason = "")
         {
             var actingHero = GetDiplomacyHero();

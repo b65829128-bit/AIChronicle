@@ -384,6 +384,8 @@ namespace MyFirstMod
                                     "propose_peace" => "提出了议和",
                                     "propose_alliance" => "提出了结盟",
                                     "propose_trade" => "提出了贸易协定",
+                                    "end_alliance" => "终止了盟约",
+                                    "end_trade_agreement" => "终止了贸易协定",
                                     "respond_to_diplomacy_proposal" => "回复了外交提案",
                                     "gift_fief" => $"将 {set} 转让了",
                                     "submit_advisory" => "向国王进谏了",
