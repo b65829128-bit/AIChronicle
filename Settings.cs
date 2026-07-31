@@ -402,6 +402,24 @@ namespace MyFirstMod
             }
         }
 
+        private bool _fiefAssignmentByAgent = true;
+
+        [SettingPropertyBool("册封由 Agent 主导", Order = 10, RequireRestart = false,
+            HintText = "开启后，AI 攻下的城镇/城堡不再触发原版影响力投票，改由国王 Agent 决定归属（用 gift_fief 赐予合适的家族）。\n玩家亲自攻下的城保留原版选择菜单。关闭则恢复原版投票。")]
+        [SettingPropertyGroup("游戏设置")]
+        public bool FiefAssignmentByAgent
+        {
+            get => _fiefAssignmentByAgent;
+            set
+            {
+                if (_fiefAssignmentByAgent != value)
+                {
+                    _fiefAssignmentByAgent = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private float _diplomacyChancePerDay = 0.1f;
 
         [SettingPropertyFloatingInteger("外交触发几率/天", 0.01f, 0.5f, Order = 10, RequireRestart = false,

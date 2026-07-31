@@ -98,6 +98,23 @@ namespace MyFirstMod
                     if (tradeM != null) harmony.Patch(tradeM, prefix: prefix);
                 }
 
+                // 册封由 Agent 主导：拦截攻城后投票（SettlementClaimantCampaignBehavior 是 CampaignBehaviors 类，
+                // PatchAll 在 OnSubModuleLoad 会静默跳过，必须这里手动注册）
+                var scbType = Type.GetType("TaleWorlds.CampaignSystem.CampaignBehaviors.SettlementClaimantCampaignBehavior, TaleWorlds.CampaignSystem");
+                if (scbType != null)
+                {
+                    var fiefHarmony = new Harmony("MyFirstMod.FiefAssignment");
+                    var dailyTickM = scbType.GetMethod("DailyTickSettlement", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                    if (dailyTickM != null)
+                        fiefHarmony.Patch(dailyTickM,
+                            prefix: new HarmonyMethod(typeof(FiefAssignmentPatch).GetMethod(nameof(FiefAssignmentPatch.PrefixDailyTickSettlement), BindingFlags.Static | BindingFlags.Public)));
+
+                    var ownerChangedM = scbType.GetMethod("OnSettlementOwnerChanged", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                    if (ownerChangedM != null)
+                        fiefHarmony.Patch(ownerChangedM,
+                            postfix: new HarmonyMethod(typeof(FiefAssignmentPatch).GetMethod(nameof(FiefAssignmentPatch.PostfixOnSettlementOwnerChanged), BindingFlags.Static | BindingFlags.Public)));
+                }
+
                 var diplomVmType = Type.GetType("TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy.KingdomDiplomacyVM, TaleWorlds.CampaignSystem.ViewModelCollection");
                 if (diplomVmType != null)
                 {
