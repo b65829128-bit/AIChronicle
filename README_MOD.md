@@ -102,7 +102,7 @@
 - 战役地图上按 **H 键**打开史书 UI（1100×700 大屏，左侧目录右侧正文），字体大小可调
 - NPC Agent 可通过 `read_file` 阅读编年史——历史成为 NPC 的共同知识
 - 史官提示词（`historian_rules.txt`、`yearly_chronicle_prompt.txt`、`biography_prompt.txt`）全部热重载
-- 史料记录类型：war_declared / peace_made / siege_started / siege_failed / siege_abandoned / settlement_captured / fief_granted（国王册封，含册封宣言）/ kingdom_destroyed / kingdom_created / hero_killed / clan_changed_kingdom / clan_leader_changed / marriage
+- 史料记录类型：war_declared（含宣战宣言）/ peace_made / siege_started / siege_failed / siege_abandoned / settlement_captured / fief_granted（国王册封，含册封宣言）/ kingdom_destroyed / kingdom_created / hero_killed / clan_changed_kingdom / clan_leader_changed / marriage
 
 ### 天命意识形态
 

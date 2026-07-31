@@ -87,9 +87,15 @@ namespace MyFirstMod
             if (target == null) return $"[错误] 未找到王国：{targetKingdomName}";
             if (target == myKingdom) return "[错误] 不能对自己宣战";
             if (myKingdom.IsAtWarWith(target)) return $"已经与{target.Name}处于交战状态。";
+            // 宣战宣言：供 HistoryRecorder 记 war_declared 史料（历史与现实对照），用完清空
+            HistoryRecorder.PendingWarDeclaration = string.IsNullOrWhiteSpace(message) ? null : message;
             IsInProgress = true;
             try { DeclareWarAction.ApplyByDefault(myKingdom, target); }
-            finally { IsInProgress = false; }
+            finally
+            {
+                HistoryRecorder.PendingWarDeclaration = null;
+                IsInProgress = false;
+            }
             var msgSuffix = !string.IsNullOrEmpty(message) ? $"\n宣战声明：{message}" : "";
             InformationManager.DisplayMessage(new InformationMessage(
                 $"{myKingdom.Name} 向 {target.Name} 宣战！{msgSuffix}", Colors.Red));

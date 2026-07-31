@@ -18,6 +18,8 @@ namespace MyFirstMod
         private string? _historyDir;
         /// <summary>册封宣言：由 ExecuteTransferFief 在转让前设置（「{国王}以「{reason}」册封」），OnSettlementOwnerChanged 读取后清空。</summary>
         public static string? PendingFiefGrantText;
+        /// <summary>宣战宣言：由 ExecuteDeclareWar 在宣战前设置（国王的宣战声明），OnWarDeclared 读取后清空——历史与现实形成对照的素材。</summary>
+        public static string? PendingWarDeclaration;
         private readonly HashSet<Settlement> _recentSiegeCaptures = new();
         // 围城开始时即记录攻城方名号——结束时 LeaderParty 可能已被击败/解散而取不到名字（史料 "?" 的根源）
         private readonly Dictionary<Settlement, (int Attackers, int Defenders, string Leader, string Kingdom)> _siegeStartTroops = new();
@@ -209,7 +211,12 @@ namespace MyFirstMod
         {
             var attacker = FactionName(faction1);
             var defender = FactionName(faction2);
-            RecordEvent("war_declared", $"{attacker}向{defender}宣战");
+            var declaration = PendingWarDeclaration;
+            PendingWarDeclaration = null; // 用完即清
+            var summary = string.IsNullOrEmpty(declaration)
+                ? $"{attacker}向{defender}宣战"
+                : $"{attacker}向{defender}宣战。宣战宣言：「{declaration}」";
+            RecordEvent("war_declared", summary);
         }
 
         private void OnMakePeace(IFaction faction1, IFaction faction2, MakePeaceAction.MakePeaceDetail detail)

@@ -339,7 +339,7 @@
       {
         "name": "message",
         "type": "string",
-        "description": "A declaration of war statement. Explain your reasons. Optional but recommended."
+        "description": "Your declaration of war statement (宣战宣言). Explain your reasons — this will be recorded in the historical chronicle, so write it as the official line your kingdom declares to the world. Optional but recommended."
       }
     ]
   },
