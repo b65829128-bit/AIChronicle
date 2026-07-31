@@ -20,26 +20,25 @@ namespace MyFirstMod
         }
 
         /// <summary>
-        /// OnSettlementOwnerChanged 后处理：AI 攻下城时取消 unassigned 标记（防忠诚惩罚），
-        /// 并激活国王 Agent（P1 级，与外交提案同级）决定该城归属。
-        /// 玩家亲自攻下的城保留原版选择菜单（capturerHero == MainHero 时跳过）。
+        /// OnSettlementOwnerChanged 后处理：取消 unassigned 标记（防忠诚惩罚），并激活国王 Agent
+        /// （P1 级，与外交提案同级）决定该城归属。攻城后的默认归属是王国（国王氏族），不区分攻城者
+        /// 是玩家还是 AI——统一由国王决定。
         /// </summary>
         public static void PostfixOnSettlementOwnerChanged(
-            Settlement settlement, bool openToClaim, Hero newOwner, Hero capturerHero)
+            Settlement settlement, bool openToClaim, Hero newOwner)
         {
             if (MySettings.Instance?.FiefAssignmentByAgent != true) return;
             if (settlement?.Town == null) return;           // 只处理城镇/城堡
             if (!openToClaim) return;                       // 非"开放归属"（如国王转让）不干预
-            if (capturerHero == Hero.MainHero) return;      // 玩家亲自攻下：保留原版选择菜单
 
             var kingdom = newOwner?.MapFaction as Kingdom;
             if (kingdom == null || kingdom.Clans.Count <= 1) return; // 单家族王国无需再分配
 
-            // 取消投票标记：攻城方直接持有，避免 unassigned 的忠诚惩罚；国王 Agent 决定是否再分配
+            // 取消投票标记：攻城后默认归国王氏族，避免 unassigned 的忠诚惩罚；国王 Agent 决定是否再分配
             settlement.Town.IsOwnerUnassigned = false;
 
             var ruler = kingdom.RulingClan?.Leader;
-            if (ruler == null || ruler == Hero.MainHero) return; // 国王是人：由玩家经秘书处处理
+            if (ruler == null || ruler == Hero.MainHero) return; // 国王是人（玩家）：由玩家经秘书处处理
             var rulerEntity = EntityManager.GetEntityByHero(ruler);
             if (rulerEntity == null) return;
 

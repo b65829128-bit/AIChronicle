@@ -664,7 +664,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 - **HistoryRecorder**：`RecordMerit` 写 `World/court/{王国}_merit.txt`（围攻/攻克/失利，真实事件记录），供内政审视读取
 - **diplomacy_rules.txt**：明示国王内外政务、赐地/夺封职权、夺封须师出有名（`gift_fief` 可附 `reason`）
 - **被夺方激活（FiefReview）**：`DiplomacyService.ExecuteTransferFief` 转让封地后，若原主（非国王本人）被夺封 → `AgentScheduler.QueueFiefReview` 激活原主审视处境（可写信/上表/转投他国，`intent="fief_review"` 分类含 diplomacy）。矛盾来自「失去的人」，得利方不激活
-- **攻城后定归属（册封由 Agent 主导）**：`FiefAssignmentPatch.cs` 拦截原版攻城后的 `SettlementClaimantDecision` 投票（Prefix 拦 `DailyTickSettlement`）；Postfix 在 `OnSettlementOwnerChanged`（AI 攻下、openToClaim、多家族王国）取消 unassigned 标记并激活国王 Agent（P1 级 KingDiplomacy，带归属指示）。玩家亲自攻下的城保留原版菜单。**手动注册**（OnGameStart Type.GetType + harmony.Patch，CampaignBehaviors 类 PatchAll 会静默跳过）。MCM「册封由 Agent 主导」
+- **攻城后定归属（册封由 Agent 主导）**：`FiefAssignmentPatch.cs` 拦截原版攻城后的 `SettlementClaimantDecision` 投票（Prefix 拦 `DailyTickSettlement`）；Postfix 在 `OnSettlementOwnerChanged`（openToClaim、多家族王国）取消 unassigned 标记（攻城后默认归国王氏族，防忠诚惩罚）并激活国王 Agent（P1 级 KingDiplomacy，带归属指示）。不区分攻城者是玩家或 AI——统一国王决定；国王是玩家时由玩家经秘书处处理。**手动注册**（OnGameStart Type.GetType + harmony.Patch，CampaignBehaviors 类 PatchAll 会静默跳过）。MCM「册封由 Agent 主导」
 - **军情迷雾**：`query_party_troops` 自己/同阵营全量精确；异国按距离与可达性分近距/远距/传闻三档（`GetIntelRadii` 按地图尺度相对锚），跨海不可达降为传闻——打破「完美信息→和平均衡」
 
 ### 历史系统（HistoryRecorder + 史官 Agent）
