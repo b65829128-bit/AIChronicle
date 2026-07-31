@@ -60,6 +60,7 @@
 - war_declared: 宣战 / peace_made: 议和
 - siege_started: 围城开始 / siege_failed: 攻城失败 / siege_abandoned: 放弃围城
 - settlement_captured: 城镇/城堡易主
+- fief_granted: 国王册封/转让封地（含册封宣言「王曰」，值得记入编年史）
 - kingdom_destroyed: 王国灭亡 / kingdom_created: 新王国建立
 - hero_killed: 重要人物死亡 / clan_changed_kingdom: 氏族叛变或归附
 - clan_leader_changed: 氏族领袖更替

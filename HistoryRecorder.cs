@@ -16,6 +16,8 @@ namespace MyFirstMod
     public class HistoryRecorder : CampaignBehaviorBase
     {
         private string? _historyDir;
+        /// <summary>册封宣言：由 ExecuteTransferFief 在转让前设置（「{国王}以「{reason}」册封」），OnSettlementOwnerChanged 读取后清空。</summary>
+        public static string? PendingFiefGrantText;
         private readonly HashSet<Settlement> _recentSiegeCaptures = new();
         // 围城开始时即记录攻城方名号——结束时 LeaderParty 可能已被击败/解散而取不到名字（史料 "?" 的根源）
         private readonly Dictionary<Settlement, (int Attackers, int Defenders, string Leader, string Kingdom)> _siegeStartTroops = new();
@@ -222,14 +224,33 @@ namespace MyFirstMod
             if (!settlement.IsTown && !settlement.IsCastle) return;
             if (_recentSiegeCaptures.Remove(settlement)) return;
 
-            var name = settlement.Name?.ToString() ?? "未知";
-            var oldClan = oldOwner?.Clan?.Name?.ToString() ?? "未知";
-            var newClan = newOwner?.Clan?.Name?.ToString() ?? "未知";
+            // 国王册封/转让：记 fief_granted（附册封宣言），而非 settlement_captured——转让不是攻城
+            if (detail == ChangeOwnerOfSettlementAction.ChangeOwnerOfSettlementDetail.ByKingDecision
+                || detail == ChangeOwnerOfSettlementAction.ChangeOwnerOfSettlementDetail.ByGift)
+            {
+                var name = settlement.Name?.ToString() ?? "未知";
+                var oldClan = oldOwner?.Clan?.Name?.ToString() ?? "未知";
+                var newClan = newOwner?.Clan?.Name?.ToString() ?? "未知";
+                var oldLeader = oldOwner?.Name?.ToString() ?? "";
+                var newLeader = newOwner?.Name?.ToString() ?? "";
+                var grantNote = PendingFiefGrantText;
+                PendingFiefGrantText = null; // 用完即清
+
+                var summary = string.IsNullOrEmpty(grantNote)
+                    ? $"册封：将{name}从{oldClan}（{oldLeader}）转予{newClan}（{newLeader}）"
+                    : $"{grantNote}：将{name}从{oldClan}（{oldLeader}）转予{newClan}（{newLeader}）";
+                RecordEvent("fief_granted", summary);
+                return;
+            }
+
+            var sName = settlement.Name?.ToString() ?? "未知";
+            var oldClanName = oldOwner?.Clan?.Name?.ToString() ?? "未知";
+            var newClanName = newOwner?.Clan?.Name?.ToString() ?? "未知";
             var oldKingdom = oldOwner?.MapFaction?.Name?.ToString() ?? "";
             var newKingdom = newOwner?.MapFaction?.Name?.ToString() ?? "";
 
-            var summary = $"{name}易主：从{oldKingdom}的{oldClan}转归{newKingdom}的{newClan}";
-            RecordEvent("settlement_captured", summary);
+            var summary2 = $"{sName}易主：从{oldKingdom}的{oldClanName}转归{newKingdom}的{newClanName}";
+            RecordEvent("settlement_captured", summary2);
         }
 
         private void OnSiegeStarted(SiegeEvent siegeEvent)

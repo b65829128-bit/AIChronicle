@@ -237,12 +237,20 @@ namespace MyFirstMod
             var oldLeaderName = ownerClan.Leader?.Name?.ToString() ?? "?";
             var newClanName = targetHero.Clan.Name?.ToString() ?? "?";
 
+            // 册封宣言：供 HistoryRecorder 记 fief_granted 史料（从谁给谁 + 王曰），用完清空
+            HistoryRecorder.PendingFiefGrantText = string.IsNullOrWhiteSpace(reason)
+                ? $"{actingHero.Name}册封"
+                : $"{actingHero.Name}以「{reason}」册封";
             IsInProgress = true;
             try
             {
                 ChangeOwnerOfSettlementAction.ApplyByKingDecision(targetHero, settlement);
             }
-            finally { IsInProgress = false; }
+            finally
+            {
+                HistoryRecorder.PendingFiefGrantText = null;
+                IsInProgress = false;
+            }
 
             var notice = string.IsNullOrWhiteSpace(reason)
                 ? $"{actingHero.Name} 将 {settlement.Name} 从 {oldClanName} 转让给了 {newClanName}"
