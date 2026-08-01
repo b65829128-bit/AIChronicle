@@ -227,7 +227,7 @@ C:\Users\yangui\BLMods\MyFirstMod\
 ├── Settings.cs                ← MCM 设置（API URL、Model、Key、双倍声望开关）
 ├── AIChatClient.cs            ← LLM API 客户端（HTTP 流式请求、SSE 解析、多轮循环），工具调用委托给 ToolExecutor
 ├── ToolExecutor.cs            ← 工具执行器（30+ 个游戏工具的具体实现 + browse_tools 元工具）
-├── DiplomacyService.cs        ← 外交服务（宣战/议和/结盟/贸易协定/回复提案 + FindKingdom）
+├── DiplomacyService.cs        ← 外交服务（宣战/议和/结盟/贸易协定/回复提案 + FindKingdom + 盟约/贸易到期记录与清除）
 ├── PartyBehaviorManager.cs    ← 部队行为管理器（PendingAction 状态机、Tick()、定时签到）
 ├── AIChatScreen.cs            ← 聊天屏幕管理器（静态类，GauntletLayer 挂载）
 ├── AIChatScreenVM.cs          ← 聊天 ViewModel（消息列表、输入绑定、function calling 处理）
@@ -238,7 +238,7 @@ C:\Users\yangui\BLMods\MyFirstMod\
 ├── EntityManager.cs           ← Entity 生命周期管理
 ├── ContextBuilder.cs          ← Context 动态组装器
 ├── LetterListScreen.cs        ← 书信收信人列表屏幕
-├── AgentScheduler.cs          ← 信件异步事件驱动调度器
+├── AgentScheduler.cs          ← 信件异步事件驱动调度器 + 每日盟约/贸易到期检测
 ├── HistoryRecorder.cs         ← 历史记录器（监听游戏事件写入原始史料）
 ├── MainThreadExecutor.cs      ← 主线程分发器（后台线程的工具执行排队回主线程，防跨线程崩溃）
 ├── DebugLogger.cs             ← 调试日志（LLM 调用摘要/思维链摘录 → 战役 debug_logs/）
@@ -692,6 +692,15 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 - **被夺方激活（FiefReview）**：`DiplomacyService.ExecuteTransferFief` 转让封地后，若原主（非国王本人）被夺封 → `AgentScheduler.QueueFiefReview` 激活原主审视处境（可写信/上表/转投他国，`intent="fief_review"` 分类含 diplomacy）。矛盾来自「失去的人」，得利方不激活
 - **攻城后定归属（册封由 Agent 主导）**：`FiefAssignmentPatch.cs` 拦截原版攻城后的 `SettlementClaimantDecision` 投票（Prefix 拦 `DailyTickSettlement`）；Postfix 在 `OnSettlementOwnerChanged`（openToClaim、多家族王国）取消 unassigned 标记（攻城后默认归国王氏族，防忠诚惩罚）并激活国王 Agent（P1 级 KingDiplomacy，带归属指示）。不区分攻城者是玩家或 AI——统一国王决定；国王是玩家时由玩家经秘书处处理。**手动注册**（OnGameStart Type.GetType + harmony.Patch，CampaignBehaviors 类 PatchAll 会静默跳过）。MCM「册封由 Agent 主导」
 - **军情迷雾**：`query_party_troops` 自己/同阵营全量精确；异国按距离与可达性分近距/远距/传闻三档（`GetIntelRadii` 按地图尺度相对锚），跨海不可达降为传闻——打破「完美信息→和平均衡」
+
+### 盟约/贸易协定到期记录（轻量拉取式，无 LLM）
+
+盟约（84 天）与贸易协定（1 年）由原版定时到期。模组接管外交后**不主动激活 Agent 处理到期**（避免 token 消耗），改为拉取式记录，国王下次激活时自行看到：
+
+- **记录**：`AgentScheduler.Tick` 每游戏日一次调 `DiplomacyService.CheckExpiringAgreements()`（无 LLM）——扫描剩余不足 1 天的盟约/贸易协定，写入 `World/diplomacy/expiry_log.txt`（行格式 `类型|王国1ID|王国2ID|到期日day|人类可读文本`，每对王国+类型一条，超 90 游戏天清除防堆积）
+- **查看**：`query_world_state` 输出各王国名下附带「📜 盟约 X与Y 于…到期」；到期前不记录不提示，国王不查就不知道
+- **防矛盾**：`DiplomacyService.ClearExpiryRecord` 在协约**重新建立**（对方接受提案 `ExecuteRespondToProposal`）或**主动结束**（`ExecuteEndAlliance`/`ExecuteEndTradeAgreement`）的瞬间清除对应记录，防止国王再次激活时看到失效的「到期」信息而反复查询求证。key 排序规则（王国 ID 字典序）与写入端一致；旧存档无记录时调用为安全 no-op
+- **续约**：不新增续约工具；国王若想续约，走现有 `propose_alliance`/`propose_trade` 流程
 
 ### 历史系统（HistoryRecorder + 史官 Agent）
 

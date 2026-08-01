@@ -216,6 +216,7 @@ namespace MyFirstMod
                 return $"[错误] {target.Name} 与你的王国没有盟约";
 
             allianceBehavior.EndAlliance(myKingdom, target); // 单向终止，无需对方确认
+            ClearExpiryRecord("盟约", myKingdom, target); // 主动结束 → 清掉可能的到期记录，防国王下次激活看到矛盾信息
             InformationManager.DisplayMessage(new InformationMessage(
                 $"{myKingdom.Name} 终止了与 {target.Name} 的盟约", Colors.Cyan));
             return $"你单方面终止了与 {target.Name} 的盟约。";
@@ -236,6 +237,7 @@ namespace MyFirstMod
                 return $"[错误] {target.Name} 与你的王国没有贸易协定";
 
             tradeBehavior.EndTradeAgreement(myKingdom, target); // 单向终止，无需对方确认
+            ClearExpiryRecord("贸易协定", myKingdom, target); // 主动结束 → 清掉可能的到期记录
             InformationManager.DisplayMessage(new InformationMessage(
                 $"{myKingdom.Name} 终止了与 {target.Name} 的贸易协定", Colors.Cyan));
             return $"你单方面终止了与 {target.Name} 的贸易协定。";
@@ -435,6 +437,7 @@ namespace MyFirstMod
                         ab.StartAlliance(proposerKingdom, myKingdom);
                     }
                     finally { IsInProgress = false; }
+                    ClearExpiryRecord("盟约", proposerKingdom, myKingdom); // 重新结盟生效 → 立即清旧到期记录
                     AgentManager.DeleteDiplomacyProposal(matchedId);
                     RecordDecision(myEntity.Id, proposerId, type, "接受", matchedId);
                     InformationManager.DisplayMessage(new InformationMessage(
@@ -451,6 +454,7 @@ namespace MyFirstMod
                         tb.MakeTradeAgreement(proposerKingdom, myKingdom, CampaignTime.Years(1f));
                     }
                     finally { IsInProgress = false; }
+                    ClearExpiryRecord("贸易协定", proposerKingdom, myKingdom); // 重签生效 → 立即清旧到期记录
                     AgentManager.DeleteDiplomacyProposal(matchedId);
                     RecordDecision(myEntity.Id, proposerId, type, "接受", matchedId);
                     InformationManager.DisplayMessage(new InformationMessage(
@@ -532,6 +536,128 @@ namespace MyFirstMod
             var timestamp = PromptManager.GetCurrentTimeString();
             var entry = $"[{timestamp}] {result}了来自 {otherId} 的{typeName}提案（{proposalId}）\n";
             AgentManager.AppendDecisionFor(myId, entry);
+        }
+
+        // ==================== 盟约/贸易协定到期记录（供国王自查） ====================
+
+        /// <summary>到期记录保留的游戏天数：超过即从日志清除，防止信息无限堆积。</summary>
+        private const double ExpiryLogKeepDays = 90;
+
+        /// <summary>剩余不足此天数视为「即将到期」：在到期当天早上记录，早于被惰性清理（HasTradeAgreement 查询即删）。</summary>
+        private const double ExpiryLogThresholdDays = 1;
+
+        /// <summary>
+        /// 每日轻量检测（无 LLM、不激活 Agent）：把当天到期的盟约/贸易协定写进
+        /// World/diplomacy/expiry_log.txt。每对王国+类型最多保留一条最近记录，超 90 游戏天的旧记录自动清除。
+        /// 到期之前不记录、不提示；国王下次 query_world_state 时自行看到「哪一天和谁的到期了」。
+        /// </summary>
+        internal static void CheckExpiringAgreements()
+        {
+            if (Campaign.Current == null) return;
+            var ab = Campaign.Current.GetCampaignBehavior<IAllianceCampaignBehavior>();
+            var tb = Campaign.Current.GetCampaignBehavior<ITradeAgreementsCampaignBehavior>();
+            if (ab == null && tb == null) return;
+
+            var logPath = System.IO.Path.Combine(AgentManager.GetDiplomacyDir(), "expiry_log.txt");
+            var nowDays = CampaignTime.Now.ToDays;
+
+            // 1) 读旧记录：key = 类型|王国1ID|王国2ID。超 90 游戏天的旧记录直接丢弃（防无限堆积）。
+            var records = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (System.IO.File.Exists(logPath))
+            {
+                foreach (var raw in SafeFileIO.ReadAllLines(logPath))
+                {
+                    if (!TryParseExpiryLine(raw, out var key, out var endDay)) continue;
+                    if (nowDays - endDay >= ExpiryLogKeepDays) continue;
+                    records[key] = raw; // 同 key 保留最后一条
+                }
+            }
+
+            // 2) 扫描王国对，更新到期记录
+            foreach (var k1 in Kingdom.All)
+            {
+                if (k1.IsEliminated) continue;
+                foreach (var k2 in Kingdom.All)
+                {
+                    if (k2.IsEliminated || k2 == k1) continue;
+                    if (string.CompareOrdinal(k1.StringId, k2.StringId) >= 0) continue; // 每对只处理一次
+
+                    // 贸易协定：仍生效且未临期 → 清掉旧记录（续约后不残留矛盾信息）；临期 → 写/覆盖记录
+                    var tradeKey = $"贸易|{k1.StringId}|{k2.StringId}";
+                    if (tb != null && tb.HasTradeAgreement(k1, k2, out var t))
+                    {
+                        if (t.EndTime.RemainingDaysFromNow < ExpiryLogThresholdDays)
+                            records[tradeKey] = BuildExpiryLine("贸易协定", k1, k2, t.EndTime);
+                        else
+                            records.Remove(tradeKey);
+                    }
+                    // 协定已不存在 → 保留最近一条到期记录（保留期内）
+
+                    // 盟约：同上
+                    var allianceKey = $"盟约|{k1.StringId}|{k2.StringId}";
+                    if (ab != null && ab.IsAllyWithKingdom(k1, k2))
+                    {
+                        var end = ab.GetAllianceEndDate(k1, k2);
+                        if (end.RemainingDaysFromNow < ExpiryLogThresholdDays)
+                            records[allianceKey] = BuildExpiryLine("盟约", k1, k2, end);
+                        else
+                            records.Remove(allianceKey);
+                    }
+                }
+            }
+
+            // 3) 写回
+            if (records.Count > 0)
+                SafeFileIO.WriteAllText(logPath, string.Join("\n", records.Values));
+            else if (System.IO.File.Exists(logPath))
+            {
+                try { System.IO.File.Delete(logPath); } catch { }
+            }
+        }
+
+        /// <summary>到期日志行格式：类型|王国1ID|王国2ID|到期日day|人类可读文本（如 盟约 斯特吉亚与瓦兰迪亚 于第1089年夏第12日到期）。</summary>
+        private static string BuildExpiryLine(string type, Kingdom k1, Kingdom k2, CampaignTime endTime)
+        {
+            var dateText = PromptManager.FormatCampaignDate(endTime);
+            return $"{type}|{k1.StringId}|{k2.StringId}|{(int)endTime.ToDays}|{type} {k1.Name}与{k2.Name} 于{dateText}到期";
+        }
+
+        private static bool TryParseExpiryLine(string line, out string key, out double endDay)
+        {
+            key = null!;
+            endDay = 0;
+            var parts = line.Split('|');
+            if (parts.Length < 5) return false;
+            if (!double.TryParse(parts[3], out endDay)) return false;
+            key = parts[0] + "|" + parts[1] + "|" + parts[2];
+            return true;
+        }
+
+        /// <summary>
+        /// 清除某王国对的到期记录：盟约/贸易协定重新建立（或主动结束）时立即调用，
+        /// 确保国王下一次激活时看不到已失效的「到期」信息，避免反复查询求证浪费 token。
+        /// </summary>
+        internal static void ClearExpiryRecord(string type, Kingdom k1, Kingdom k2)
+        {
+            try
+            {
+                var id1 = k1.StringId;
+                var id2 = k2.StringId;
+                var key = string.CompareOrdinal(id1, id2) <= 0 ? $"{type}|{id1}|{id2}" : $"{type}|{id2}|{id1}";
+                var logPath = System.IO.Path.Combine(AgentManager.GetDiplomacyDir(), "expiry_log.txt");
+                if (!System.IO.File.Exists(logPath)) return;
+                var remaining = SafeFileIO.ReadAllLines(logPath)
+                    .Where(l => !l.StartsWith(key + "|", StringComparison.Ordinal)).ToList();
+                if (remaining.Count == 0)
+                {
+                    try { System.IO.File.Delete(logPath); } catch { }
+                }
+                else
+                {
+                    SafeFileIO.WriteAllText(logPath, string.Join("\n", remaining));
+                }
+            }
+            catch { }
         }
     }
 }

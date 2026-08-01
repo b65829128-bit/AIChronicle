@@ -272,6 +272,22 @@ namespace MyFirstMod
             return $"第{year}年，{season}第{day}日，{timeOfDay}";
         }
 
+        /// <summary>格式化任意时间点为紧凑日期：第{年}年{季}第{日}日（如 第1089年夏第12日），用于到期记录等。</summary>
+        public static string FormatCampaignDate(CampaignTime time)
+        {
+            var year = time.GetYear;
+            var season = time.GetSeasonOfYear switch
+            {
+                CampaignTime.Seasons.Spring => "春",
+                CampaignTime.Seasons.Summer => "夏",
+                CampaignTime.Seasons.Autumn => "秋",
+                CampaignTime.Seasons.Winter => "冬",
+                _ => "?"
+            };
+            var day = time.GetDayOfSeason + 1;
+            return $"第{year}年{season}第{day}日";
+        }
+
         public static string? GetWorldInfoPath()
         {
             var path = Path.Combine(_campaignDir, "world_info.txt");

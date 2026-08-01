@@ -65,6 +65,7 @@ namespace MyFirstMod
         private static readonly System.Collections.Concurrent.ConcurrentQueue<ActivationEvent> _pendingPlayerProposals = new();
         private static bool _playerProposalShowing;
         private static int _lastChronicleYear;
+        private static int _lastExpiryCheckDay = -1;
         private static bool _historianInitialized;
         private static int _warmupFramesHistorian = 60;
         private static readonly Random _rng = new();
@@ -97,6 +98,7 @@ namespace MyFirstMod
             while (_pendingPlayerProposals.TryDequeue(out _)) { }
             _playerProposalShowing = false;
             _lastChronicleYear = 0;
+            _lastExpiryCheckDay = -1;
             _historianInitialized = false;
             _lastAdvisorySpeaker.Clear();
             _lastAdvisoryCheck.Clear();
@@ -195,8 +197,20 @@ namespace MyFirstMod
             });
         }
 
+        /// <summary>每日一次（无 LLM、不激活 Agent）：把当天到期的盟约/贸易协定写入到期日志，供国王下次查世界局势时自行看到。</summary>
+        private static void CheckExpiringAgreements()
+        {
+            if (Campaign.Current == null) return;
+            var nowDays = (int)CampaignTime.Now.ToDays;
+            if (nowDays == _lastExpiryCheckDay) return;
+            _lastExpiryCheckDay = nowDays;
+            DiplomacyService.CheckExpiringAgreements();
+        }
+
         public static void Tick()
         {
+            CheckExpiringAgreements();
+
             if (_inFlightCount >= MaxConcurrent) return;
 
             CheckDelayedEvents();

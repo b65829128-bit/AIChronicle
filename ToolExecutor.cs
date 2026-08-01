@@ -442,6 +442,7 @@ namespace MyFirstMod
             var sb = new StringBuilder();
             var ab = Campaign.Current.GetCampaignBehavior<IAllianceCampaignBehavior>();
             var tb = Campaign.Current.GetCampaignBehavior<ITradeAgreementsCampaignBehavior>();
+            var expiryLines = LoadExpiryDisplayLines(); // 盟约/贸易协定到期记录（国王自查）
 
             IEnumerable<Kingdom> targets;
             if (!string.IsNullOrEmpty(kingdomName))
@@ -478,9 +479,36 @@ namespace MyFirstMod
                     if (tb != null && tb.HasTradeAgreement(k, other, out _))
                         sb.AppendLine($"  🏪 与 {other.Name} 贸易协定");
                 }
+
+                foreach (var el in expiryLines)
+                {
+                    if (el.Contains(kName))
+                        sb.AppendLine($"  📜 {el}");
+                }
             }
 
             return sb.ToString().TrimEnd();
+        }
+
+        /// <summary>读取到期日志中的人类可读部分（盟约/贸易协定 X与Y 于…到期）。</summary>
+        private static List<string> LoadExpiryDisplayLines()
+        {
+            var list = new List<string>();
+            try
+            {
+                var logPath = Path.Combine(AgentManager.GetDiplomacyDir(), "expiry_log.txt");
+                if (File.Exists(logPath))
+                {
+                    foreach (var raw in SafeFileIO.ReadAllLines(logPath))
+                    {
+                        var parts = raw.Split('|');
+                        if (parts.Length >= 5 && parts[4].Trim().Length > 0)
+                            list.Add(parts[4]);
+                    }
+                }
+            }
+            catch { }
+            return list;
         }
 
         private static string ExecuteQueryKingdomSettlements(string kingdomName)
