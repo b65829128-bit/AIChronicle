@@ -230,7 +230,8 @@ namespace MyFirstMod
                 .Replace("{current_time}", GetCurrentTimeString());
         }
 
-        public static string BuildAgentSystemPrompt(Hero hero, CharacterPrompt charPrompt, string intent = "conversation")
+        /// <summary>解析当前交互的 agent/target 实体 ID（与构建稳定前缀使用同一套逻辑，保证易变块与稳定前缀指向同一对实体）。</summary>
+        public static (string agentId, string targetId) GetAgentTargetIds(Hero hero, string intent = "conversation")
         {
             var agentEntity = EntityManager.GetOrCreateEntity(hero);
             var agentId = agentEntity.Id;
@@ -241,7 +242,15 @@ namespace MyFirstMod
             else
                 targetId = AgentManager.ActiveTargetId ?? agentId;
 
-            return ContextBuilder.Build(agentId, targetId, intent);
+            return (agentId, targetId);
+        }
+
+        /// <summary>构建稳定 system 前缀（身份/persona/世界背景/工具清单/行为守则）。
+        /// 易变内容（时间/状态/认知/目标/客观关系）由 AIChatClient 单独用 BuildVolatile 作为【当前状况】消息注入。</summary>
+        public static string BuildAgentSystemPrompt(Hero hero, CharacterPrompt charPrompt, string intent = "conversation")
+        {
+            var (agentId, targetId) = GetAgentTargetIds(hero, intent);
+            return ContextBuilder.BuildStable(agentId, targetId, intent);
         }
 
         public static string GetCurrentTimeString()

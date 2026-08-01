@@ -136,6 +136,7 @@ namespace MyFirstMod
             EntityManager.ResetForNewCampaign();
             PartyBehaviorManager.ResetForNewCampaign();
             AgentScheduler.ResetForNewCampaign();
+            AIChatClient.ResetForNewCampaign();
             DebugLogger.Reset();
         }
 

@@ -120,6 +120,8 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 > **提示词同步规则（newer-wins）**：基础目录 `_Module/Prompts/` 是模板源，战役创建时复制到 `Campaigns/{战役}/`。每次进档（`OnSessionLaunched` → `PromptManager.StartCampaign`）会做同步——**只要基础目录文件比战役副本新，就覆盖战役副本**。玩家在战役副本上的手动编辑（时间戳更新）会被保留。
 >
+> **上下文模板结构（缓存优化）**：`context_template.txt` 以 `<!--VOLATILE-->` 标记分界。标记前为**稳定前缀**（身份/persona/世界背景/工具清单/行为守则）→ system 消息；标记后为**易变块**（当前时间/自身状态/对对方认知/目标/客观关系/内政报告）→ 单独作为【当前状况】user 消息插在最新消息前。目的：让 system+历史构成逐字节稳定的前缀，最大化 DeepSeek 前缀缓存命中（命中输入 0.02元/M vs 未命中 1元/M，价差 50 倍）。`ContextBuilder` 相应提供 `BuildStable`/`BuildVolatile`（合并 `Build` 保留兼容）。**史官 intent 例外**：不拆易变块，走合并 `Build()` 保持单一 system 消息——文笔是模组核心，结构与旧版一致。旧版模板（无标记）整体按稳定处理，行为不变。
+>
 > **已知边界情况（待解决）**：如果玩家在战役副本自定义了某文件（副本时间戳更新），之后基础目录又修改了（基础更晚）→ newer-wins 会覆盖副本，玩家自定义丢失。当前对开发期是期望行为；未来如需保护战役自定义，需引入"用户修改标记"机制（如哈希比对或 .custom 标记文件）。
 >
 > **运行期热重载**：游戏运行中，编辑战役副本文件立即生效（加载器按 LastWriteTime 重新读取）；编辑基础目录要下次进档才同步。
@@ -615,11 +617,12 @@ Usage:
 - 无轮次上限（由 `MaxAgentRounds` 或「不限制」模式控制），模型自主决定何时停止
 
 实现要点：
-- HTTP 请求 payload 中 `stream: true`
+- HTTP 请求 payload 中 `stream: true`（含 `stream_options.include_usage`，用于缓存命中统计）
 - 用 `HttpCompletionOption.ResponseHeadersRead` 获取流式响应
 - 逐行解析 `data:` 前缀的 SSE 事件
 - 文本增量（delta）累积成完整回复
 - `reasoning_content` delta 跨 chunk 累积（DeepSeek 默认思考模式开启，思维链内容需捕获并在工具调用轮次中回传）
+- **思考强度（reasoning_effort）**：MCM「思考强度」可调（low/high/max），默认 `low`——思考按输出价计费，是成本大头。**史官固定 high**（文笔核心，且不发送该参数、用 API 默认值以兼容）；其余 intent 发送 MCM 设置值。部分模型/端点不支持该参数（400 时自动回退去掉它）。
 - tool_calls delta 跨 chunk 累积（DeepSeek 协议中 tool_call 分多次 delta 传输）
 
 ### 信件激活机制（AgentScheduler）
@@ -766,7 +769,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 
 3. **dnSpy 调试**：打开 `C:\Users\yangui\Tools\dnSpy\dnSpy-net-win64\dnSpy.exe`，附加到 Bannerlord 进程，可在任意游戏方法上设断点
 
-4. **DebugLogger 调试日志**（推荐优先）：战役目录 `debug_logs/debug_*.log` 记录每次 LLM 调用的轮次/推理长度/工具名；**最终轮无文本时记录思维链摘录**（600 字）。排查"Agent 为什么这么干/没干"首选此日志。受 MCM「调试日志」开关控制（默认开）。注意：`SendMessage` 返回的 `Content` 若回退到"（已通过工具处理完毕）"表示 Agent 调了工具但没输出结语（如国王评估后决定不行动）
+4. **DebugLogger 调试日志**（推荐优先）：战役目录 `debug_logs/debug_*.log` 记录每次 LLM 调用的轮次/推理长度/工具名；**最终轮无文本时记录思维链摘录**（600 字）；请求结束时记录**缓存命中统计**（`LLM 完成 ... 缓存命中=X 未命中=Y 命中率=Z%`，来自 `stream_options.include_usage` 的 `usage.prompt_cache_hit_tokens`/`prompt_cache_miss_tokens`）。排查"Agent 为什么这么干/没干"首选此日志，排查"缓存是否生效"也看它。受 MCM「调试日志」开关控制（默认开）。注意：`SendMessage` 返回的 `Content` 若回退到"（已通过工具处理完毕）"表示 Agent 调了工具但没输出结语（如国王评估后决定不行动）；若端点拒绝 `stream_options` 会回退为无 usage 请求并记日志（功能不受影响）
 
 ## 注意事项
 

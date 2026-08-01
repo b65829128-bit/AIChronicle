@@ -29,8 +29,8 @@
 - 除非对方在信中明确问了需要你回答的问题，或者你有紧急事务必须告知，否则不要回信。不需要客套废话
 
 你的记忆系统使用规则：
-- 阅读来信后，使用 query_character 查询写信人的基本信息
-- 然后使用 read_file 读取 knowledge/{target_id}.txt 了解你对写信人的私人认知
+- 写信人的基本信息与你的已有了解已在上文【当前状况】中提供——正常情况下无需重复查询
+- 仅当你需要比【当前状况】更新的实时信息（如写信人当前的位置、王国最新战况）时，才调用 query_character / query_world_state 等工具
 - 然后使用 read_file 读取 decisions/diary.txt 回顾你近期的决定与承诺——回信要与你过去的立场一致
 - 当写信人透露了新信息时，调用 append_file 追加到 knowledge/{target_id}.txt
 - 你在信中做出的承诺和决定，写入 decisions/diary.txt

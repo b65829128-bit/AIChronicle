@@ -38,6 +38,11 @@ namespace MyFirstMod
         private static readonly AsyncLocal<string?> _currentIntent = new();
         private static readonly AsyncLocal<HashSet<string>?> _activatedCategories = new();
 
+        // 流式 usage（缓存命中统计）支持探测：部分兼容端点不接受 stream_options.include_usage，遇 400 自动回退
+        private static bool _streamUsageSupported = true;
+        // reasoning_effort 支持探测：部分模型/端点不接受该参数，遇 400 自动回退
+        private static bool _reasoningEffortSupported = true;
+
         internal static Hero? CurrentHero
         {
             get => _currentHero.Value;
@@ -91,6 +96,26 @@ namespace MyFirstMod
         internal static void ActivateCategory(string category)
         {
             ActivatedCategories.Add(category);
+            var key = UnlockKey();
+            if (key == null) return;
+            var set = _unlockedCategories.GetOrAdd(key, _ => new HashSet<string>());
+            lock (set) set.Add(category);
+        }
+
+        /// <summary>跨 SendMessage 调用记住本 agent+intent 解锁过的工具分类，避免每次对话回合重新 browse_tools。
+        /// 按 agent|intent 键控，会话/意图之间隔离；战役结束时清空。</summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, HashSet<string>> _unlockedCategories = new();
+
+        private static string? UnlockKey()
+        {
+            var agentId = AgentManager.ActiveAgentId;
+            return string.IsNullOrEmpty(agentId) ? null : agentId + "|" + CurrentIntent;
+        }
+
+        /// <summary>战役结束/切档时清空跨档的解锁记忆，避免新档沿用旧档的已解锁工具分类。</summary>
+        public static void ResetForNewCampaign()
+        {
+            _unlockedCategories.Clear();
         }
 
         private static ToolDef BrowseToolsDef => new()
@@ -225,12 +250,35 @@ namespace MyFirstMod
             CurrentHero = hero;
             CurrentIntent = intent;
             ActivatedCategories = new HashSet<string>(GetDefaultCategories(intent));
+            // 本 agent+intent 之前浏览解锁过的分类：跨回合保留，避免每次对话回合重新 browse_tools。
+            var persistKey = UnlockKey();
+            if (persistKey != null && _unlockedCategories.TryGetValue(persistKey, out var unlocked))
+            {
+                lock (unlocked) foreach (var c in unlocked) ActivatedCategories.Add(c);
+            }
+
             var settings = MySettings.Instance!;
-            var systemPrompt = hero != null
-                ? PromptManager.BuildAgentSystemPrompt(hero, charPrompt, intent)
-                : intent == "historian"
-                    ? ContextBuilder.Build("__historian__", "__historian__", "historian")
-                    : PromptManager.BuildSystemPrompt(charPrompt.HeroName, charPrompt);
+
+            // 史官系统：文笔是模组核心，保持"单一 system 消息"结构与旧版一致（情境内容在 system 尾部），
+            // 不拆易变块——绝对保真。史官内容几乎静态（仅时间变化，位于尾部），缓存收益仍远高于改前。
+            string systemPrompt;
+            string volatileBlock;
+            if (intent == "historian")
+            {
+                systemPrompt = ContextBuilder.Build("__historian__", "__historian__", "historian");
+                volatileBlock = "";
+            }
+            else if (hero != null)
+            {
+                systemPrompt = PromptManager.BuildAgentSystemPrompt(hero, charPrompt, intent);
+                var (vAgentId, vTargetId) = PromptManager.GetAgentTargetIds(hero, intent);
+                volatileBlock = ContextBuilder.BuildVolatile(vAgentId, vTargetId, intent);
+            }
+            else
+            {
+                systemPrompt = PromptManager.BuildSystemPrompt(charPrompt.HeroName, charPrompt);
+                volatileBlock = "";
+            }
 
             var historyLimit = settings.ChatHistoryLimit;
             var trimmedHistory = charPrompt.ChatHistory;
@@ -244,6 +292,7 @@ namespace MyFirstMod
             }
 
             var messageList = new List<object> { new { role = "system", content = systemPrompt } };
+            var lastHistoryRole = "";
 
             foreach (var entry in trimmedHistory)
             {
@@ -310,6 +359,16 @@ namespace MyFirstMod
                 {
                     messageList.Add(new { role = entry.Role, content = entry.Content });
                 }
+                lastHistoryRole = entry.Role;
+            }
+
+            if (!string.IsNullOrEmpty(volatileBlock))
+            {
+                var ctxMsg = new { role = "user", content = volatileBlock };
+                if (lastHistoryRole == "user" && messageList.Count >= 2)
+                    messageList.Insert(messageList.Count - 1, ctxMsg);
+                else
+                    messageList.Add(ctxMsg);
             }
 
             string? learnedKnowledge = null;
@@ -318,39 +377,47 @@ namespace MyFirstMod
             var lastMeaningfulText = "";
             var lastReasoning = "";
             var lastFinishReason = "";
+            // 缓存命中统计：stream_options.include_usage 让末帧携带 usage，跨轮次累计后落日志
+            long totalCacheHit = 0;
+            long totalCacheMiss = 0;
 
             // 不再限制工具调用轮数——模型直到自然停止。
             // 仅保留一个极高的安全阀（50 轮），防止病态死循环。
             const int MaxSafetyRounds = 50;
 
+            // reasoning_effort：史官固定 high（文笔核心；high 正是 API 默认值 → 不发送该参数，最大兼容性）。
+            // 其余 intent 用 MCM 设置（默认 low）——这是成本大头，见设置面板说明。
+            var reasoningEffort = intent == "historian"
+                ? null
+                : (settings.ReasoningEffort?.SelectedValue ?? "low");
+
             for (int round = 0; round < MaxSafetyRounds; round++)
             {
-                object payload;
-                if (includeTools)
+                JObject BuildPayload(bool withUsage, bool withEffort)
                 {
-                    payload = new
+                    var p = new JObject
                     {
-                        model = settings.Model,
-                        messages = messageList,
-                        tools = BuildTools(),
-                        tool_choice = "auto",
-                        max_tokens = settings.MaxTokens,
-                        temperature = settings.Temperature,
-                        stream = true
+                        ["model"] = settings.Model,
+                        ["messages"] = JToken.FromObject(messageList),
+                        ["max_tokens"] = settings.MaxTokens,
+                        ["temperature"] = settings.Temperature,
+                        ["stream"] = true
                     };
-                }
-                else
-                {
-                    payload = new
+                    if (includeTools)
                     {
-                        model = settings.Model,
-                        messages = messageList,
-                        max_tokens = settings.MaxTokens,
-                        temperature = settings.Temperature,
-                        stream = true
-                    };
+                        p["tools"] = JToken.FromObject(BuildTools());
+                        p["tool_choice"] = "auto";
+                    }
+                    if (withUsage)
+                        p["stream_options"] = new JObject { ["include_usage"] = true };
+                    if (withEffort && reasoningEffort != null)
+                        p["reasoning_effort"] = reasoningEffort;
+                    return p;
                 }
 
+                var withUsage = _streamUsageSupported;
+                var withEffort = _reasoningEffortSupported && reasoningEffort != null;
+                var payload = BuildPayload(withUsage, withEffort);
                 var json = JsonConvert.SerializeObject(payload);
                 var request = new HttpRequestMessage(HttpMethod.Post, settings.ApiUrl)
                 {
@@ -363,6 +430,25 @@ namespace MyFirstMod
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
                     cts.Token);
+
+                // 安全网：端点若拒绝 stream_options 或 reasoning_effort（400），回退为最兼容请求（两者都不带）重试一次
+                if (httpResponse.StatusCode == System.Net.HttpStatusCode.BadRequest && (withUsage || withEffort))
+                {
+                    _streamUsageSupported = false;
+                    _reasoningEffortSupported = false;
+                    DebugLogger.Log($"端点拒绝 400，本会话回退为无 usage/无 reasoning_effort 请求 intent={intent}");
+                    var fallbackPayload = BuildPayload(false, false);
+                    var fallbackJson = JsonConvert.SerializeObject(fallbackPayload);
+                    var fallbackRequest = new HttpRequestMessage(HttpMethod.Post, settings.ApiUrl)
+                    {
+                        Content = new StringContent(fallbackJson, Encoding.UTF8, "application/json")
+                    };
+                    fallbackRequest.Headers.Add("Authorization", $"Bearer {settings.ApiKey}");
+                    httpResponse = await _client.SendAsync(
+                        fallbackRequest,
+                        HttpCompletionOption.ResponseHeadersRead,
+                        cts.Token);
+                }
                 httpResponse.EnsureSuccessStatusCode();
 
                 var roundToolCalls = new List<JToken>();
@@ -396,6 +482,16 @@ namespace MyFirstMod
                     JObject chunk;
                     try { chunk = JObject.Parse(data); }
                     catch { continue; }
+
+                    // 缓存命中统计：DeepSeek 每个流式 chunk 都带 usage（正常块为 null，仅流末尾独立帧为对象）。
+                    // 注意不能写 `if (usage != null)`——"usage":null 时返回的是值为 Null 的 JValue（引用非空），
+                    // 对 JValue 做索引会抛 InvalidOperationException。用 `is JObject` 才能只匹配真正的 usage 对象。
+                    var usage = chunk["usage"];
+                    if (usage is JObject usageObj)
+                    {
+                        totalCacheHit += usageObj["prompt_cache_hit_tokens"]?.ToObject<long>() ?? 0;
+                        totalCacheMiss += usageObj["prompt_cache_miss_tokens"]?.ToObject<long>() ?? 0;
+                    }
 
                     var choices = chunk["choices"]?[0];
                     if (choices == null) continue;
@@ -492,6 +588,10 @@ namespace MyFirstMod
                     // 覆盖两类：完全沉默（未调工具）、以及"调工具调查后无结语"（如国王评估后决定不行动）。
                     if (string.IsNullOrEmpty(roundText) && !string.IsNullOrEmpty(roundReasoning))
                         DebugLogger.Log($"LLM 静默结束 intent={intent} agent={hero?.Name?.ToString() ?? "?"} toolsCalled={allToolCalls.Count} reasoning={DebugLogger.Truncate(roundReasoning, 600)}");
+                    var hitRate = (totalCacheHit + totalCacheMiss) > 0
+                        ? ((double)totalCacheHit / (totalCacheHit + totalCacheMiss)).ToString("P1")
+                        : "N/A";
+                    DebugLogger.Log($"LLM 完成 intent={intent} agent={hero?.Name?.ToString() ?? "?"} 轮次={round + 1} 缓存命中={totalCacheHit} 未命中={totalCacheMiss} 命中率={hitRate}");
                     return new ChatResponse
                     {
                         Content = finalContent,
@@ -539,6 +639,10 @@ namespace MyFirstMod
                 }
             }
 
+            var hitRateFinal = (totalCacheHit + totalCacheMiss) > 0
+                ? ((double)totalCacheHit / (totalCacheHit + totalCacheMiss)).ToString("P1")
+                : "N/A";
+            DebugLogger.Log($"LLM 完成(安全阀) intent={intent} agent={hero?.Name?.ToString() ?? "?"} 缓存命中={totalCacheHit} 未命中={totalCacheMiss} 命中率={hitRateFinal}");
             return new ChatResponse
             {
                 Content = !string.IsNullOrEmpty(lastMeaningfulText) ? lastMeaningfulText

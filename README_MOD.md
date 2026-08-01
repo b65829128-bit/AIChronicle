@@ -239,11 +239,18 @@ _Module/Prompts/
 > `query_character` 返回结果以「该人物：」开头作为补充约定。
 > 禁止使用「TA」「他/她」「其」等模糊人称。未来添加新提示词文件时必须遵守此约定。
 
+> **上下文结构（缓存优化）**：`context_template.txt` 以 `<!--VOLATILE-->` 标记分为两段——
+> **稳定前缀**（身份/persona/世界背景/工具清单/行为守则）进 system 消息；**易变块**（当前时间/自身状态/对对方认知/目标/客观关系/内政报告）单独作为【当前状况】user 消息插在最新消息前。
+> 这样 system+历史构成逐字节稳定的前缀，最大化 DeepSeek 前缀缓存命中（缓存命中输入价格仅为未命中的 1/50）。
+> **史官例外**：史官 intent 不拆易变块，保持单一 system 消息——文笔是模组核心，结构与旧版一致，绝对保真。
+> 旧版模板（无标记）整体按稳定处理，行为与旧版一致；模板改动随 newer-wins 同步到战役副本。
+> `conversation_rules.txt`/`letter_rules.txt` 采用**条件式记忆读取**：基本信息/当前目标/对对方的认知已由【当前状况】提供，不再每回合机械重复 query/read，仅当需要更新的实时信息时才查询。
+
 - **Agent 系统**：每个 NPC 有独立文件系统，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`list_dir`/`glob`/`grep`/`send_letter` 工具管理记忆
 - **信息隔离**：Agent 只能操作自己目录下的文件 + World/ 目录，不能读取其他 NPC 的信息
 - **解耦存储**：聊天记录（`chat_logs/`）、对 Entity 认知（`knowledge/`）、NPC 性格（`persona.txt`）全部独立文件，Agent 按需精确读取
 - **LLM 生成 persona**：首次对话时自动调用 LLM 为 NPC 生成结构化 persona（玩家角色除外，使用静态占位文本）
-- **ContextBuilder**：根据交互双方动态组装系统提示词，通过 `context_template.txt` 模板注入 Entity 的 persona 和能力信息
+- **ContextBuilder**：根据交互双方动态组装提示词，通过 `context_template.txt` 模板注入 persona 和能力信息；输出拆分为稳定前缀（system）+ 易变块（【当前状况】user 消息），史官 intent 例外（合并为单一 system）
 - **世界信息系统**：卡拉迪亚大陆介绍，每个战役可独立编辑
 - **系统提示词**：控制 AI 行为风格的核心提示，每个战役独立
 - **工具定义**（`tools.json`）：定义 AI 可调用的游戏函数
@@ -269,6 +276,7 @@ _Module/Prompts/
 | API Key | 你的 API 密钥 | 空（需自行填入） |
 | 最大 Token 数 | AI 单次回复的 token 上限（DeepSeek V4 最高 384K 输出；默认 32768 足够长编年史/长思考，特殊场景可上调至 65536） | `32768` |
 | 回复创造性 | Temperature 值，越低越稳定保守 | `0.8` |
+| 思考强度 (reasoning_effort) | AI 思考强度（成本大头，见下）。史官固定 high 不受此设置影响；部分模型不支持该参数则不生效 | `low` |
 | API 超时（秒） | 请求超时时间 | `30` |
 | Test Connection | 测试按钮 | 验证连通性和 function calling 支持 |
 | 双倍声望 | 战斗中声望翻倍 | 关闭 |
@@ -299,6 +307,8 @@ _Module/Prompts/
 | 角色名上间距 | 角色名与时间戳之间的间距 | `6` |
 | 对话上间距 | 对话内容与角色名之间的间距 | `6` |
 | 重置聊天界面 | 一键恢复聊天界面所有默认值（按钮） | — |
+
+> **成本提示**：AI 成本主要由两部分构成——**思考输出**（`reasoning_content`，按输出价计费，占比可超 1/3）与**缓存未命中输入**（每次新对话冷启动重编 system+工具数组）。「思考强度」设为 `low` 可显著降低思考 token（默认 high 时每次决策都产生大量思维链）；DeepSeek v4-flash 支持 `low/high/max` 三档。**史官固定 high**（文笔核心）。部分模型（非思考模式或不支持该参数的端点）此设置不生效。
 
 ### 双倍声望（可选）
 
@@ -388,4 +398,12 @@ MyFirstMod/
 ## 版本
 
 - 游戏版本：Bannerlord v1.4.7
-- 模组版本：v1.3.0
+- 模组版本：v1.4.0
+
+### v1.4.0 更新要点
+
+- **缓存优化**：上下文拆为「稳定前缀 + 易变【当前状况】块」（`<!--VOLATILE-->` 标记），system+历史逐字节稳定，最大化 DeepSeek 前缀缓存命中（命中价仅为未命中 1/50）。史官例外保持单一 system 消息（文笔保真）。
+- **思考强度可控**：MCM 新增「思考强度 (reasoning_effort)」，默认 `low`（成本大头）；史官固定 `high`。部分模型不支持该参数则不生效。
+- **缓存命中统计**：调试日志记录每次请求的命中/未命中/命中率（`stream_options.include_usage`）。
+- **省 token**：工具清单精简；`conversation_rules`/`letter_rules` 改条件式记忆读取（不再每回合机械重复查询）；browse_tools 解锁跨回合持久化；knowledge/goals 注入截断。
+- **修复**：流式 usage 解析边界（`"usage":null` 的 chunk 不再误判）；兼容 400 自动回退（无 usage/无 reasoning_effort 重试）。

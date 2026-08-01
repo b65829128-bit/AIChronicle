@@ -582,6 +582,24 @@ namespace MyFirstMod
             }
         }
 
+        private MCM.Common.Dropdown<string> _reasoningEffort = new(new[] { "low", "high", "max" }, 0);
+
+        [SettingPropertyDropdown("思考强度 (reasoning_effort)", Order = 9, RequireRestart = false,
+            HintText = "AI 思考强度（DeepSeek reasoning_effort）。这是成本大头：思考按输出价计费（flash 2元/M），默认 high 时每次决策都会产生大量思维链。\nlow=最省 token、决策更直接；high=更周全但更贵；max=最强推理。\n史官固定为 high（文笔核心），不受此设置影响。\n部分模型（非思考模式或不支持该参数的端点）此设置不生效。")]
+        [SettingPropertyGroup("连接设置")]
+        public MCM.Common.Dropdown<string> ReasoningEffort
+        {
+            get => _reasoningEffort;
+            set
+            {
+                if (_reasoningEffort != value)
+                {
+                    _reasoningEffort = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private int _timeout = 30;
 
         [SettingPropertyInteger("API 超时（秒）", 10, 120, Order = 7, RequireRestart = false,

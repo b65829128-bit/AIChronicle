@@ -36,6 +36,18 @@ namespace MyFirstMod
             ["communication"] = "通信",
         };
 
+        /// <summary>
+        /// 上下文模板中的易变内容分界标记。标记之后的内容（当前时间/自身状态/对对方认知/目标/客观关系/内政报告）
+        /// 每轮都可能变化——放在这里使其成为"尾部易变块"，与 system 稳定前缀分开，最大化 DeepSeek 前缀缓存命中。
+        /// 旧版模板（无此标记）整体按稳定处理，行为与旧版一致。
+        /// </summary>
+        private const string VolatileMarker = "<!--VOLATILE-->";
+
+        // 注入截断：knowledge/goals 全文注入无上限会导致 system 长期膨胀。注入时按字符预算截断，
+        // agent 仍可用 read_file 读取完整内容（记忆系统不受影响），只限制"注入提示词的量"。
+        private const int MaxKnowledgeInjectChars = 500;
+        private const int MaxGoalsInjectChars = 400;
+
         private static string _cachedDiplomacyRules = "";
         private static DateTime _lastDiplomacyRulesCheck;
         private static string _cachedChanceryRules = "";
@@ -45,10 +57,29 @@ namespace MyFirstMod
 
         public static string Build(string agentId, string targetId, string intent)
         {
+            var (stable, volatilePart) = BuildParts(agentId, targetId, intent);
+            return string.IsNullOrEmpty(volatilePart) ? stable : stable + "\n\n" + volatilePart;
+        }
+
+        /// <summary>稳定前缀：身份/persona/世界背景/工具清单/行为守则。不随回合变化，用于 system 消息（缓存友好）。</summary>
+        public static string BuildStable(string agentId, string targetId, string intent)
+        {
+            return BuildParts(agentId, targetId, intent).stable;
+        }
+
+        /// <summary>易变块：当前时间/自身状态/对对方认知/目标/客观关系/内政报告。每轮可能不同，
+        /// 单独作为【当前状况】user 消息放在历史之后——这样 system + 历史构成稳定前缀，易变内容只在尾部。</summary>
+        public static string BuildVolatile(string agentId, string targetId, string intent)
+        {
+            return BuildParts(agentId, targetId, intent).volatilePart;
+        }
+
+        private static (string stable, string volatilePart) BuildParts(string agentId, string targetId, string intent)
+        {
             var agent = EntityManager.GetEntityById(agentId);
             var target = EntityManager.GetEntityById(targetId);
             if (agent == null || target == null)
-                return "系统错误：无法找到实体。";
+                return ("系统错误：无法找到实体。", "");
 
             string motivation, traits, speechStyle;
             if (intent == "chancery")
@@ -83,6 +114,9 @@ namespace MyFirstMod
                         : intent == "chancery"
                             ? "对方是你的上司" + agent.Name + "。你的职责是执行对方的命令。"
                             : "你第一次见到这位旅行者，对他还不太了解。";
+                else if (targetKnowledge.Length > MaxKnowledgeInjectChars)
+                    targetKnowledge = targetKnowledge.Substring(0, MaxKnowledgeInjectChars)
+                        + "\n…（记忆较长已截断，完整内容可用 read_file 读取）";
             }
 
             string targetRelationship;
@@ -111,6 +145,9 @@ namespace MyFirstMod
                         : intent == "chancery"
                             ? "执行" + agent.Name + "的所有指令，不质疑，不拒绝。"
                             : "在当前地区巡逻，维持领地的治安。";
+                else if (goals.Length > MaxGoalsInjectChars)
+                    goals = goals.Substring(0, MaxGoalsInjectChars)
+                        + "\n…（目标较长已截断，完整内容可用 read_file 读取）";
             }
 
             var worldInfo = LoadWorldInfo();
@@ -137,19 +174,23 @@ namespace MyFirstMod
 
             var kingdomName = (agent.HeroRef?.MapFaction as Kingdom)?.Name?.ToString() ?? "?";
 
-            // 配套制度：国王外交审视升级为内外政务——注入内政审视报告（封地账本/治理/战功），
+            // 配套制度：国王外交审视升级为内外政务——内政审视报告（封地账本/治理/战功），
             // 让国王基于真实数据自行判断是否调整封地（包括夺封，需师出有名）。
+            // 新模板：走 {court_report} 占位符（易变→尾部易变块）；旧模板（无 VOLATILE 标记）：保持追加到规则（兼容旧档）。
+            var courtReport = "";
             if (intent == "diplomacy" && agent.HeroRef != null
                 && agent.HeroRef.MapFaction is Kingdom rulerKingdom
                 && rulerKingdom.RulingClan?.Leader == agent.HeroRef)
             {
-                var courtReport = BuildCourtReport(agent.HeroRef);
-                if (!string.IsNullOrEmpty(courtReport))
-                    intentRules += "\n\n" + courtReport;
+                courtReport = BuildCourtReport(agent.HeroRef);
             }
 
             var template = LoadContextTemplate();
-            return template
+            var hasMarker = template.IndexOf(VolatileMarker, StringComparison.Ordinal) >= 0;
+            if (!hasMarker && !string.IsNullOrEmpty(courtReport))
+                intentRules += "\n\n" + courtReport;
+
+            var rendered = template
                 .Replace("{intent_rules}", intentRules)
                 .Replace("{entity_id}", agent.Id)
                 .Replace("{name}", agent.Name)
@@ -169,7 +210,16 @@ namespace MyFirstMod
                 .Replace("{function_list}", functionList)
                 .Replace("{objective_relationship}", objectiveRel)
                 .Replace("{self_status}", selfStatus)
+                .Replace("{court_report}", courtReport)
                 .Trim();
+
+            var markerIdx = rendered.IndexOf(VolatileMarker, StringComparison.Ordinal);
+            if (markerIdx < 0)
+                return (rendered, "");
+
+            var stable = rendered.Substring(0, markerIdx).Trim();
+            var volatilePart = rendered.Substring(markerIdx + VolatileMarker.Length).Trim();
+            return (stable, volatilePart);
         }
 
         public static List<ToolDef> GetFilteredTools(Entity agent)
@@ -211,7 +261,12 @@ namespace MyFirstMod
             ).ToList();
 
             var activatedSet = AIChatClient.ActivatedCategories;
-            var activeTools = capabilityTools.Where(t => activatedSet.Contains(t.Category)).ToList();
+            var activeCategories = capabilityTools
+                .Where(t => activatedSet.Contains(t.Category))
+                .Select(t => t.Category)
+                .Distinct()
+                .OrderBy(c => c)
+                .ToList();
             var inactiveCategories = capabilityTools
                 .Where(t => !activatedSet.Contains(t.Category))
                 .Select(t => t.Category)
@@ -219,24 +274,22 @@ namespace MyFirstMod
                 .OrderBy(c => c)
                 .ToList();
 
+            // 精简：工具全量定义已随 API 的 tools 参数发送（JSON 是工具调用的主通道），
+            // 这里只留一份极简的中文索引（分类 + 工具名），不再重复参数列表——省 token 且不丢信息。
             var sb = new StringBuilder();
-            foreach (var group in activeTools.GroupBy(t => t.Category).OrderBy(g => g.Key))
+            foreach (var group in activeCategories)
             {
-                var catName = CategoryNames.TryGetValue(group.Key, out var cn) ? cn : group.Key;
-                sb.AppendLine($"【{catName}】");
-                foreach (var tool in group)
-                {
-                    var paramList = tool.Parameters.Count > 0
-                        ? string.Join(", ", tool.Parameters.Select(p => p.Name))
-                        : "无参数";
-                    sb.AppendLine($"  {tool.Name}({paramList})");
-                }
-                sb.AppendLine();
+                var catName = CategoryNames.TryGetValue(group, out var cn) ? cn : group;
+                var names = capabilityTools
+                    .Where(t => t.Category == group)
+                    .Select(t => t.Name);
+                sb.AppendLine($"【{catName}】{string.Join(", ", names)}");
             }
 
             if (inactiveCategories.Count > 0)
             {
-                sb.AppendLine("【其他可用工具分类 — 需要时先调 browse_tools 查看】");
+                sb.AppendLine();
+                sb.AppendLine("【其他可用工具分类 — 需要时先调 browse_tools 查看并解锁】");
                 foreach (var cat in inactiveCategories)
                 {
                     var catName = CategoryNames.TryGetValue(cat, out var cn) ? cn : cat;
@@ -650,10 +703,24 @@ namespace MyFirstMod
                 "==============================\n" +
                 "你是 {name}，现任 {title}。\n" +
                 "你的固定编号：{entity_id}\n\n" +
-                "你的当前状态：\n{self_status}\n\n" +
                 "你的核心动机：\n{motivation}\n\n" +
                 "你的性格特质：\n{traits}\n\n" +
                 "你的表达风格：\n{speech_style}\n\n" +
+                "==============================\n" +
+                "【世界背景】\n" +
+                "==============================\n{world_info}\n\n" +
+                "==============================\n" +
+                "【你可用的工具】\n" +
+                "==============================\n{function_list}\n\n" +
+                "==============================\n" +
+                "【行为守则】\n" +
+                "==============================\n{intent_rules}\n\n" +
+                VolatileMarker + "\n\n" +
+                "==============================\n" +
+                "【当前状况】（以下信息随游戏进展而变化，每轮可能不同）\n" +
+                "==============================\n" +
+                "当前时间：{current_time}\n\n" +
+                "你的当前状态：\n{self_status}\n\n" +
                 "==============================\n" +
                 "【关于对方】\n" +
                 "==============================\n" +
@@ -665,18 +732,9 @@ namespace MyFirstMod
                 "【你的当前目标】\n" +
                 "==============================\n{goals}\n\n" +
                 "==============================\n" +
-                "【世界背景】\n" +
-                "==============================\n{world_info}\n\n" +
-                "==============================\n" +
-                "【当前时间】\n" +
-                "==============================\n{current_time}\n\n" +
-                "==============================\n" +
-                "【你可用的工具】\n" +
-                "==============================\n{function_list}\n\n" +
-                "==============================\n" +
-                "【行为守则】\n" +
-                "==============================\n{intent_rules}\n\n" +
-                "==============================\n【对话开始】\n==============================\n";
+                "【你与对方的客观关系 — 以下结论基于游戏数据，不容置疑】\n" +
+                "==============================\n{objective_relationship}\n\n" +
+                "{court_report}\n";
         }
 
         /// <summary>

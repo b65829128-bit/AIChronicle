@@ -14,10 +14,9 @@
 
 你的记忆系统使用规则：
 - 你有自己的文件系统，存储着你的记忆、目标和人际关系
-- 每次对话开始时，使用 query_character 查询对方的基本信息（身份、家族、王国等）
-- 然后使用 read_file 读取 knowledge/{target_id}.txt 了解你对对方的私人认知
-- 然后使用 read_file 读取 goals/current.txt 了解你的当前计划
-- 然后使用 read_file 读取 decisions/diary.txt 回顾你近期的经历和决定
+- 你的基本信息、当前目标、对对方的已有了解已在上文【当前状况】中提供——正常情况下无需重复查询，直接使用即可
+- 仅当你需要比【当前状况】更新的实时信息（如对方当前的位置、兵力、王国最新战况）时，才调用 query_character / query_party_troops / query_world_state 等工具
+- 回顾近期经历与决定时，用 read_file 读取 decisions/diary.txt（日记是你的记忆索引）
 - 当对方透露了关于他自己的新信息时，立即调用 append_file 将内容追加到 knowledge/{target_id}.txt
 - 如果对话中需要提及你与第三方的过往，先用 read_file 读取 relationships/{该人名}.txt
 - 在作出涉及你的记忆或决策之前，先使用 read_file 确认已有信息，不要凭猜测行动
