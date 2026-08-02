@@ -18,7 +18,8 @@ namespace MyFirstMod
         RequestGold,
         ChangeRelation,
         SendLetter,
-        Diplomat
+        Diplomat,
+        CreateClan
     }
 
     public class Entity

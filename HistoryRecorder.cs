@@ -192,6 +192,14 @@ namespace MyFirstMod
             }
         }
 
+        /// <summary>静态入口：供 create_clan（天意建族）等外部模块记录家族建立事件。</summary>
+        public static void RecordClanCreated(string summary)
+        {
+            if (Campaign.Current == null) return;
+            var behavior = Campaign.Current.GetCampaignBehavior<HistoryRecorder>();
+            behavior?.RecordEvent("clan_created", summary);
+        }
+
         private static string GetSeasonName(CampaignTime.Seasons s) => s switch
         {
             CampaignTime.Seasons.Spring => "春",
@@ -411,21 +419,24 @@ namespace MyFirstMod
 
             RecordEvent("hero_killed", summary);
 
+            // 传记摘要带上受害者编号（StringId），供史官用 query_character 精确查询——重名者多，仅凭姓名会张冠李戴
+            var idTag = string.IsNullOrEmpty(victim.StringId) ? "" : $"（{victim.StringId}）";
+
             if (victim.Clan?.Kingdom?.RulingClan?.Leader == victim)
             {
-                AgentScheduler.QueueSpecialChronicle($"重要人物之死：{victim.Clan.Kingdom.Name}统治者 {name}{cause}。");
+                AgentScheduler.QueueSpecialChronicle($"重要人物之死：{victim.Clan.Kingdom.Name}统治者 {name}{idTag}{cause}。");
             }
             else if (victim.Clan?.Leader == victim)
             {
-                AgentScheduler.QueueSpecialChronicle($"重要人物之死：{clan}族长 {name}{cause}。");
+                AgentScheduler.QueueSpecialChronicle($"重要人物之死：{clan}族长 {name}{idTag}{cause}。");
             }
             else if (victim.Clan != null && MySettings.Instance?.BiographyAllNobles != false)
             {
-                AgentScheduler.QueueSpecialChronicle($"重要人物之死：{clan}成员 {name}{cause}。");
+                AgentScheduler.QueueSpecialChronicle($"重要人物之死：{clan}成员 {name}{idTag}{cause}。");
             }
             else if (victim == Hero.MainHero)
             {
-                AgentScheduler.QueueSpecialChronicle($"重要人物之死：冒险者 {name}{cause}，一段传奇就此落幕。");
+                AgentScheduler.QueueSpecialChronicle($"重要人物之死：冒险者 {name}{idTag}{cause}，一段传奇就此落幕。");
             }
         }
 

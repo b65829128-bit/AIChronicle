@@ -93,6 +93,35 @@ namespace MyFirstMod
             AgentManager.Activate(historianId, historianId);
         }
 
+        /// <summary>天意（家族补充）：观照天下家族兴衰的虚拟实体，当封臣/雇佣兵家族凋零时补充新的贵族家族。</summary>
+        public static void ActivateFate()
+        {
+            var fateId = "__fate__";
+            if (!_entityCache.TryGetValue(fateId, out var fate))
+            {
+                fate = new Entity
+                {
+                    Id = fateId,
+                    Name = "天意",
+                    Title = "卡拉迪亚命运的天意",
+                    Culture = "帝国",
+                    Controller = EntityController.Agent,
+                    HeroRef = null,
+                    Capabilities = new HashSet<EntityCapability>
+                    {
+                        EntityCapability.FileSystem,
+                        EntityCapability.SendLetter,
+                        EntityCapability.CreateClan
+                    }
+                };
+                _entityCache[fateId] = fate;
+            }
+
+            _activeAgentId.Value = fateId;
+            _activeTargetId.Value = fateId;
+            AgentManager.Activate(fateId, fateId);
+        }
+
         public static Entity GetOrCreateEntity(Hero hero)
         {
             if (_heroToEntity.TryGetValue(hero, out var existing))

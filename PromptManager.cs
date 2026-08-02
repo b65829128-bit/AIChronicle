@@ -142,6 +142,25 @@ namespace MyFirstMod
                 catch { }
             }
 
+            // 游戏规则层（与 world_info 相同：基础目录比战役副本新则覆盖，玩家副本手动编辑保留）
+            var destGameRules = Path.Combine(_campaignDir, "game_rules.txt");
+            if (!File.Exists(destGameRules))
+            {
+                var defaultGameRules = Path.Combine(_promptsBaseDir, "game_rules.txt");
+                if (File.Exists(defaultGameRules))
+                    File.Copy(defaultGameRules, destGameRules);
+            }
+            else
+            {
+                var defaultGameRules = Path.Combine(_promptsBaseDir, "game_rules.txt");
+                try
+                {
+                    if (File.Exists(defaultGameRules) && File.GetLastWriteTimeUtc(defaultGameRules) > File.GetLastWriteTimeUtc(destGameRules))
+                        File.Copy(defaultGameRules, destGameRules, true);
+                }
+                catch { }
+            }
+
             var destSystemPrompt = Path.Combine(_campaignDir, "system_prompt.txt");
             if (!File.Exists(destSystemPrompt))
             {
@@ -177,6 +196,7 @@ namespace MyFirstMod
             CopyPromptToCampaign("biography_prompt.txt");
             CopyPromptToCampaign("advisory_rules.txt");
             CopyPromptToCampaign("fief_review_rules.txt");
+            CopyPromptToCampaign("clan_replenishment_rules.txt");
             CopyTemplateToCampaign("context_template.txt");
         }
 
@@ -300,6 +320,12 @@ namespace MyFirstMod
         public static string? GetWorldInfoPath()
         {
             var path = Path.Combine(_campaignDir, "world_info.txt");
+            return File.Exists(path) ? path : null;
+        }
+
+        public static string? GetGameRulesPath()
+        {
+            var path = Path.Combine(_campaignDir, "game_rules.txt");
             return File.Exists(path) ? path : null;
         }
 

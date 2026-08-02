@@ -124,6 +124,8 @@ namespace MyFirstMod
             }
 
             LoadAdvisoryList();
+            LoadEdictList();
+            LoadSecretAdvisoryList();
         }
 
         private void LoadAdvisoryList()
@@ -162,6 +164,85 @@ namespace MyFirstMod
                 return $"封臣谏言 · {kingdom} · 第{year}年";
             }
             return $"封臣谏言 · {filename}";
+        }
+
+        /// <summary>国王诏令（本国）：读 World/edict/{玩家王国}_*.txt，按年份倒序列出。诏令全公开，玩家可见本国。</summary>
+        private void LoadEdictList()
+        {
+            if (Campaign.Current == null) return;
+            if (Clan.PlayerClan?.IsUnderMercenaryService == true) return;
+
+            var playerKingdom = Clan.PlayerClan?.Kingdom;
+            if (playerKingdom == null) return;
+
+            var campaignDir = PromptManager.CampaignDir;
+            if (string.IsNullOrEmpty(campaignDir)) return;
+
+            var edictDir = Path.Combine(campaignDir, "NPCs", "World", "edict");
+            if (!Directory.Exists(edictDir)) return;
+
+            var kingdomName = playerKingdom.Name.ToString();
+            var files = Directory.GetFiles(edictDir, $"{kingdomName}_*.txt");
+            Array.Sort(files, (a, b) => string.Compare(Path.GetFileName(a), Path.GetFileName(b), StringComparison.Ordinal));
+            Array.Reverse(files);
+
+            foreach (var file in files)
+            {
+                var fname = Path.GetFileNameWithoutExtension(file);
+                var displayName = ParseEdictName(fname);
+                Chronicles.Add(new ChronicleEntryVM(displayName, file, this));
+            }
+        }
+
+        private static string ParseEdictName(string filename)
+        {
+            var parts = filename.Split('_');
+            if (parts.Length >= 2 && int.TryParse(parts[parts.Length - 1], out int year))
+            {
+                var kingdom = string.Join("_", parts, 0, parts.Length - 1);
+                return $"国王诏令 · {kingdom} · 第{year}年";
+            }
+            return $"国王诏令 · {filename}";
+        }
+
+        /// <summary>国王密陈（仅本国国王）：读 World/secret_advisory/{玩家王国}_*.txt。只有玩家是本国统治者（国王）时可见。</summary>
+        private void LoadSecretAdvisoryList()
+        {
+            if (Campaign.Current == null) return;
+            if (Clan.PlayerClan?.IsUnderMercenaryService == true) return;
+
+            var playerKingdom = Clan.PlayerClan?.Kingdom;
+            if (playerKingdom == null) return;
+            if (playerKingdom.RulingClan?.Leader != Hero.MainHero) return; // 仅本国国王可看密陈
+
+            var campaignDir = PromptManager.CampaignDir;
+            if (string.IsNullOrEmpty(campaignDir)) return;
+
+            var secretDir = Path.Combine(campaignDir, "NPCs", "World", "secret_advisory");
+            if (!Directory.Exists(secretDir)) return;
+
+            var kingdomName = playerKingdom.Name.ToString();
+            var files = Directory.GetFiles(secretDir, $"{kingdomName}_*.txt");
+            Array.Sort(files, (a, b) => string.Compare(Path.GetFileName(a), Path.GetFileName(b), StringComparison.Ordinal));
+            Array.Reverse(files);
+
+            foreach (var file in files)
+            {
+                var fname = Path.GetFileNameWithoutExtension(file);
+                var displayName = ParseSecretAdvisoryName(fname);
+                Chronicles.Add(new ChronicleEntryVM(displayName, file, this));
+            }
+        }
+
+        private static string ParseSecretAdvisoryName(string filename)
+        {
+            var parts = filename.Split('_');
+            if (parts.Length >= 2 && int.TryParse(parts[parts.Length - 1], out int year))
+            {
+                var kingdom = string.Join("_", parts, 0, parts.Length - 1);
+                return $"国王密陈 · {kingdom} · 第{year}年";
+            }
+            return $"国王密陈 · {filename}";
         }
 
         private static string ParseChronicleName(string filename)

@@ -13,14 +13,17 @@ using TaleWorlds.CampaignSystem.Encounters;
 using TaleWorlds.CampaignSystem.LogEntries;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Party.PartyComponents;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
+using TaleWorlds.Localization;
 
 namespace MyFirstMod
 {
     public static class ToolExecutor
     {
+        private static readonly Random _rng = new();
         /// <summary>
         /// 工具入口。Bannerlord 游戏对象是主线程独占的，而 LLM 工具循环跑在后台线程——
         /// 除需要阻塞等待玩家弹窗确认的工具外，全部经 MainThreadExecutor 分发到主线程执行。
@@ -154,6 +157,9 @@ namespace MyFirstMod
                     case "query_war_status":
                         return ExecuteQueryWarStatus(args["kingdom_name"]?.ToString());
 
+                    case "query_influence":
+                        return ExecuteQueryInfluence();
+
                     case "query_pending_proposals":
                         return ExecuteQueryPendingProposals();
 
@@ -233,6 +239,9 @@ namespace MyFirstMod
                     case "go_around_party":
                         return ExecuteGoAroundParty(args["target_entity_id"]?.ToString());
 
+                    case "form_army":
+                        return ExecuteFormArmy(args["target_settlement"]?.ToString() ?? "", args["army_type"]?.ToString() ?? "");
+
                     case "query_recent_events":
                         return ExecuteQueryRecentEvents(
                             args["target_entity_id"]?.ToString(),
@@ -290,6 +299,23 @@ namespace MyFirstMod
                     case "let_go":
                         return ExecuteLetGo();
 
+                    case "release_prisoner":
+                        return ExecuteReleasePrisoner(
+                            args["prisoner_name"]?.ToString() ?? "",
+                            args["count"]?.ToObject<int>() ?? 0,
+                            args["all"]?.ToObject<bool>() ?? false);
+
+                    case "execute_prisoner":
+                        return ExecuteExecutePrisoner(args["prisoner_name"]?.ToString() ?? "");
+
+                    case "create_clan":
+                        return ExecuteCreateClan(
+                            args["clan_name"]?.ToString() ?? "",
+                            args["kingdom_name"]?.ToString() ?? "",
+                            args["culture"]?.ToString() ?? "",
+                            args["motivation"]?.ToString() ?? "",
+                            args["is_mercenary"]?.ToObject<bool>() ?? false);
+
                     case "query_settlement_villages":
                         return ExecuteQuerySettlementVillages(args["settlement_name"]?.ToString() ?? "");
 
@@ -301,6 +327,15 @@ namespace MyFirstMod
 
                     case "submit_secret_advisory":
                         return ExecuteSubmitSecretAdvisory(args["content"]?.ToString() ?? "");
+
+                    case "submit_edict":
+                        return ExecuteSubmitEdict(args["content"]?.ToString() ?? "");
+
+                    case "consult_king":
+                        return ExecuteConsultKing(args["target_kingdom"]?.ToString() ?? "", args["message"]?.ToString() ?? "");
+
+                    case "reply_consult":
+                        return ExecuteReplyConsult(args["target_kingdom"]?.ToString() ?? "", args["message"]?.ToString() ?? "");
 
                     default:
                         return $"未知工具：{name}";
@@ -332,89 +367,118 @@ namespace MyFirstMod
         {
             if (string.IsNullOrEmpty(name))
                 return "[错误] 请提供人物名称";
+            name = name.Trim();
 
-            // 修复：用"所有氏族成员（含已故）+ 所有在世英雄"枚举——史官立传需要查询已死人物；原 AllAliveHeroes 查不到死人
-            foreach (var hero in AllHeroesForQuery())
+            // 修复：支持按编号（StringId，形如 CharacterObject_2840）精确查找——重名人物多，列传/查档时
+            // 优先用事件里给出的编号精查，避免按姓名子串误匹配到同名者（曾出现史官把被处决的
+            // 狼皮部落利夫里斯写成另一氏族的利夫里斯，氏族、年龄全错）。
+            var byId = AllHeroesForQuery().FirstOrDefault(h => h.StringId != null
+                && h.StringId.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (byId != null)
+                return BuildCharacterProfile(byId);
+
+            // 用"所有氏族成员（含已故）+ 所有在世英雄"枚举——史官立传需要查询已死人物；原 AllAliveHeroes 查不到死人
+            var matches = AllHeroesForQuery().Where(h =>
             {
-                var heroName = hero.Name?.ToString() ?? "";
-                if (!heroName.Contains(name) && !name.Contains(heroName)) continue;
+                var heroName = h.Name?.ToString() ?? "";
+                return heroName.Contains(name) || name.Contains(heroName);
+            }).ToList();
 
-                var sb = new StringBuilder();
-                sb.AppendLine("【系统公开档案 — 以下信息为卡拉迪亚公认事实，不容质疑】");
-                sb.AppendLine("===== 该人物：" + heroName + (hero.IsDead ? "（已故）" : "") + " =====");
+            if (matches.Count == 0)
+                return "[未找到] 名为 \"" + name + "\" 的人物";
 
-                sb.AppendLine("性别：" + (hero.IsFemale ? "女" : "男"));
-                sb.AppendLine("文化：" + (hero.Culture?.Name?.ToString() ?? "未知"));
+            if (matches.Count == 1)
+                return BuildCharacterProfile(matches[0]);
 
-                // 生卒年：史官立传所需；出生日期有效时输出，已故则输出卒年
-                if (hero.BirthDay != CampaignTime.Zero)
-                    sb.AppendLine("出生：" + hero.BirthDay.GetYear + "年");
-                if (hero.IsDead && hero.DeathDay != CampaignTime.Zero)
-                    sb.AppendLine("卒于：" + hero.DeathDay.GetYear + "年");
+            // 重名消歧：列出所有候选人（含编号/氏族/王国/年龄），要求用精确编号重新查询
+            var sb = new StringBuilder();
+            sb.AppendLine($"【模糊匹配】名为 \"{name}\" 的人物有 {matches.Count} 位，请用精确编号重新查询（query_character(\"编号\")），避免张冠李戴：");
+            foreach (var hero in matches)
+            {
+                var ageDesc = hero.IsDead ? "已故" : "在世";
+                sb.AppendLine($"  [{hero.StringId ?? "?"}] {hero.Name}（{(hero.Clan?.Name?.ToString() ?? "无氏族")}·{(hero.Clan?.Kingdom?.Name?.ToString() ?? "无王国")}，{(int)hero.Age}岁，{ageDesc}）");
+            }
+            sb.AppendLine();
+            sb.AppendLine("若查询的是已故人物（如为史官立传），优先使用事件描述中给出的编号精查。");
+            return sb.ToString();
+        }
 
-                var statuses = new List<string>();
-                if (hero.Clan?.Kingdom?.RulingClan?.Leader == hero)
-                    statuses.Add("国王");
-                if (hero.Clan?.Leader == hero)
-                    statuses.Add("家族领袖");
-                else if (hero.Clan != null)
-                    statuses.Add("封臣");
+        private static string BuildCharacterProfile(Hero hero)
+        {
+            var heroName = hero.Name?.ToString() ?? "";
+            var sb = new StringBuilder();
+            sb.AppendLine("【系统公开档案 — 以下信息为卡拉迪亚公认事实，不容质疑】");
+            sb.AppendLine("===== 该人物：" + heroName + (hero.IsDead ? "（已故）" : "") + " =====");
 
-                if (hero.Clan?.IsUnderMercenaryService == true)
-                    statuses.Add("雇佣兵势力");
-                if (hero.IsWanderer && hero.Clan == null)
-                    statuses.Add("流浪者");
-                if (statuses.Count == 0)
-                    statuses.Add("平民");
-                sb.AppendLine("身份：" + string.Join("、", statuses));
+            sb.AppendLine("性别：" + (hero.IsFemale ? "女" : "男"));
+            sb.AppendLine("文化：" + (hero.Culture?.Name?.ToString() ?? "未知"));
 
-                sb.AppendLine("家族：" + (hero.Clan?.Name?.ToString() ?? "无"));
-                sb.AppendLine("王国：" + (hero.Clan?.Kingdom?.Name?.ToString() ?? "无"));
+            // 生卒年：史官立传所需；出生日期有效时输出，已故则输出卒年
+            if (hero.BirthDay != CampaignTime.Zero)
+                sb.AppendLine("出生：" + hero.BirthDay.GetYear + "年");
+            if (hero.IsDead && hero.DeathDay != CampaignTime.Zero)
+                sb.AppendLine("卒于：" + hero.DeathDay.GetYear + "年");
 
-                var enc = hero.EncyclopediaText?.ToString();
-                if (!string.IsNullOrEmpty(enc))
-                    sb.AppendLine("简述：" + enc);
+            var statuses = new List<string>();
+            if (hero.Clan?.Kingdom?.RulingClan?.Leader == hero)
+                statuses.Add("国王");
+            if (hero.Clan?.Leader == hero)
+                statuses.Add("家族领袖");
+            else if (hero.Clan != null)
+                statuses.Add("封臣");
 
-                var clan = hero.Clan;
-                if (clan != null)
-                {
-                    sb.AppendLine("家族等级：" + clan.Tier);
-                    sb.AppendLine("家族声望：" + clan.Renown.ToString("F0"));
-                }
+            if (hero.Clan?.IsUnderMercenaryService == true)
+                statuses.Add("雇佣兵势力");
+            if (hero.IsWanderer && hero.Clan == null)
+                statuses.Add("流浪者");
+            if (statuses.Count == 0)
+                statuses.Add("平民");
+            sb.AppendLine("身份：" + string.Join("、", statuses));
 
-                var state = "正常";
-                if (hero.IsPrisoner) state = "囚禁中";
-                else if (hero.IsFugitive) state = "逃亡中";
-                else if (hero.IsDisabled) state = "失踪";
-                sb.AppendLine("当前状态：" + state);
+            sb.AppendLine("家族：" + (hero.Clan?.Name?.ToString() ?? "无"));
+            sb.AppendLine("王国：" + (hero.Clan?.Kingdom?.Name?.ToString() ?? "无"));
 
-                var party = hero.PartyBelongedTo;
-                if (party != null && party.LeaderHero == hero)
-                {
-                    sb.AppendLine("军队：率领中");
-                    if (party.MemberRoster != null)
-                        sb.AppendLine("兵力：约 " + party.MemberRoster.TotalManCount + " 人");
-                }
-                else if (party != null)
-                {
-                    sb.AppendLine("军队：随 " + (party.LeaderHero?.Name?.ToString() ?? "他人") + " 行军");
-                }
-                else
-                {
-                    sb.AppendLine("军队：无");
-                }
+            var enc = hero.EncyclopediaText?.ToString();
+            if (!string.IsNullOrEmpty(enc))
+                sb.AppendLine("简述：" + enc);
 
-                if (hero.CurrentSettlement != null)
-                    sb.AppendLine("当前位置：" + hero.CurrentSettlement.Name?.ToString());
-                else if (party != null && party.CurrentSettlement != null)
-                    sb.AppendLine("当前位置：" + party.CurrentSettlement.Name?.ToString());
-                else
-                    sb.AppendLine("当前位置：野外行军");
-
-                return sb.ToString().TrimEnd();
+            var clan = hero.Clan;
+            if (clan != null)
+            {
+                sb.AppendLine("家族等级：" + clan.Tier);
+                sb.AppendLine("家族声望：" + clan.Renown.ToString("F0"));
             }
 
-            return "[未找到] 名为 \"" + name + "\" 的人物";
+            var state = "正常";
+            if (hero.IsPrisoner) state = "囚禁中";
+            else if (hero.IsFugitive) state = "逃亡中";
+            else if (hero.IsDisabled) state = "失踪";
+            sb.AppendLine("当前状态：" + state);
+
+            var party = hero.PartyBelongedTo;
+            if (party != null && party.LeaderHero == hero)
+            {
+                sb.AppendLine("军队：率领中");
+                if (party.MemberRoster != null)
+                    sb.AppendLine("兵力：约 " + party.MemberRoster.TotalManCount + " 人");
+            }
+            else if (party != null)
+            {
+                sb.AppendLine("军队：随 " + (party.LeaderHero?.Name?.ToString() ?? "他人") + " 行军");
+            }
+            else
+            {
+                sb.AppendLine("军队：无");
+            }
+
+            if (hero.CurrentSettlement != null)
+                sb.AppendLine("当前位置：" + hero.CurrentSettlement.Name?.ToString());
+            else if (party != null && party.CurrentSettlement != null)
+                sb.AppendLine("当前位置：" + party.CurrentSettlement.Name?.ToString());
+            else
+                sb.AppendLine("当前位置：野外行军");
+
+            return sb.ToString().TrimEnd();
         }
 
         private static string QuerySettlement(string name)
@@ -840,6 +904,37 @@ namespace MyFirstMod
             }
 
             return "[未找到] 名为 \"" + kingdomName + "\" 的王国";
+        }
+
+        /// <summary>查询本族当前影响力（政治资财：拉军团/推行政策的消耗资源）。</summary>
+        private static string ExecuteQueryInfluence()
+        {
+            if (Campaign.Current == null)
+                return "[错误] 战役未加载";
+            if (AIChatClient.CurrentHero == null)
+                return "[错误] 无当前领主";
+
+            var hero = AIChatClient.CurrentHero;
+            var clan = hero.Clan;
+            if (clan == null)
+                return "[错误] 你没有家族";
+
+            var influence = clan.Influence;
+            var kingdom = hero.MapFaction as Kingdom;
+            var kingdomName = kingdom?.Name?.ToString() ?? "（无王国）";
+            var canArmy = influence > 100f && kingdom != null
+                && !clan.IsUnderMercenaryService
+                && kingdom.FactionsAtWarWith.Any(f => f.Fiefs.Any());
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"===== {hero.Name} 的影响力报告 =====");
+            sb.AppendLine($"当前影响力：{influence:F0}（家族：{clan.Name}，王国：{kingdomName}）");
+            sb.AppendLine();
+            sb.AppendLine("影响力是你的政治资财，主要用途：");
+            sb.AppendLine("- 拉军团：影响力超过 100 时，可召集本国领主组成军团协同作战（当前" + (canArmy ? "已可召集" : "尚不足或条件未满足") + "）");
+            sb.AppendLine("- 推行政策：在王国朝堂提议立法");
+            sb.AppendLine("影响力随战功、封地与政务积累；拉军团与推行政策会消耗");
+            return sb.ToString().TrimEnd();
         }
 
         private static string ExecuteQueryWarStatus(string? kingdomName)
@@ -1298,6 +1393,69 @@ namespace MyFirstMod
             return $"部队已出发围攻{target.Name}。";
         }
 
+        /// <summary>拉军团：以军事目标为指向召集本国领主成军团，交还原版 AI 指挥（集结→扑目标→攻城/劫掠→解散）。</summary>
+        private static string ExecuteFormArmy(string targetSettlementName, string armyType)
+        {
+            if (AIChatClient.CurrentHero == null) return "[错误] 无当前部队指挥官";
+
+            var hero = AIChatClient.CurrentHero;
+            var party = hero.PartyBelongedTo;
+            if (party == null) return $"[错误] {hero.Name} 没有带领部队";
+            if (!party.IsActive) return "[错误] 部队当前不可用";
+
+            var kingdom = hero.MapFaction as Kingdom;
+            if (kingdom == null) return "[错误] 你不属于任何王国，无法召集军团";
+            if (hero.Clan?.IsUnderMercenaryService == true) return "[错误] 雇佣兵不能召集军团";
+
+            var target = FindSettlement(targetSettlementName);
+            if (target == null) return $"[错误] 未找到定居点：{targetSettlementName}";
+
+            var typeLower = (armyType ?? "").Trim().ToLowerInvariant();
+            Army.ArmyTypes selectedType;
+            if (typeLower.Contains("围") || typeLower.Contains("攻") || typeLower == "besiege")
+            {
+                if (!target.IsTown && !target.IsCastle) return $"[错误] 围攻军团的目标必须是城镇或城堡";
+                selectedType = Army.ArmyTypes.Besieger;
+            }
+            else if (typeLower.Contains("掠") || typeLower.Contains("劫") || typeLower == "raid")
+            {
+                if (!target.IsVillage) return $"[错误] 劫掠军团的目标必须是村庄";
+                selectedType = Army.ArmyTypes.Raider;
+            }
+            else if (typeLower == "defend" || typeLower.Contains("解围") || typeLower.Contains("防御"))
+            {
+                if (!target.IsTown && !target.IsCastle) return $"[错误] 防御军团的目标必须是城镇或城堡";
+                if (!target.IsUnderSiege) return "[错误] 该定居点当前未被围攻——防御军团只用于集结兵力解围；若想让部队驻守，请用 defend_settlement";
+                selectedType = Army.ArmyTypes.Defender;
+            }
+            else if (typeLower.Contains("守") || typeLower.Contains("驻") || typeLower.Contains("护"))
+            {
+                return "[错误] 驻守/守护不是军团类型——军团用于进攻（围攻/劫掠）或解围（防御）。单支部队驻守请用 defend_settlement";
+            }
+            else
+                return "[错误] 军团类型必须是 围攻/劫掠/防御（besiege/raid/defend）";
+
+            // 原版条件：影响力>100、王国交战、部曲充足、氏族领袖 → 算候选成员
+            if (!Campaign.Current.Models.ArmyManagementCalculationModel.CanLordCreateArmy(party, out var possibleMembers))
+                return "[错误] 当前无法召集军团（需影响力超过 100、王国处于交战、部曲充足，且你是氏族领袖）";
+            if (possibleMembers.Count == 0)
+                return "[错误] 本国附近没有可召集的领主部队";
+
+            // 创建军团：原版接管集结与作战（军团长等待成员→成员奔赴→扑向目标）
+            kingdom.CreateArmy(hero, target, selectedType, possibleMembers);
+
+            // 清掉军团长现有 PendingAction，避免模组每帧重发指令覆盖原版集结
+            PartyBehaviorManager.RemoveAction(hero);
+
+            var typeName = selectedType switch
+            {
+                Army.ArmyTypes.Besieger => "围攻",
+                Army.ArmyTypes.Raider => "劫掠",
+                _ => "防御"
+            };
+            return $"军团已组建（{typeName} {target.Name}），正召集本国领主集结，原版军团将接管指挥。你无需再发指令；军团使命结束后自行评估下一步。";
+        }
+
         private static string ExecuteEngageParty(string targetEntityId)
         {
             if (AIChatClient.CurrentHero == null) return "[错误] 无当前部队指挥官";
@@ -1334,6 +1492,7 @@ namespace MyFirstMod
             da.Behavior = AiBehavior.DefendSettlement;
             da.TargetSettlement = target;
             da.CheckInHours = 72f;
+            da.CreatedAt = CampaignTime.Now;
             return $"部队已出发驻防{target.Name}。";
         }
 
@@ -1353,6 +1512,7 @@ namespace MyFirstMod
             pa.Behavior = AiBehavior.PatrolAroundPoint;
             pa.TargetSettlement = target;
             pa.CheckInHours = 48f;
+            pa.CreatedAt = CampaignTime.Now;
             return $"部队已出发巡逻{target.Name}周边。";
         }
 
@@ -1374,6 +1534,7 @@ namespace MyFirstMod
             esa.Behavior = AiBehavior.EscortParty;
             esa.TargetParty = targetParty;
             esa.CheckInHours = 24f;
+            esa.CreatedAt = CampaignTime.Now;
             return $"部队已出发护送{targetParty.Name?.ToString() ?? targetEntityId}。";
         }
 
@@ -1773,6 +1934,146 @@ namespace MyFirstMod
             return "秘密谏言已密陈给国王。";
         }
 
+        /// <summary>国王诏令：只有王国统治者可颁布。公开归档 World/edict/{王国}_{年}.txt，史官可读、本国史书可见。</summary>
+        private static string ExecuteSubmitEdict(string content)
+        {
+            if (string.IsNullOrWhiteSpace(content))
+                return "[错误] 诏令内容不能为空";
+            if (AIChatClient.CurrentHero == null)
+                return "[错误] 无当前领主";
+            if (string.IsNullOrEmpty(PromptManager.CampaignDir))
+                return "[错误] 战役目录未就绪";
+
+            var hero = AIChatClient.CurrentHero;
+            var kingdom = hero.MapFaction as Kingdom;
+            if (kingdom == null)
+                return "[错误] 你不属于任何王国，无法颁布诏令";
+            if (kingdom.RulingClan?.Leader != hero)
+                return "[错误] 只有王国统治者才能颁布诏令";
+
+            var kingdomName = kingdom.Name.ToString();
+            var currentYear = CampaignTime.Now.GetYear;
+            var currentTime = PromptManager.GetCurrentTimeString();
+
+            var entity = EntityManager.GetOrCreateEntity(hero);
+            var name = entity?.Name ?? hero.Name?.ToString() ?? "?";
+            var title = entity?.Title ?? "?";
+
+            var edictFile = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "edict", $"{kingdomName}_{currentYear}.txt");
+
+            var header = $"\n[{currentTime}] {name}（{title}）诏令：\n";
+            SafeFileIO.AppendAllText(edictFile, header);
+            SafeFileIO.AppendAllText(edictFile, content.Trim() + "\n");
+
+            return "诏令已昭告天下。";
+        }
+
+        /// <summary>国王外交问询：遣使问询另一王国国王，激活对方（KingConsult 事件）。问询落盘 World/diplomacy/consults/，史官可读。</summary>
+        private static string ExecuteConsultKing(string targetKingdomName, string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return "[错误] 问询内容不能为空";
+            if (AIChatClient.CurrentHero == null)
+                return "[错误] 无当前领主";
+            if (string.IsNullOrEmpty(PromptManager.CampaignDir))
+                return "[错误] 战役目录未就绪";
+
+            var hero = AIChatClient.CurrentHero;
+            var myKingdom = hero.MapFaction as Kingdom;
+            if (myKingdom == null || myKingdom.RulingClan?.Leader != hero)
+                return "[错误] 只有王国统治者才能遣使问询他国";
+
+            var target = DiplomacyService.FindKingdom(targetKingdomName);
+            if (target == null)
+                return "[错误] 找不到王国：" + targetKingdomName;
+            if (target.IsEliminated)
+                return "[错误] " + target.Name + " 已灭亡，无处遣使";
+            var targetRuler = target.RulingClan?.Leader;
+            if (targetRuler == null || !targetRuler.IsAlive)
+                return "[错误] " + target.Name + " 国王已亡或空缺，无法问询";
+            if (target == myKingdom)
+                return "[错误] 你不能问询自己";
+
+            var myName = myKingdom.Name.ToString();
+            var targetName = target.Name.ToString();
+            var pairKey = BuildPairKey(myName, targetName);
+
+            if (!AgentScheduler.TryConsult(pairKey, out var daysRemaining))
+                return $"[冷却] 使者尚未从 {targetName} 归来，需再等 {daysRemaining} 游戏天。你可以先处理其他政务。";
+
+            var currentTime = PromptManager.GetCurrentTimeString();
+            var entity = EntityManager.GetOrCreateEntity(hero);
+            var name = entity?.Name ?? hero.Name?.ToString() ?? "?";
+
+            var threadPath = GetConsultThreadPath(myName, targetName);
+            SafeFileIO.AppendAllText(threadPath, $"[{currentTime}] {name}（{myName}国王）问询：{message.Trim()}\n");
+
+            AgentScheduler.RecordConsult(pairKey);
+
+            var targetEntity = EntityManager.GetOrCreateEntity(targetRuler);
+            if (targetEntity == null)
+                return "[错误] 无法解析目标国王实体";
+            var framed = $"你是{targetName}的至高统治者。{myName}国王{name}遣使问询你：\n「{message.Trim()}」\n\n请决定如何回应——可用 reply_consult 工具答复使者（可据实回答，也可虚与委蛇），或不予理睬。你仍可照常审视本国政务。";
+            AgentScheduler.QueueEvent(new ActivationEvent
+            {
+                Type = ActivationEventType.KingConsult,
+                AgentId = targetEntity.Id,
+                TargetId = entity.Id,
+                Content = framed,
+                Depth = 1
+            });
+
+            return $"已遣使问询 {targetName}，使者将带回其答复。此问询会作为公开外交记录，史官可查阅。";
+        }
+
+        /// <summary>回复外交问询：向另一王国国王回话，落盘到双方问询线程。</summary>
+        private static string ExecuteReplyConsult(string targetKingdomName, string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return "[错误] 答复内容不能为空";
+            if (AIChatClient.CurrentHero == null)
+                return "[错误] 无当前领主";
+            if (string.IsNullOrEmpty(PromptManager.CampaignDir))
+                return "[错误] 战役目录未就绪";
+
+            var hero = AIChatClient.CurrentHero;
+            var myKingdom = hero.MapFaction as Kingdom;
+            if (myKingdom == null || myKingdom.RulingClan?.Leader != hero)
+                return "[错误] 只有王国统治者才能回复外交问询";
+
+            var target = DiplomacyService.FindKingdom(targetKingdomName);
+            if (target == null)
+                return "[错误] 找不到王国：" + targetKingdomName;
+            if (target == myKingdom)
+                return "[错误] 不能回复自己";
+
+            var myName = myKingdom.Name.ToString();
+            var targetName = target.Name.ToString();
+            var currentTime = PromptManager.GetCurrentTimeString();
+            var entity = EntityManager.GetOrCreateEntity(hero);
+            var name = entity?.Name ?? hero.Name?.ToString() ?? "?";
+
+            var threadPath = GetConsultThreadPath(myName, targetName);
+            SafeFileIO.AppendAllText(threadPath, $"[{currentTime}] {name}（{myName}国王）答复：{message.Trim()}\n");
+
+            return $"答复已送达 {targetName}。";
+        }
+
+        private static string GetConsultThreadPath(string kingdomA, string kingdomB)
+        {
+            var pair = BuildPairKey(kingdomA, kingdomB);
+            var dir = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "diplomacy", "consults");
+            Directory.CreateDirectory(dir);
+            return Path.Combine(dir, pair + ".txt");
+        }
+
+        private static string BuildPairKey(string kingdomA, string kingdomB)
+        {
+            if (string.CompareOrdinal(kingdomA, kingdomB) <= 0)
+                return kingdomA + "_and_" + kingdomB;
+            return kingdomB + "_and_" + kingdomA;
+        }
+
         internal static float CalculateLetterDelay(Hero sender, Hero? recipient)
         {
             if (sender == null || recipient == null) return 0f;
@@ -1953,6 +2254,13 @@ namespace MyFirstMod
             if (prisonerCount > 0)
             {
                 sb.AppendLine("===== 俘虏 =====");
+                foreach (var p in prisoners.Where(p => p.Character != null && p.Character.IsHero))
+                {
+                    var hero = p.Character.HeroObject;
+                    if (hero == null) continue;
+                    var desc = hero.Clan != null ? hero.Clan.Name?.ToString() ?? "无氏族" : "无氏族";
+                    sb.AppendLine($"  [贵族] {hero.Name}（{desc}）");
+                }
                 foreach (var p in prisoners.Where(p => p.Character != null && !p.Character.IsHero))
                 {
                     var tier = p.Character.GetBattleTier();
@@ -2192,12 +2500,15 @@ namespace MyFirstMod
                 var (lo, hi) = FuzzBand(totalMen, 0.2f);
                 sb.AppendLine($"===== {name}的部队（近距侦察） =====");
                 sb.AppendLine($"兵力：约 {hi} 人（{lo}-{hi}，情报误差 ±20%）");
+                var (loMax, hiMax) = FuzzBand(SafePartySizeLimit(party), 0.2f);
+                if (hiMax > 0)
+                    sb.AppendLine($"规模上限：约 {hiMax} 人（{loMax}-{hiMax}，情报误差 ±20%）");
                 var wounded = SafeWounded(party);
                 if (wounded > 0)
                     sb.AppendLine($"伤兵：约 {FuzzRound(wounded, 10)} 人");
                 sb.AppendLine($"兵种构成：{SafeComposition(party, totalMen)}");
                 sb.AppendLine($"当前位置：{SafeLocationDesc(party, leader)}");
-                sb.AppendLine("【侦察情报】近距观察所得，兵力与兵种构成基本可信；金币、军饷、兵种经验、升级路线、俘虏与物资详情无法从外部探知。");
+                sb.AppendLine("【侦察情报】近距观察所得，兵力、规模上限与兵种构成基本可信；金币、军饷、兵种经验、升级路线、俘虏与物资详情无法从外部探知。");
                 return sb.ToString().TrimEnd();
             }
 
@@ -2206,10 +2517,13 @@ namespace MyFirstMod
                 var (lo, hi) = FuzzBand(totalMen, 0.4f);
                 sb.AppendLine($"===== {name}的部队（远方情报） =====");
                 sb.AppendLine($"兵力：约 {lo}-{hi} 人（情报不确定）");
+                var (loMax, hiMax) = FuzzBand(SafePartySizeLimit(party), 0.4f);
+                if (hiMax > 0)
+                    sb.AppendLine($"规模上限：约 {loMax}-{hiMax} 人（情报不确定）");
                 sb.AppendLine($"兵种构成：{SafeComposition(party, totalMen)}");
                 sb.AppendLine($"装备水平：{SafeGearQuality(party, totalMen)}");
                 sb.AppendLine($"当前位置：{SafeLocationDesc(party, leader)}");
-                sb.AppendLine("【情报不确定】远处得来的消息，仅有大致兵力与构成印象；具体军情（金币、军饷、兵种经验、升级路线、俘虏、物资、装备）无从得知。");
+                sb.AppendLine("【情报不确定】远处得来的消息，仅有大致兵力、规模上限与构成印象；具体军情（金币、军饷、兵种经验、升级路线、俘虏、物资、装备）无从得知。");
                 return sb.ToString().TrimEnd();
             }
 
@@ -2224,6 +2538,11 @@ namespace MyFirstMod
         private static int SafeTotalMen(MobileParty party)
         {
             try { return party.MemberRoster?.TotalManCount ?? 0; } catch { return 0; }
+        }
+
+        private static int SafePartySizeLimit(MobileParty party)
+        {
+            try { return party.Party?.PartySizeLimit ?? 0; } catch { return 0; }
         }
 
         private static int SafeWounded(MobileParty party)
@@ -2790,7 +3109,16 @@ namespace MyFirstMod
             }
 
             var entityId = EntityManager.ResolveEntityId(targetEntityId!);
-            if (entityId == null) return null;
+            if (entityId == null)
+            {
+                // 修复：支持按 StringId 精确查找（重名人物多，且已故人物不参与 ResolveEntityId 的名称匹配）。
+                // 例如列传流程 query_recent_events("CharacterObject_2840") 可直接命中被处决者。
+                var byStringId = AllHeroesForQuery().FirstOrDefault(h => h.StringId != null
+                    && h.StringId.Equals(targetEntityId, StringComparison.OrdinalIgnoreCase));
+                if (byStringId != null)
+                    return byStringId;
+                return null;
+            }
 
             var entity = EntityManager.GetEntityById(entityId);
             return entity?.HeroRef;
@@ -2928,6 +3256,239 @@ namespace MyFirstMod
             MobileParty.MainParty.IgnoreForHours(6f);
 
             return $"你决定放{encounteredParty.LeaderHero?.Name?.ToString() ?? "玩家"}一马。对方已安全离开，你的部队短时间内不会再次追击。";
+        }
+
+        /// <summary>按名称在部队俘虏名册中匹配俘虏（支持中英文名，双向包含）。</summary>
+        private static bool PrisonerNameMatches(CharacterObject? troop, string name)
+        {
+            if (troop?.Name == null || string.IsNullOrEmpty(name)) return false;
+            var n = troop.Name.ToString();
+            return n.Contains(name) || name.Contains(n);
+        }
+
+        /// <summary>释放自己部队中的俘虏（贵族英雄或普通士兵）。释放英雄 → EndCaptivityAction（对方成为逃亡者，事件入史）；
+        /// 释放普通士兵 → 直接从俘虏名册移除。</summary>
+        private static string ExecuteReleasePrisoner(string prisonerName, int count, bool all)
+        {
+            var hero = AIChatClient.CurrentHero;
+            if (hero == null) return "[错误] 无当前领主";
+
+            var party = hero.PartyBelongedTo;
+            if (party == null)
+                return $"[错误] {hero.Name} 没有带领部队，无法释放俘虏";
+
+            var prisoners = party.PrisonRoster.GetTroopRoster();
+
+            // 释放全部
+            if (all || string.IsNullOrEmpty(prisonerName))
+            {
+                var releasedHeroes = 0;
+                var releasedTroops = 0;
+                foreach (var p in prisoners.Where(p => p.Character != null).ToList())
+                {
+                    if (p.Character!.IsHero)
+                    {
+                        var h = p.Character.HeroObject;
+                        if (h == null) continue;
+                        EndCaptivityAction.ApplyByReleasedByChoice(h, hero);
+                        releasedHeroes++;
+                    }
+                    else
+                    {
+                        party.PrisonRoster.RemoveTroop(p.Character, p.Number);
+                        releasedTroops += p.Number;
+                    }
+                }
+                return $"已释放全部俘虏：贵族 {releasedHeroes} 人，士兵 {releasedTroops} 人。";
+            }
+
+            var match = prisoners.FirstOrDefault(p => p.Character != null && PrisonerNameMatches(p.Character, prisonerName));
+            if (match.Character == null)
+                return $"[未找到] 部队中没有名为 \"{prisonerName}\" 的俘虏。使用 query_party_troops 查看俘虏列表。";
+
+            if (match.Character.IsHero)
+            {
+                var h = match.Character.HeroObject;
+                if (h == null) return "[错误] 无法解析该俘虏";
+                EndCaptivityAction.ApplyByReleasedByChoice(h, hero);
+                return $"已释放贵族 {h.Name}。对方成为逃亡者，返回领地休整。";
+            }
+
+            var n = count > 0 ? Math.Min(count, match.Number) : match.Number;
+            party.PrisonRoster.RemoveTroop(match.Character, n);
+            return $"已释放 {n} 名 {match.Character.Name} 俘虏。";
+        }
+
+        /// <summary>处决自己部队中的贵族俘虏（仅限贵族英雄）。处决是不可逆的重罪：
+        /// 斩首者名誉下降，受害者氏族/亲友/同阵营贵族对斩首者的好感大幅下降（移植原版玩家处决惩罚给 NPC）。</summary>
+        private static string ExecuteExecutePrisoner(string prisonerName)
+        {
+            var hero = AIChatClient.CurrentHero;
+            if (hero == null) return "[错误] 无当前领主";
+
+            var party = hero.PartyBelongedTo;
+            if (party == null)
+                return $"[错误] {hero.Name} 没有带领部队，无法处决俘虏";
+
+            var prisoners = party.PrisonRoster.GetTroopRoster();
+            var match = prisoners.FirstOrDefault(p =>
+                p.Character != null && p.Character.IsHero && PrisonerNameMatches(p.Character, prisonerName));
+            if (match.Character == null)
+                return $"[未找到] 部队中没有名为 \"{prisonerName}\" 的贵族俘虏（处决仅限贵族）。使用 query_party_troops 查看俘虏列表。";
+
+            var victim = match.Character.HeroObject;
+            if (victim == null) return "[错误] 无法解析该贵族";
+            if (victim == Hero.MainHero)
+                return "[错误] 不能处决玩家本人。";
+            if (victim.IsPlayerCompanion)
+                return $"[错误] {victim.Name} 是玩家的同伴，不能处决。";
+            if (!victim.IsLord)
+                return $"[错误] {victim.Name} 不是贵族，不能处以斩首之刑。";
+
+            // isForced=true：无论"死亡模式"是否开启都强制执行（参考原版叛乱清除成员的用法）。
+            KillCharacterAction.ApplyByExecution(victim, hero, true, true);
+
+            // 政治代价——受 MCM「处决无惩罚」控制（默认开启 = 无惩罚，玩家与 NPC 都可随便处决）：
+            // 仅 NPC 执行者手动施加（玩家执行者的处决代价由原版行为处理，避免叠加；原版惩罚由 Harmony 补丁禁用）。
+            if (MySettings.Instance?.ExecutionNoPenalty != true && !hero.IsHumanPlayerCharacter)
+            {
+                // 名誉下降：移植玩家处决的 -1000 名誉经验（约降 1 级），下限 -2。
+                var honorLevel = hero.GetTraitLevel(DefaultTraits.Honor);
+                if (honorLevel > -2)
+                    hero.SetTraitLevel(DefaultTraits.Honor, honorLevel - 1);
+
+                // 关系惩罚：走游戏自带的 DefaultExecutionRelationModel（已内置 NPC 执行者分支），
+                // 受害者氏族成员/亲友/同阵营贵族/名誉高尚的贵族对斩首者好感下降。
+                var affected = new List<string>();
+                foreach (var other in Hero.AllAliveHeroes)
+                {
+                    if (other == hero || other == victim) continue;
+                    var penalty = Campaign.Current.Models.ExecutionRelationModel
+                        .GetRelationChangeForExecutingHero(victim, other, out var showQuickNotification);
+                    if (penalty != 0)
+                    {
+                        ChangeRelationAction.ApplyRelationChangeBetweenHeroes(hero, other, penalty, showQuickNotification);
+                        affected.Add($"{other.Name}{penalty:+0;-0}");
+                    }
+                }
+
+                var result = $"已处决贵族 {victim.Name}。{hero.Name} 名誉受损，人神共愤，卡拉迪亚贵族间对其恶名昭彰。";
+                if (affected.Count > 0)
+                    result += " 受此影响的关系：" + string.Join("，", affected.Take(8)) + (affected.Count > 8 ? " 等" : "");
+                return result;
+            }
+
+            return $"已处决贵族 {victim.Name}。";
+        }
+
+        /// <summary>
+        /// 天意建族（家族补充系统）：创建一个新的贵族家族。成员 3-6 人由程序随机生成（偏向年轻），
+        /// 家族等级 2（恰好够当封臣又看得出是新族），投效指定王国（封臣或雇佣兵），族长自动获得部队。
+        /// 仅「天意」（__fate__）实体可调用。
+        /// </summary>
+        private static string ExecuteCreateClan(string clanName, string kingdomName, string culture, string motivation, bool isMercenary)
+        {
+            if (AgentManager.ActiveAgentId != "__fate__")
+                return "[拒绝] 只有天意（家族补充系统）能创建家族。";
+            if (string.IsNullOrEmpty(clanName))
+                return "[错误] 请提供家族名称。";
+            if (Campaign.Current == null)
+                return "[错误] 战役未加载。";
+
+            var kingdom = DiplomacyService.FindKingdom(kingdomName);
+            if (kingdom == null)
+                return $"[错误] 未找到王国：{kingdomName}。";
+
+            CultureObject cultureObj = null;
+            if (!string.IsNullOrEmpty(culture))
+            {
+                try
+                {
+                    cultureObj = Game.Current.ObjectManager.GetObjectTypeList<CultureObject>()
+                        .FirstOrDefault(c => (c.Name?.ToString() ?? "").Contains(culture) || culture.Contains(c.Name?.ToString() ?? ""));
+                }
+                catch { }
+            }
+            cultureObj ??= kingdom.Culture;
+            if (cultureObj == null)
+                return "[错误] 无法确定家族文化。";
+
+            var homeSettlement = kingdom.Settlements.FirstOrDefault(s => s.IsTown)
+                ?? Settlement.All.FirstOrDefault(s => s.IsTown && s.Culture == cultureObj)
+                ?? Settlement.All.FirstOrDefault(s => s.IsTown);
+            if (homeSettlement == null)
+                return "[错误] 找不到合适的定居点作为家族根基。";
+
+            try
+            {
+                // 1. 建族
+                var clan = Clan.CreateClan("fate_clan_" + Guid.NewGuid().ToString("N").Substring(0, 6));
+                var nameObj = new TextObject(clanName);
+                clan.ChangeClanName(nameObj, nameObj);
+                clan.Culture = cultureObj;
+                clan.IsNoble = true;
+                // 家族等级 2（恰好够当封臣又看得出是新族）：Tier 私有 setter，改从声望抬升
+                clan.AddRenown(Campaign.Current.Models.ClanTierModel.GetRequiredRenownForTier(2), false);
+                try
+                {
+                    var donor = Clan.All.FirstOrDefault(c => c.Banner != null);
+                    if (donor?.Banner != null)
+                        clan.Banner = new Banner(donor.Banner);
+                }
+                catch { }
+                clan.SetInitialHomeSettlement(homeSettlement);
+
+                // 2. 生成成员（3-6，偏向年轻：族长 25-40，其余 14-35）
+                var memberCount = 3 + _rng.Next(4);
+                var heroes = new List<Hero>();
+                for (var i = 0; i < memberCount; i++)
+                {
+                    try
+                    {
+                        var age = i == 0 ? _rng.Next(25, 41) : _rng.Next(14, 36);
+                        var template = Campaign.Current.Models.HeroCreationModel.GetRandomTemplateByOccupation(Occupation.Lord, homeSettlement);
+                        if (template == null) continue;
+                        var h = HeroCreator.CreateSpecialHero(template, homeSettlement, clan, null, age);
+                        if (h != null) heroes.Add(h);
+                    }
+                    catch { }
+                }
+                if (heroes.Count == 0)
+                    return "[错误] 未能生成家族成员。";
+                clan.SetLeader(heroes[0]);
+
+                // 3. 投效（封臣或雇佣兵）
+                if (isMercenary)
+                    ChangeKingdomAction.ApplyByJoinFactionAsMercenary(clan, kingdom, CampaignTime.Zero, 50, true);
+                else
+                    ChangeKingdomAction.ApplyByJoinToKingdom(clan, kingdom, CampaignTime.Zero, true);
+
+                // 4. 族长带兵
+                try
+                {
+                    var leader = clan.Leader;
+                    if (leader != null)
+                        LordPartyComponent.CreateLordParty(leader.StringId, leader, homeSettlement.GatePosition, 3f, homeSettlement, leader);
+                }
+                catch (Exception ex)
+                {
+                    DebugLogger.Log($"新家族 {clanName} 族长建队失败：{ex.Message}");
+                }
+
+                // 5. 通知游戏 + 入史
+                CampaignEventDispatcher.Instance.OnClanCreated(clan, true);
+                var joinText = isMercenary ? $"以雇佣兵身份效力于{kingdom.Name}" : $"投效{kingdom.Name}";
+                HistoryRecorder.RecordClanCreated($"{clanName}建立（{cultureObj.Name}，家族等级2，{heroes.Count}名成员），{joinText}，族长为{heroes[0].Name}");
+                if (!string.IsNullOrEmpty(motivation))
+                    HistoryRecorder.RecordClanCreated($"新家族{clanName}之立族宣言：{motivation}");
+
+                return $"已降下新的贵族血脉：{clanName}（{cultureObj.Name}文化，家族等级2，{heroes.Count}名成员）——{joinText}，族长{heroes[0].Name}。{(!string.IsNullOrEmpty(motivation) ? " 立族宣言：" + motivation : "")}";
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"create_clan 异常：{ex.Message}");
+                return $"[错误] 创建家族失败：{ex.Message}";
+            }
         }
     }
 }

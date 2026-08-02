@@ -126,6 +126,25 @@ namespace MyFirstMod
                             prefix: new HarmonyMethod(typeof(SubModule).GetMethod(nameof(BlockDiplomacyUI), BindingFlags.Static | BindingFlags.NonPublic)));
                     }
                 }
+
+                // 处决无惩罚（MCM「处决无惩罚」默认开）：禁用处决的荣誉与好感代价。手动注册防 PatchAll 静默跳过。
+                var execHarmony = new Harmony("MyFirstMod.ExecutionNoPenalty");
+                var traitType = Type.GetType("TaleWorlds.CampaignSystem.CharacterDevelopment.TraitLevelingHelper, TaleWorlds.CampaignSystem");
+                if (traitType != null)
+                {
+                    var traitM = traitType.GetMethod("OnLordExecuted", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (traitM != null)
+                        execHarmony.Patch(traitM,
+                            prefix: new HarmonyMethod(typeof(ExecutionNoPenaltyPatch).GetMethod(nameof(ExecutionNoPenaltyPatch.OnLordExecutedPrefix), BindingFlags.Static | BindingFlags.Public)));
+                }
+                var execRelType = Type.GetType("TaleWorlds.CampaignSystem.GameComponents.DefaultExecutionRelationModel, TaleWorlds.CampaignSystem");
+                if (execRelType != null)
+                {
+                    var relM = execRelType.GetMethod("GetRelationChangeForExecutingHero", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (relM != null)
+                        execHarmony.Patch(relM,
+                            prefix: new HarmonyMethod(typeof(ExecutionNoPenaltyPatch).GetMethod(nameof(ExecutionNoPenaltyPatch.GetRelationChangeForExecutingHeroPrefix), BindingFlags.Static | BindingFlags.Public)));
+                }
             }
         }
 

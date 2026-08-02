@@ -44,7 +44,7 @@ namespace MyFirstMod
 
         private static readonly HashSet<string> _readableWorldDirs = new()
         {
-            "history", "history/chronicles", "advisory"
+            "history", "history/chronicles"
         };
 
         public static string ActiveAgentId => _agentEntityId.Value ?? "";
@@ -150,6 +150,9 @@ namespace MyFirstMod
             public int LoyaltyType { get; set; }
             public int RiskTolerance { get; set; }
             public int MandateBelief { get; set; }
+            public int WarLiking { get; set; }
+            /// <summary>维度版本标记：战争倾向 v2 分布（好战 50/30/20）由本版本引入，旧档缺此字段 → 触发重掷。</summary>
+            public int MetaVersion { get; set; }
         }
 
         private static PersonaMeta LoadOrCreatePersonaMeta(Hero hero)
@@ -160,7 +163,9 @@ namespace MyFirstMod
                 Ambition = RollWeightedTrait(skewPositive: true),
                 LoyaltyType = RollLoyaltyType(),
                 RiskTolerance = RollWeightedTrait(skewPositive: false),
-                MandateBelief = RollMandateBelief()
+                MandateBelief = RollMandateBelief(),
+                WarLiking = RollWarLiking(),
+                MetaVersion = 2
             });
         }
 
@@ -178,6 +183,13 @@ namespace MyFirstMod
                         if (!json.Contains("\"MandateBelief\""))
                         {
                             meta.MandateBelief = RollMandateBelief();
+                            File.WriteAllText(path, JsonConvert.SerializeObject(meta, Formatting.Indented), Encoding.UTF8);
+                        }
+                        // 旧存档迁移：战争倾向缺失或为旧版分布（MetaVersion<2）→ 按新分布（好战 50/30/20）重掷并持久化
+                        if (!json.Contains("\"WarLiking\"") || meta.MetaVersion < 2)
+                        {
+                            meta.WarLiking = RollWarLiking();
+                            meta.MetaVersion = 2;
                             File.WriteAllText(path, JsonConvert.SerializeObject(meta, Formatting.Indented), Encoding.UTF8);
                         }
                         return meta;
@@ -234,6 +246,18 @@ namespace MyFirstMod
             if (roll < 64) return 0;
             if (roll < 90) return 1;
             return 2;
+        }
+
+        /// <summary>战争倾向分布（v2，有形的大手）：+2 占 50%、+1 占 30%、0 占 10%、-1 占 6%、-2 占 4%。
+        /// 默认分布过于和平导致 AI 不开战，故意大幅拉高好战比例以激活战争循环——80% 的人好战。</summary>
+        private static int RollWarLiking()
+        {
+            var roll = _rng.Next(100);
+            if (roll < 50) return 2;
+            if (roll < 80) return 1;
+            if (roll < 90) return 0;
+            if (roll < 96) return -1;
+            return -2;
         }
 
         private static string BuildNativeTraitsText(Hero hero)
@@ -303,7 +327,49 @@ namespace MyFirstMod
             };
             sb.AppendLine($"天命信仰：{meta.MandateBelief:+0;-0} — {mandateDesc}");
 
+            var warDesc = meta.WarLiking switch
+            {
+                2 => "穷兵黩武、好战成性——不打仗就浑身难受，即便处于劣势、代价惨重也渴望开战，视征伐为乐趣与荣耀",
+                1 => "主动求战——倾向用战争解决问题，能打就打，会积极寻找甚至制造开战理由，不太权衡代价",
+                0 => "对战争无倾向——有利就打、不利则不战，完全看形势与利益",
+                -1 => "不轻启战端——认为战争是万不得已的最后手段，只有被逼到非战不可时才动武",
+                -2 => "极力避战——任何争端都倾向和平解决，宁可吃亏也不愿开战",
+                _ => "?"
+            };
+            sb.AppendLine($"战争倾向：{meta.WarLiking:+0;-0} — {warDesc}");
+
             return sb.ToString().TrimEnd();
+        }
+
+        /// <summary>persona 完整性检查：标准三段标记缺一即视为被截断/损坏（生成时 max_tokens 不足可能切断输出）。
+        /// 截断自愈：加载时检测到残缺 → 触发重新生成（重新生成失败会写回完整的 fallback，不会死循环）。</summary>
+        private static bool IsCompletePersona(string text)
+        {
+            return text.Contains("[MOTIVATION]")
+                && text.Contains("[TRAITS]")
+                && text.Contains("[SPEECH_STYLE]");
+        }
+
+        /// <summary>有形的大手——战争倾向 v2 迁移：旧档 persona_meta 的 WarLiking 为旧版（过于和平）分布。
+        /// 加载时发现 MetaVersion&lt;2 则按新分布（好战 50/30/20）重掷，并删除 persona.txt 强制重新生成——
+        /// 否则旧人格文本（多为和平倾向）与新 WarLiking 不一致，重掷白做。</summary>
+        private static void EnsureWarTendencyV2(string agentDir, Hero hero)
+        {
+            if (hero == Hero.MainHero) return;
+            var metaPath = Path.Combine(agentDir, "persona_meta.json");
+            if (!File.Exists(metaPath)) return;
+            try
+            {
+                var json = File.ReadAllText(metaPath, Encoding.UTF8);
+                var meta = JsonConvert.DeserializeObject<PersonaMeta>(json);
+                if (meta == null || meta.MetaVersion >= 2) return;
+                meta.WarLiking = RollWarLiking();
+                meta.MetaVersion = 2;
+                File.WriteAllText(metaPath, JsonConvert.SerializeObject(meta, Formatting.Indented), Encoding.UTF8);
+                var personaPath = Path.Combine(agentDir, "persona.txt");
+                if (File.Exists(personaPath)) File.Delete(personaPath);
+            }
+            catch { }
         }
 
         public static string LoadPersona(Hero hero)
@@ -311,9 +377,16 @@ namespace MyFirstMod
             if (string.IsNullOrEmpty(_agentDir))
                 return "名字：" + (hero.Name?.ToString() ?? "未知") + "\n性别：" + (hero.IsFemale ? "女" : "男") + "\n文化：" + (hero.Culture?.Name?.ToString() ?? "未知") + "\n说话风格：使用中世纪贵族的正式口吻。";
 
+            EnsureWarTendencyV2(_agentDir, hero);
+
             var path = Path.Combine(_agentDir, "persona.txt");
             if (File.Exists(path))
-                return File.ReadAllText(path, Encoding.UTF8);
+            {
+                var existing = File.ReadAllText(path, Encoding.UTF8);
+                if (hero != Hero.MainHero && !IsCompletePersona(existing))
+                    return GeneratePersona(hero);
+                return existing;
+            }
 
             if (hero == Hero.MainHero)
                 return "[MOTIVATION]\n你是一位在卡拉迪亚大陆闯荡的冒险者。\n\n[TRAITS]\n- 待探索\n\n[SPEECH_STYLE]\n自由发挥。";
@@ -374,28 +447,43 @@ namespace MyFirstMod
                 .Replace("{native_traits}", nativeTraits)
                 .Replace("{custom_traits}", customTraits);
 
-            var payload = new
+            // 修复：原 max_tokens=1200 且不发 reasoning_effort——DeepSeek 默认思考强度为 high，
+            // 思考 token 计入 max_tokens，思考一多正文就会被截断（persona 生成出过半句）。
+            // 人格生成是模板跟随的机械任务：low 思考即可，4096 上限留足余量。
+            var payload = new JObject
             {
-                model = settings.Model,
-                messages = new[] { new { role = "user", content = prompt } },
-                max_tokens = 1200,
-                temperature = 0.7f
+                ["model"] = settings.Model,
+                ["messages"] = new JArray(new JObject { ["role"] = "user", ["content"] = prompt }),
+                ["max_tokens"] = 4096,
+                ["temperature"] = 0.7f,
+                ["reasoning_effort"] = "low"
             };
-
-            var json = JsonConvert.SerializeObject(payload);
-            var request = new HttpRequestMessage(HttpMethod.Post, settings.ApiUrl)
-            {
-                Content = new StringContent(json, Encoding.UTF8, "application/json")
-            };
-            request.Headers.Add("Authorization", "Bearer " + settings.ApiKey);
 
             var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
-            var response = await _http.SendAsync(request, cts.Token);
+            var response = await _http.SendAsync(BuildPersonaRequest(payload), cts.Token);
+
+            // 端点若不接受 reasoning_effort（400）→ 去掉该参数重试一次
+            if ((int)response.StatusCode == 400)
+            {
+                payload.Remove("reasoning_effort");
+                response = await _http.SendAsync(BuildPersonaRequest(payload), cts.Token);
+            }
             response.EnsureSuccessStatusCode();
 
             var body = await response.Content.ReadAsStringAsync();
             var result = JObject.Parse(body);
             return result["choices"]?[0]?["message"]?["content"]?.ToString()?.Trim() ?? "";
+        }
+
+        private static HttpRequestMessage BuildPersonaRequest(JObject payload)
+        {
+            var settings = MySettings.Instance!;
+            var request = new HttpRequestMessage(HttpMethod.Post, settings.ApiUrl)
+            {
+                Content = new StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
+            };
+            request.Headers.Add("Authorization", "Bearer " + settings.ApiKey);
+            return request;
         }
 
         private static string LoadPersonaGenerationPrompt()
@@ -487,8 +575,13 @@ namespace MyFirstMod
                 if (Directory.Exists(worldDir))
                 {
                     foreach (var file in Directory.GetFiles(worldDir, "*.txt", SearchOption.AllDirectories))
+                    {
+                        // 只搜当前 agent 有权读取的文件（防 grep World 绕过权限读到别国密陈/外交）
+                        var rel = file.Substring(worldDir.Length).TrimStart('\\', '/').Replace('\\', '/');
+                        if (!IsPathAllowed(rel, read: true)) continue;
                         if (SearchFile(file, worldDir, "World", pattern, comparison, contextLines, maxResults, ref matchCount, results))
                             break;
+                    }
                 }
             }
             else
@@ -722,7 +815,11 @@ namespace MyFirstMod
                         foreach (var f in files)
                         {
                             var rel = f.FullName.Substring(baseDir.Length).TrimStart('/', '\\').Replace('\\', '/').TrimStart('/');
-                            if (isWorld || isWorldHistory) rel = "World/" + rel;
+                            if (isWorld || isWorldHistory)
+                            {
+                                if (!IsPathAllowed(rel, read: true)) continue; // 只列出有权读取的文件
+                                rel = "World/" + rel;
+                            }
                             results.AppendLine("[FILE] " + rel);
                         }
                     }
@@ -733,7 +830,11 @@ namespace MyFirstMod
                     foreach (var f in files)
                     {
                         var rel = f.FullName.Substring(baseDir.Length).TrimStart('/', '\\').Replace('\\', '/').TrimStart('/');
-                        if (isWorld || isWorldHistory) rel = "World/" + rel;
+                        if (isWorld || isWorldHistory)
+                        {
+                            if (!IsPathAllowed(rel, read: true)) continue; // 只列出有权读取的文件
+                            rel = "World/" + rel;
+                        }
                         results.AppendLine("[FILE] " + rel);
                     }
                 }
@@ -833,9 +934,16 @@ namespace MyFirstMod
             if (string.IsNullOrEmpty(_baseDir))
                 return "名字：" + (hero.Name?.ToString() ?? "未知") + "\n性别：" + (hero.IsFemale ? "女" : "男") + "\n文化：" + (hero.Culture?.Name?.ToString() ?? "未知") + "\n说话风格：使用中世纪贵族的正式口吻。";
 
+            EnsureWarTendencyV2(agentDir, hero);
+
             var path = Path.Combine(agentDir, "persona.txt");
             if (File.Exists(path))
-                return File.ReadAllText(path, Encoding.UTF8);
+            {
+                var existing = File.ReadAllText(path, Encoding.UTF8);
+                if (hero != Hero.MainHero && !IsCompletePersona(existing))
+                    return GeneratePersonaFor(agentId, hero);
+                return existing;
+            }
 
             if (hero == Hero.MainHero)
                 return "[MOTIVATION]\n你是一位在卡拉迪亚大陆闯荡的冒险者。\n\n[TRAITS]\n- 待探索\n\n[SPEECH_STYLE]\n自由发挥。";
@@ -942,7 +1050,9 @@ namespace MyFirstMod
                 Ambition = RollWeightedTrait(skewPositive: true),
                 LoyaltyType = RollLoyaltyType(),
                 RiskTolerance = RollWeightedTrait(skewPositive: false),
-                MandateBelief = RollMandateBelief()
+                MandateBelief = RollMandateBelief(),
+                WarLiking = RollWarLiking(),
+                MetaVersion = 2
             });
         }
 
@@ -1154,14 +1264,16 @@ namespace MyFirstMod
             if (read && !write)
             {
                 if (_readableDirs.Contains(dirPart)) return true;
-                if (isWorldPath) return true;
-                if (IsSecretAdvisoryAllowed(relPath)) return true; // 本国王可读本国秘密谏言
+                if (IsConsultAllowed(relPath)) return true;        // 外交问询：史官任何国家、参与双方国王
+                if (IsPublicDocAllowed(relPath)) return true;      // 公开诏令/谏言：史官任何国家、其他仅本国
+                if (IsSecretAdvisoryAllowed(relPath)) return true; // 秘密谏言：仅本国国王
+                if (isWorldPath) return true;                      // 其余世界只读文件（史料/编年史/世界名册）
             }
 
             if (write && _writableDirs.Contains(dirPart))
                 return true;
 
-            if (write && _agentEntityId.Value == "__historian__")
+            if (write && (_agentEntityId.Value == "__historian__" || _agentEntityId.Value == "__fate__"))
             {
                 if (relPath.StartsWith("history/chronicles/") || relPath == "history/chronicles")
                     return true;
@@ -1183,10 +1295,16 @@ namespace MyFirstMod
             if (_readableWorldFiles.Contains(relPath))
                 return Path.Combine(_baseDir, "World", relPath);
 
-            if (_readableWorldDirs.Any(d => relPath.StartsWith(d + "/") || relPath == d))
+            if (IsConsultAllowed(relPath))
+                return Path.Combine(_baseDir, "World", relPath);
+
+            if (IsPublicDocAllowed(relPath))
                 return Path.Combine(_baseDir, "World", relPath);
 
             if (IsSecretAdvisoryAllowed(relPath))
+                return Path.Combine(_baseDir, "World", relPath);
+
+            if (_readableWorldDirs.Any(d => relPath.StartsWith(d + "/") || relPath == d))
                 return Path.Combine(_baseDir, "World", relPath);
 
             if (string.IsNullOrEmpty(_agentDir))
@@ -1197,21 +1315,86 @@ namespace MyFirstMod
             return full.StartsWith(agentRoot, StringComparison.Ordinal) ? full : null;
         }
 
+        /// <summary>从 {王国}_{年} 文件名提取王国名（去掉末尾 _年份）。</summary>
+        private static string? KingdomNameFromFile(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName)) return null;
+            var idx = fileName.LastIndexOf('_');
+            if (idx > 0) fileName = fileName.Substring(0, idx);
+            return string.IsNullOrEmpty(fileName) ? null : fileName;
+        }
+
         /// <summary>
-        /// 秘密谏言（World/secret_advisory/{王国}_{年}.txt）的读取授权：只有该王国的统治者可读。
-        /// 史官（__historian__，HeroRef 为 null）与异国君主天然无权。
+        /// 公开诏令/谏言（World/advisory|edict/）的读取授权：史官可读任何国家；其他 agent 仅本国
+        /// （按文件名王国名与自身王国匹配）。非史官不可列整个目录，只能读本国文件。
+        /// </summary>
+        private static bool IsPublicDocAllowed(string relPath)
+        {
+            var isPublicDoc = relPath == "advisory" || relPath.StartsWith("advisory/", StringComparison.Ordinal)
+                           || relPath == "edict" || relPath.StartsWith("edict/", StringComparison.Ordinal);
+            if (!isPublicDoc) return false;
+
+            if (_agentEntityId.Value == "__historian__")
+                return true; // 史官：任何国家的公开诏令/谏言
+
+            if (relPath == "advisory" || relPath == "edict")
+                return false; // 非史官不可列整个目录，只读本国文件
+
+            var hero = EntityManager.GetEntityById(_agentEntityId.Value ?? "")?.HeroRef;
+            var kingdom = hero?.MapFaction as Kingdom;
+            if (kingdom == null) return false;
+            var kingdomName = KingdomNameFromFile(Path.GetFileNameWithoutExtension(relPath));
+            return kingdomName != null
+                && string.Equals(kingdom.Name?.ToString(), kingdomName, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 秘密谏言（World/secret_advisory/{王国}_{年}.txt）的读取授权：只有本国国王可读。
+        /// 封臣与史官（__historian__，HeroRef 为 null）及异国人员天然无权。
         /// </summary>
         private static bool IsSecretAdvisoryAllowed(string relPath)
         {
             if (!relPath.StartsWith("secret_advisory/", StringComparison.Ordinal)) return false;
             var fileName = Path.GetFileNameWithoutExtension(relPath); // 北帝国_1089
             if (string.IsNullOrEmpty(fileName)) return false;
-            var idx = fileName.LastIndexOf('_');
-            if (idx > 0) fileName = fileName.Substring(0, idx); // 去掉末尾 _年份
+            var kingdomName = KingdomNameFromFile(fileName);
 
             var hero = EntityManager.GetEntityById(_agentEntityId.Value ?? "")?.HeroRef;
             var kingdom = hero?.MapFaction as Kingdom;
-            return kingdom != null && string.Equals(kingdom.Name?.ToString(), fileName, StringComparison.Ordinal);
+            // 只有本国国王可读密陈——连本国的封臣也不可
+            return kingdom != null
+                && kingdom.RulingClan?.Leader == hero
+                && kingdomName != null
+                && string.Equals(kingdom.Name?.ToString(), kingdomName, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 外交问询线程（World/diplomacy/consults/{X}_and_{Y}.txt）的读取授权：
+        /// 史官可读任何国家的公开外交问询；参与双方国王可读自己的线程；第三方不可读。
+        /// </summary>
+        private static bool IsConsultAllowed(string relPath)
+        {
+            if (!relPath.StartsWith("diplomacy/consults/", StringComparison.Ordinal)) return false;
+            if (_agentEntityId.Value == "__historian__")
+                return true; // 史官：任何国家的公开外交问询
+
+            var fileName = Path.GetFileNameWithoutExtension(relPath); // {X}_and_{Y}
+            if (string.IsNullOrEmpty(fileName)) return false;
+
+            var hero = EntityManager.GetEntityById(_agentEntityId.Value ?? "")?.HeroRef;
+            var kingdom = hero?.MapFaction as Kingdom;
+            if (kingdom == null || kingdom.RulingClan?.Leader != hero) return false; // 仅国王可读
+
+            var ownName = kingdom.Name?.ToString();
+            if (string.IsNullOrEmpty(ownName)) return false;
+
+            var sep = "_and_";
+            var idx = fileName.IndexOf(sep, StringComparison.Ordinal);
+            if (idx <= 0) return false;
+            var nameA = fileName.Substring(0, idx);
+            var nameB = fileName.Substring(idx + sep.Length);
+            return string.Equals(ownName, nameA, StringComparison.Ordinal)
+                || string.Equals(ownName, nameB, StringComparison.Ordinal);
         }
 
         private static string SanitizeDir(string name)

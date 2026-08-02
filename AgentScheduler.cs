@@ -20,7 +20,9 @@ namespace MyFirstMod
         YearlyChronicle,
         SpecialChronicle,
         Advisory,
-        FiefReview
+        FiefReview,
+        KingConsult,
+        ClanReplenishment
     }
 
     public class ActivationEvent
@@ -35,9 +37,9 @@ namespace MyFirstMod
         public int Priority => Type switch
         {
             ActivationEventType.YearlyChronicle or ActivationEventType.SpecialChronicle => 0,
-            ActivationEventType.KingDiplomacy => 1,
+            ActivationEventType.KingDiplomacy or ActivationEventType.KingConsult => 1,
             ActivationEventType.LetterReceived => 2,
-            ActivationEventType.BehaviorCheckIn or ActivationEventType.PlanCheckIn or ActivationEventType.FiefReview => 3,
+            ActivationEventType.BehaviorCheckIn or ActivationEventType.PlanCheckIn or ActivationEventType.FiefReview or ActivationEventType.ClanReplenishment => 3,
             _ => 4
         };
     }
@@ -66,11 +68,14 @@ namespace MyFirstMod
         private static bool _playerProposalShowing;
         private static int _lastChronicleYear;
         private static int _lastExpiryCheckDay = -1;
+        private static int _lastClanReplenishDay = -1;
         private static bool _historianInitialized;
         private static int _warmupFramesHistorian = 60;
         private static readonly Random _rng = new();
         private static readonly Dictionary<Kingdom, string> _lastAdvisorySpeaker = new();
         private static readonly Dictionary<Kingdom, CampaignTime> _lastAdvisoryCheck = new();
+        private static readonly Dictionary<string, CampaignTime> _lastConsultByPair = new();
+        private const double ConsultCooldownDays = 7.0;
 
         public static bool IsProcessing => _inFlightCount > 0;
         public static int CurrentProcessingDepth
@@ -102,6 +107,7 @@ namespace MyFirstMod
             _historianInitialized = false;
             _lastAdvisorySpeaker.Clear();
             _lastAdvisoryCheck.Clear();
+            _lastConsultByPair.Clear();
             _nextKingIndex = 0;
             _warmupFrames = 120;
             _warmupFramesHistorian = 60;
@@ -134,6 +140,58 @@ namespace MyFirstMod
             MainThreadExecutor.DisplayMessage(new InformationMessage(
                 "[MyFirstMod] 封臣谏言计时器已重置，封臣们将在接下来的游戏日中陆续进谏。",
                 Colors.Cyan));
+        }
+
+        /// <summary>外交问询冷却（每王国对）：问询后 N 游戏天才能再次遣使，防刷。返回是否可问询，不可时给出剩余天数。</summary>
+        public static bool TryConsult(string pairKey, out int daysRemaining)
+        {
+            daysRemaining = 0;
+            if (_lastConsultByPair.TryGetValue(pairKey, out var last))
+            {
+                var elapsed = (CampaignTime.Now - last).ToDays;
+                if (elapsed < ConsultCooldownDays)
+                {
+                    daysRemaining = (int)Math.Ceiling(ConsultCooldownDays - elapsed);
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        public static void RecordConsult(string pairKey)
+        {
+            _lastConsultByPair[pairKey] = CampaignTime.Now;
+        }
+
+        /// <summary>国王政务审视时注入的外交问询回音：扫 consults/ 下含本国的对，取最后一条对方发来的问询/答复。</summary>
+        private static string BuildConsultInjection(Kingdom kingdom)
+        {
+            if (string.IsNullOrEmpty(PromptManager.CampaignDir)) return "";
+            var kingdomName = kingdom.Name?.ToString();
+            if (string.IsNullOrEmpty(kingdomName)) return "";
+            var consultsDir = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "diplomacy", "consults");
+            if (!Directory.Exists(consultsDir)) return "";
+
+            var notes = new List<string>();
+            try
+            {
+                foreach (var file in Directory.GetFiles(consultsDir, "*.txt"))
+                {
+                    var fname = Path.GetFileNameWithoutExtension(file);
+                    if (!fname.Contains(kingdomName)) continue; // 只关心含本国的对
+                    var all = SafeFileIO.ReadAllLines(file);
+                    if (all.Length == 0) continue;
+                    var last = all[all.Length - 1].Trim();
+                    if (last.Length == 0) continue;
+                    // 最后一条是自己发出的（问询尚无回音），不注入；对方发来的才注入
+                    if (last.Contains("（" + kingdomName + "国王）")) continue;
+                    notes.Add(last);
+                }
+            }
+            catch { }
+
+            if (notes.Count == 0) return "";
+            return "\n（提示：你与他国的外交问询记录——\n" + string.Join("\n", notes) + "\n可用 reply_consult 回复对方，或置之不理。）\n";
         }
 
         public static void QueueEvent(ActivationEvent evt)
@@ -207,6 +265,57 @@ namespace MyFirstMod
             DiplomacyService.CheckExpiringAgreements();
         }
 
+        /// <summary>统计当前封臣/雇佣兵家族数量。</summary>
+        private static (int Vassals, int Mercenaries) CountClans()
+        {
+            if (Campaign.Current == null) return (0, 0);
+            var vassals = 0;
+            var mercenaries = 0;
+            foreach (var clan in Clan.All)
+            {
+                if (clan == null || clan.Leader == null) continue;
+                if (clan.IsUnderMercenaryService)
+                    mercenaries++;
+                else if (clan.Kingdom != null && !clan.IsRebelClan && clan.IsNoble)
+                    vassals++;
+            }
+            return (vassals, mercenaries);
+        }
+
+        /// <summary>每日检测：封臣/雇佣兵家族低于下限时，激活「天意」补充新家族（家族补充系统，防大屠杀导致世家凋零）。
+        /// 有冷却（2 游戏天），且已有待处理的补充事件时不重复排队。</summary>
+        private static void CheckClanReplenishment()
+        {
+            if (Campaign.Current == null) return;
+            var settings = MySettings.Instance;
+            if (settings?.ClanReplenishmentEnabled != true) return;
+
+            var nowDays = (int)CampaignTime.Now.ToDays;
+            if (_lastClanReplenishDay >= 0 && nowDays - _lastClanReplenishDay < 2) return;
+            if (string.IsNullOrEmpty(PromptManager.CampaignDir)) return;
+
+            var (vassals, mercenaries) = CountClans();
+            var vassalThreshold = settings.MinVassalClans;
+            var mercenaryThreshold = settings.MinMercenaryClans;
+            if (vassals >= vassalThreshold && mercenaries >= mercenaryThreshold)
+                return;
+
+            // 差距过大时连续激活：一次补一个，_lastClanReplenishDay 只在排队成功后推进
+            _lastClanReplenishDay = nowDays;
+            var needVassal = Math.Max(0, vassalThreshold - vassals);
+            var needMercenary = Math.Max(0, mercenaryThreshold - mercenaries);
+            var content = $"当前封臣家族 {vassals} 个（下限 {vassalThreshold}，缺 {needVassal} 个）；雇佣兵家族 {mercenaries} 个（下限 {mercenaryThreshold}，缺 {needMercenary} 个）。请按规则创建一个新家族。";
+
+            QueueEvent(new ActivationEvent
+            {
+                Type = ActivationEventType.ClanReplenishment,
+                AgentId = "__fate__",
+                TargetId = "__fate__",
+                Content = content,
+                Depth = 0
+            });
+        }
+
         public static void Tick()
         {
             CheckExpiringAgreements();
@@ -222,6 +331,7 @@ namespace MyFirstMod
                 {
                     CheckKingActivations();
                     CheckAdvisoryActivations();
+                    CheckClanReplenishment();
                 }
                 return;
             }
@@ -301,7 +411,8 @@ namespace MyFirstMod
                     : "";
 
                 var currentYear = CampaignTime.Now.GetYear;
-                var advisoryNote = $"\n（提示：先用 read_file 阅读 advisory/{kingdom.Name}_{currentYear}.txt 了解封臣们的公开谏言，再用 read_file 阅读 secret_advisory/{kingdom.Name}_{currentYear}.txt 查看封臣们的秘密陈奏——后者仅你可见、不入史册。群臣意见是你的决策参考，但你的决定权至高无上。）\n";
+                var advisoryNote = $"\n（提示：先用 read_file 阅读 advisory/{kingdom.Name}_{currentYear}.txt 了解封臣们的公开谏言，再用 read_file 阅读 secret_advisory/{kingdom.Name}_{currentYear}.txt 查看封臣们的秘密陈奏——后者仅你可见、不入史册。群臣意见是你的决策参考，但你的决定权至高无上。若需向国内宣示方针、回应群臣或垂询政务，可调用 submit_edict 颁布公开诏令——封臣进谏前会先读你的诏令，史官也会记载。）\n";
+                var consultNote = BuildConsultInjection(kingdom);
 
                 var activationMsg =
                     $"你是{kingdom.Name}的至高统治者。审视你的王国局势，凭自己的判断做出外交决断。\n\n"
@@ -309,13 +420,15 @@ namespace MyFirstMod
                     + $"步骤2：调用 query_war_status 了解当前所有战争的战况\n"
                     + proposalLines
                     + advisoryNote
+                    + consultNote
                     + $"\n（提示：你可以在 goals/strategy.txt 中记录你的长期战略方针，如交好谁、提防谁、扩张方向等。每次外交审视前，先 read_file 查看已有战略，据此做出连贯的决策；局势变化时可 edit_file 调整。）\n\n"
                     + $"然后依据你自己的判断采取行动——以下是你可用的外交工具：\n"
                     + "- propose_peace：结束一场战争（可附带赔款条件）\n"
                     + "- propose_alliance：与中立王国结盟\n"
                     + "- propose_trade：与中立王国签订贸易协定\n"
-                    + "- declare_war：宣战\n\n"
-                    + "不要幻想或虚构数据。send_letter 不能替代外交动作（宣战/议和/结盟必须用对应 function），但可用 send_letter 写信通知、沟通、试探他人。";
+                    + "- declare_war：宣战\n"
+                    + "- submit_edict：颁布公开诏令，向国内宣示方针、回应群臣或垂询政务（可选）\n\n"
+                    + "不要幻想或虚构数据。不要用 send_letter 处理外交事务——外交方案只用上述 function 发起；需要向国内传达旨意时，用 submit_edict 颁布公开诏令。";
 
                 QueueEvent(new ActivationEvent
                 {
@@ -469,6 +582,12 @@ namespace MyFirstMod
                     return;
                 }
 
+                if (evt.Type == ActivationEventType.ClanReplenishment)
+                {
+                    await ProcessClanReplenishmentEvent(evt);
+                    return;
+                }
+
                 if (evt.Type == ActivationEventType.Advisory)
                 {
                     var vassal = EntityManager.GetEntityById(evt.AgentId);
@@ -518,6 +637,12 @@ namespace MyFirstMod
                     MainThreadExecutor.DisplayMessage(new InformationMessage(
                         $"{agentName} 发现自己被夺封了...",
                         Colors.Yellow));
+                }
+                else if (evt.Type == ActivationEventType.KingConsult)
+                {
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
+                        $"{targetName} 遣使问询 {agentName}，{agentName} 正在回应...",
+                        Colors.Cyan));
                 }
                 else
                 {
@@ -576,6 +701,7 @@ namespace MyFirstMod
                     ActivationEventType.KingDiplomacy => "diplomacy",
                     ActivationEventType.PlanCheckIn => "chat",
                     ActivationEventType.FiefReview => "fief_review",
+                    ActivationEventType.KingConsult => "king_consult",
                     _ => "letter"
                 };
                 var response = await AIChatClient.SendMessage(
@@ -635,6 +761,14 @@ namespace MyFirstMod
                 MainThreadExecutor.DisplayMessage(new InformationMessage(
                     $"你的封地遭变故：{evt.Content}",
                     Colors.Red));
+                return;
+            }
+
+            if (evt.Type == ActivationEventType.KingConsult)
+            {
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
+                    $"{senderEntity.Name} 遣使问询你，按 M 键秘书处查看并回应。",
+                    Colors.Cyan));
                 return;
             }
         }
@@ -716,6 +850,51 @@ namespace MyFirstMod
                 }),
                 pauseGameActiveState: true,
                 prioritize: true);
+        }
+
+        /// <summary>家族补充：激活「天意」实体，让它按当前家族统计创建新家族（create_clan 工具）。</summary>
+        private static async Task ProcessClanReplenishmentEvent(ActivationEvent evt)
+        {
+            var settings = MySettings.Instance;
+            if (settings == null || string.IsNullOrEmpty(settings.ApiKey))
+                return;
+
+            try
+            {
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
+                    "天意降下新的贵族血脉...",
+                    Colors.Cyan));
+
+                EntityManager.ActivateFate();
+
+                if (string.IsNullOrEmpty(evt.Content))
+                {
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
+                        "[MyFirstMod] 家族补充事件内容为空，跳过。", Colors.Yellow));
+                    return;
+                }
+
+                var charPrompt = new CharacterPrompt
+                {
+                    HeroId = "__fate__",
+                    HeroName = "天意",
+                    ChatHistory = new List<ChatHistoryEntry>
+                    {
+                        new() { Role = "user", Content = evt.Content }
+                    }
+                };
+
+                var response = await AIChatClient.SendMessage(
+                    charPrompt, hero: null, includeTools: true, intent: "clan_replenishment");
+
+                var createdClan = response.ToolCalls.Any(tc => tc.Name == "create_clan");
+                if (!createdClan)
+                    DebugLogger.Log($"天意未调用 create_clan，本次补充未落地（稍后会再次尝试）。response={response.Content?.Substring(0, Math.Min(100, response.Content?.Length ?? 0))}");
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"家族补充处理异常：{ex.Message}");
+            }
         }
 
         private static async Task ProcessHistorianEvent(ActivationEvent evt)
@@ -998,9 +1177,10 @@ namespace MyFirstMod
                         + $"当前时间：{currentTime}\n\n"
                         + $"作为{kingdomName}的封臣，请审视王国当前的局势，向国王进谏。\n"
                         + "步骤：\n"
-                        + "1. 如需回顾你之前的私人记录，可用 read_file 阅读 decisions/personal_notes.txt\n"
-                        + "2. 用 query_world_state、query_war_status 等工具了解当前局势\n"
-                        + "3. 用 submit_advisory 工具提交你的公开谏言（在 content 参数里直接写谏言正文）；若有不便入史的内容，用 submit_secret_advisory 密陈给国王\n"
+                        + $"1. 先用 read_file 阅读国王的公开诏令（edict/{kingdomName}_{currentYear}.txt；若为空说明国王本年尚无诏令，必要时可用 glob 查看 edict/ 目录了解国王近期诏令），了解王上的旨意与垂询；若国王在诏令中垂询某事，应在谏言中回应\n"
+                        + "2. 如需回顾你之前的私人记录，可用 read_file 阅读 decisions/personal_notes.txt\n"
+                        + "3. 用 query_world_state、query_war_status 等工具了解当前局势\n"
+                        + "4. 用 submit_advisory 工具提交你的公开谏言（在 content 参数里直接写谏言正文）；若有不便入史的内容，用 submit_secret_advisory 密陈给国王\n"
                         + "\n注意：谏言正文直接填进 submit_advisory / submit_secret_advisory 的 content 参数，不要写在你的回复文本里。"
                         + $"如有需要记录的私人想法，可用 write_file 写入 decisions/personal_notes.txt。";
 

@@ -19,6 +19,7 @@ namespace MyFirstMod
         public MobileParty? TargetParty;
         public int WaitHours;
         public float CheckInHours;
+        public CampaignTime? CreatedAt;   // 持久行为下发时间（卡死保险：到不了目标点时超时释放用）
         public CampaignTime? ArrivedAt;
         public bool TargetReached;
         public bool CheckInQueued;
@@ -112,6 +113,10 @@ namespace MyFirstMod
                         keysToRemove.Add(kv.Key);
                         continue;
                     }
+
+                    // 持久行为下发时间兜底（工具侧已设置；此处防遗漏，保证卡死保险有时间基准）
+                    if (action.CheckInHours > 0f && action.CreatedAt == null)
+                        action.CreatedAt = CampaignTime.Now;
 
                     if (action.Behavior == AiBehavior.EngageParty
                         || action.Behavior == AiBehavior.EscortParty)
@@ -210,6 +215,45 @@ namespace MyFirstMod
 
                         if (action.TargetReached && action.ArrivedAt == null)
                             action.ArrivedAt = CampaignTime.Now;
+                    }
+
+                    // 卡死保险：持久行为（驻防/巡逻/护送）下发后长时间未能到达目标点
+                    //（被拦截/目标遥不可及/巡逻绕圈不进判定圈），强制触发签到释放——
+                    // 否则 PendingAction 永不移除、mod 每帧重发覆盖原版 AI、agent 永不激活而静默卡死。
+                    // 超时阈值 = 2× 签到周期（驻防 6 天/巡逻 4 天/护送 2 天）。正常到达时此分支永不触发。
+                    if (action.CheckInHours > 0f && !action.TargetReached
+                        && action.CreatedAt != null
+                        && (CampaignTime.Now - action.CreatedAt.Value).ToDays >= action.CheckInHours / 24f * 2f
+                        && CheckInCooldownPassed(hero.Id.ToString()))
+                    {
+                        MarkCheckIn(hero.Id.ToString());
+                        var agentEntity = EntityManager.GetEntityByHero(hero);
+                        if (agentEntity != null)
+                        {
+                            var locDesc = action.TargetSettlement?.Name?.ToString()
+                                ?? action.TargetParty?.Name?.ToString()
+                                ?? "目标";
+                            var behaviorDesc = action.Behavior switch
+                            {
+                                AiBehavior.DefendSettlement => "驻防",
+                                AiBehavior.PatrolAroundPoint => "巡逻",
+                                AiBehavior.EscortParty => "护送",
+                                _ => "执行任务"
+                            };
+                            var stuckContent =
+                                $"你奉命{behaviorDesc} {locDesc}，但已过去{(int)(action.CheckInHours * 2)}小时仍未到达目标（可能被拦截或目标遥不可及）。\n" +
+                                $"请决定：1) 放弃该任务，转往他处 2) 继续尝试 3) 向阵营领袖汇报。";
+                            AgentScheduler.QueueEvent(new ActivationEvent
+                            {
+                                Type = ActivationEventType.BehaviorCheckIn,
+                                AgentId = agentEntity.Id,
+                                TargetId = agentEntity.Id,
+                                Content = stuckContent,
+                                Depth = 0
+                            });
+                        }
+                        keysToRemove.Add(kv.Key);
+                        continue;
                     }
 
                     if (action.CheckInHours > 0f && action.TargetReached

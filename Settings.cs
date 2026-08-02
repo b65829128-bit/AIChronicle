@@ -348,6 +348,24 @@ namespace MyFirstMod
             }
         }
 
+        private bool _useGameRules = true;
+
+        [SettingPropertyBool("注入游戏规则", Order = 8, RequireRestart = false,
+            HintText = "是否在提示词中加入卡拉迪亚的实际运转规则（机动/金钱/部队上限/兵种/招募/战争/影响力），让 agent 按游戏机制而非现实经验做决策。关闭可节省 token。")]
+        [SettingPropertyGroup("游戏设置")]
+        public bool UseGameRules
+        {
+            get => _useGameRules;
+            set
+            {
+                if (_useGameRules != value)
+                {
+                    _useGameRules = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private int _surroundingsScanRadius = 20;
 
         [SettingPropertyInteger("环境扫描半径（km）", 5, 200, Order = 8, RequireRestart = false,
@@ -541,6 +559,78 @@ namespace MyFirstMod
                 if (_chronicleFontSize != value)
                 {
                     _chronicleFontSize = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private bool _executionNoPenalty = true;
+
+        [SettingPropertyBool("处决无惩罚", Order = 16, RequireRestart = false,
+            HintText = "开启：处决贵族俘虏不承受任何政治代价——斩首者名誉不降、全图贵族好感不降（玩家与 NPC 均生效）。\n关闭：恢复原版/模组处决惩罚（名誉大降 + 受害者氏族/亲友/同阵营贵族好感大降）。")]
+        [SettingPropertyGroup("游戏设置")]
+        public bool ExecutionNoPenalty
+        {
+            get => _executionNoPenalty;
+            set
+            {
+                if (_executionNoPenalty != value)
+                {
+                    _executionNoPenalty = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private bool _clanReplenishmentEnabled = true;
+
+        [SettingPropertyBool("启用家族补充", Order = 17, RequireRestart = false,
+            HintText = "开启：封臣家族或雇佣兵家族数量低于下限时，激活「天意」agent 补充新的贵族家族，防止大屠杀导致世家凋零、世界崩解。")]
+        [SettingPropertyGroup("游戏设置")]
+        public bool ClanReplenishmentEnabled
+        {
+            get => _clanReplenishmentEnabled;
+            set
+            {
+                if (_clanReplenishmentEnabled != value)
+                {
+                    _clanReplenishmentEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _minVassalClans = 70;
+
+        [SettingPropertyInteger("封臣家族补充阈值", 20, 150, Order = 18, RequireRestart = false,
+            HintText = "封臣家族（非雇佣兵、非叛军的贵族氏族）数量低于此值时触发「天意」补充新家族。单位：家族。原版卡拉迪亚约 70 个封臣家族——调低则世界更冷清、家族更稀有，调高则世家更兴旺。")]
+        [SettingPropertyGroup("游戏设置")]
+        public int MinVassalClans
+        {
+            get => _minVassalClans;
+            set
+            {
+                if (_minVassalClans != value)
+                {
+                    _minVassalClans = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _minMercenaryClans = 8;
+
+        [SettingPropertyInteger("雇佣兵家族补充阈值", 2, 30, Order = 19, RequireRestart = false,
+            HintText = "雇佣兵家族数量低于此值时触发「天意」补充。单位：家族。原版卡拉迪亚约 8 个雇佣兵家族。")]
+        [SettingPropertyGroup("游戏设置")]
+        public int MinMercenaryClans
+        {
+            get => _minMercenaryClans;
+            set
+            {
+                if (_minMercenaryClans != value)
+                {
+                    _minMercenaryClans = value;
                     OnPropertyChanged();
                 }
             }

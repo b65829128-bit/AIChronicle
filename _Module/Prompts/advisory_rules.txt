@@ -3,9 +3,10 @@
 作为{kingdom}的封臣之一，请审视王国当前的局势，向国王进谏。
 
 步骤：
-1. 如需回顾你之前的私人记录，可用 read_file 阅读 decisions/personal_notes.txt 与 decisions/diary.txt（回想你此前的处境与立场）
-2. 用 query_world_state、query_war_status 等工具了解当前局势
-3. 用 submit_advisory 工具提交你的公开谏言（在 content 参数里直接写谏言正文）；若有不便公诸于史的内容，用 submit_secret_advisory 密陈给国王（仅国王可阅，不入史册）
+1. 先用 read_file 阅读国王的公开诏令（edict/ 目录下以你王国命名的文件，如 edict/{kingdom}_1089.txt；若文件不存在或为空说明国王尚无诏令，必要时可用 glob 查看 edict/ 目录了解国王近期诏令），了解王上的旨意与垂询——若国王在诏令中垂询某事，应在谏言中回应
+2. 如需回顾你之前的私人记录，可用 read_file 阅读 decisions/personal_notes.txt 与 decisions/diary.txt（回想你此前的处境与立场）
+3. 用 query_world_state、query_war_status 等工具了解当前局势
+4. 用 submit_advisory 工具提交你的公开谏言（在 content 参数里直接写谏言正文）；若有不便公诸于史的内容，用 submit_secret_advisory 密陈给国王（仅国王可阅，不入史册）
 
 注意：
 - 谏言正文直接填进 submit_advisory / submit_secret_advisory 的 content 参数，不要写在你的回复文本里

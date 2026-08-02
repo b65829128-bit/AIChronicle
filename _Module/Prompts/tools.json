@@ -229,6 +229,23 @@
     ]
   },
   {
+    "name": "form_army",
+    "category": "military",
+    "description": "Gather an army from your kingdom's lords and lead it against a target settlement. The army forms, your fellow lords assemble to you, and the whole army then acts under the realm's command — you hand off control and no longer need to issue orders while the army operates.\n\nUsage:\n- Call this when you intend a major military action (besieging a fortress or raiding a village) and want the strength of an assembled army rather than your party alone.\n- Requires: influence over 100, your kingdom at war, your party large enough, and you leading your clan (a clan leader). Not for mercenaries.\n- target_settlement: the settlement to act against (a town/castle for siege or defense, a village for raid).\n- army_type: besiege (attack a fortress) / raid (plunder a village) / defend (RELIEVE a town or castle that is currently under siege — the army assembles to break the siege, NOT a garrison order; to garrison with a single party use defend_settlement instead).\n- The army assembles automatically (your lords march to you, then the army moves on the target), then disbands on its own once the mission is over.",
+    "parameters": [
+      {
+        "name": "target_settlement",
+        "type": "string",
+        "description": "Name of the target settlement (town/castle for siege or defense, village for raid)."
+      },
+      {
+        "name": "army_type",
+        "type": "string",
+        "description": "besiege / raid / defend."
+      }
+    ]
+  },
+  {
     "name": "query_recent_events",
     "category": "query",
     "description": "Query recent events involving a specific character — tournaments won, captures, releases, deaths, marriages, births, fugitive status, kingdom destruction, clan leadership changes.\n\nUsage:\n- Call this to learn what has recently happened to someone — have they won tournaments? been captured? escaped? died? gotten married?\n- The target_entity_id parameter is the entity ID or Chinese name of the character to query. Omit to query the current conversation partner.\n- max_events limits how many events to return (default 10, max 30).\n- max_days_ago limits how far back to look in game days (default 14, max 84).\n- Returns each event with how many days ago it happened and a description.\n- This is public knowledge — these events are recorded in the Calradia encyclopedia.",
@@ -325,6 +342,12 @@
         "description": "Name of the kingdom to query war stats for. Omit to query your own kingdom."
       }
     ]
+  },
+  {
+    "name": "query_influence",
+    "category": "query",
+    "description": "Query your current influence (影响力) — your political capital within your kingdom.\n\nUsage:\n- Call this to know how much political weight you hold and what you can afford.\n- Influence is spent on: gathering an army (requires over 100 influence, spent to call lords and while leading), and proposing policies in the kingdom.\n- It grows from battlefield merit, fiefs and governance. Knowing your influence helps you judge whether you can afford to raise an army or push a policy.\n- No parameters — always reports your own clan's influence.",
+    "parameters": []
   },
   {
     "name": "declare_war",
@@ -500,7 +523,7 @@
   {
     "name": "query_party_troops",
     "category": "query",
-    "description": "Inspect a party's troop roster, prisoners, inventory, and finances.\n\nUsage:\n- Call this to learn about your own party or another party's composition.\n- The target_entity_id specifies whose party to inspect. Omit to inspect your own party.\n- FULL detail (gold, wages, exact troop counts with Xp/upgrade paths, prisoners, items, equipment) is available ONLY for your own party and for parties of your own kingdom or allied faction.\n- For parties of FOREIGN kingdoms you receive only SCOUTING ESTIMATES, not exact figures: close range gives a rough troop count with composition (about ±20%); mid range gives only a wide estimate and qualitative description; distant or across the sea gives only unreliable rumors.\n- Treat foreign intel as estimates and act with uncertainty — you do not know the enemy's true strength.\n- This is your primary tool for military self-assessment before making recruitment or upgrade decisions.\n- To see what troops are available for recruitment at a settlement, use query_available_troops.",
+    "description": "Inspect a party's troop roster, prisoners, inventory, and finances.\n\nUsage:\n- Call this to learn about your own party or another party's composition.\n- The target_entity_id specifies whose party to inspect. Omit to inspect your own party.\n- FULL detail (gold, wages, exact troop counts with Xp/upgrade paths, prisoners, items, equipment) is available ONLY for your own party and for parties of your own kingdom or allied faction.\n- For parties of FOREIGN kingdoms you receive only SCOUTING ESTIMATES, not exact figures: close range gives a rough troop count with composition and an estimated party size limit (about ±20%); mid range gives only a wide estimate of troop count and size limit with qualitative description; distant or across the sea gives only unreliable rumors.\n- Treat foreign intel as estimates and act with uncertainty — you do not know the enemy's true strength.\n- This is your primary tool for military self-assessment before making recruitment or upgrade decisions.\n- To see what troops are available for recruitment at a settlement, use query_available_troops.",
     "parameters": [
       {
         "name": "target_entity_id",
@@ -654,5 +677,71 @@
     "category": "social",
     "description": "Let the other party go free from an encounter.\n\nUsage:\n- Call this when you are in an encounter with the other person and your forces are significantly stronger than theirs.\n- You decide to release them without a fight, granting them safe passage.\n- This ends the current encounter peacefully. The released party will be teleported away and cannot be attacked for a period of time.\n- Call this ONLY if you are the stronger party in the encounter and have decided not to attack.\n- Do NOT call this if you are in a settlement, in a battle, or not currently in an encounter with the other person.\n- This is a diplomatic gesture — releasing someone may improve relations, but it also means you lose the chance to capture them or take their loot.",
     "parameters": []
+  },
+  {
+    "name": "release_prisoner",
+    "category": "military",
+    "description": "Release a prisoner held in YOUR OWN party's prisoner roster.\n\nUsage:\n- Call this when you decide to set prisoners free — as an act of mercy, a diplomatic gesture, or to lighten your prisoner load.\n- The prisoner_name must be the name of a prisoner currently held in your own party (visible via query_party_troops). Works for both noble heroes and common soldiers.\n- Releasing a noble hero sends them home as a fugitive; they may be grateful later.\n- Set all=true (or omit prisoner_name) to release ALL prisoners in your party at once.\n- The count parameter is only used for common soldier prisoners; heroes are always released one by one.\n- Do NOT call this if you are not leading a party, or if the prisoner is not in your own party.\n- This only affects prisoners in your own party — you cannot release prisoners from someone else's party.",
+    "parameters": [
+      {
+        "name": "prisoner_name",
+        "type": "string",
+        "description": "Name of the prisoner to release, in Chinese or English. Omit (or set all=true) to release all prisoners."
+      },
+      {
+        "name": "count",
+        "type": "integer",
+        "description": "Optional. Number of common soldier prisoners of this type to release. Omit to release all of that type."
+      },
+      {
+        "name": "all",
+        "type": "boolean",
+        "description": "Optional. Set true to release ALL prisoners in your party at once."
+      }
+    ]
+  },
+  {
+    "name": "execute_prisoner",
+    "category": "military",
+    "description": "Execute (behead) a noble hero prisoner held in YOUR OWN party's prisoner roster.\n\nUsage:\n- Call this when you decide to execute a captured noble — the ultimate act of severity.\n- The prisoner_name must be the name of a noble hero (lord) currently held prisoner in your own party, visible via query_party_troops (marked as 贵族).\n- Only noble heroes can be executed; common soldiers are not subject to beheading. The player and companions can never be executed.\n- POLITICAL CONSEQUENCES: execution normally brings heavy penalties (your honor drops, and nobles across Calradia — the victim's clan, friends, fellow faction members, and honorable lords — hate you deeply). However, the MCM setting 「处决无惩罚」 (default ON) disables these penalties for both players and NPCs — when it is ON, you may execute without political cost.\n- The execution is recorded in history regardless.\n- Do NOT call this if you are not leading a party, or if the prisoner is not in your own party.",
+    "parameters": [
+      {
+        "name": "prisoner_name",
+        "type": "string",
+        "description": "Name of the noble hero prisoner to execute, in Chinese or English."
+      }
+    ]
+  },
+  {
+    "name": "create_clan",
+    "category": "universal",
+    "description": "Create a new noble clan in Calradia (家族补充系统). This is the hand of fate — used ONLY when noble houses have been wiped out and the world needs new blood.\n\nUsage:\n- Call this when you (the FATE entity) are summoned because vassal clans or mercenary clans have fallen below their minimum count.\n- clan_name: the new clan's name, fitting its culture's naming conventions.\n- kingdom_name: the kingdom the new clan will serve. For a mercenary clan, still specify a kingdom and set is_mercenary=true.\n- culture: the clan's culture (match the kingdom's culture).\n- motivation: a one-line clan identity/motto, recorded in history.\n- is_mercenary: true = serve the kingdom as a mercenary band (not counted as a vassal clan); false or omit = become a vassal.\n- Family members are auto-generated by the system (3-6, young-biased); clan tier is 2.\n- This tool is restricted to the FATE entity only — normal lords cannot use it.",
+    "parameters": [
+      {
+        "name": "clan_name",
+        "type": "string",
+        "description": "Name of the new clan, fitting its culture's conventions."
+      },
+      {
+        "name": "kingdom_name",
+        "type": "string",
+        "description": "Kingdom the new clan joins (or serves as mercenary). Chinese or English name."
+      },
+      {
+        "name": "culture",
+        "type": "string",
+        "description": "Culture of the new clan (e.g. 帝国/巴旦尼亚/库赛特/阿塞莱/瓦兰迪亚/斯特吉亚). Usually the kingdom's culture."
+      },
+      {
+        "name": "motivation",
+        "type": "string",
+        "description": "One-line clan identity or founding motto, recorded in history."
+      },
+      {
+        "name": "is_mercenary",
+        "type": "boolean",
+        "description": "true = serve the kingdom as a mercenary band; false/omit = become a vassal clan."
+      }
+    ]
   }
 ]

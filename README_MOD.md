@@ -13,7 +13,7 @@
 - 与任意领主对话时，对话选项中均出现 **「【AI 聊天】」** 选项
 - 点击后打开 **专用聊天窗口**（模态屏幕），窗口中显示完整的对话历史
 - 输入任意消息发给 LLM，AI 会获取**完整对话上下文**（之前的聊天记录都会传给 AI）
-- LLM 会以领主的身份角色扮演回复（中世纪贵族口吻，中文）
+- LLM 会以领主的身份角色扮演回复（中文）。**对话风格为自然口语、有来有回**（中世纪背景，措辞不过分现代）：短句、顺着对方的话接、对方问什么答什么；性格体现在语气态度上，而非堆砌文言修辞
 - 关掉聊天窗口后**回到对话界面**，可以继续正常交谈
 - AI 可以在对话中了解玩家，通过 **function calling** 机制自动更新对玩家的认知
 - 首次对话时自动用 LLM 为 NPC 生成**结构化 persona**（动机、性格特质、表达风格三段式）
@@ -30,6 +30,7 @@
   - Agent 可以调用 `besiege_settlement` 围攻城镇或城堡
   - Agent 可以调用 `engage_party` 追击并攻击另一支部队
   - Agent 可以调用 `defend_settlement` 驻防守卫某个定居点
+  - Agent 可以调用 `form_army` 召集军团：以军事目标（攻城/劫掠/**解围**——防御军团只用于某城正被围攻时集结兵力打破围城，非驻守）为指向，召集本国领主组成军团，**交还原版 AI 指挥**（集结→扑目标→作战→解散），agent 不再逐帧发令。需影响力>100、王国交战、部曲充足、氏族领袖
   - Agent 可以调用 `patrol_settlement` 围绕定居点巡逻警戒
   - Agent 可以调用 `escort_party` 护送跟随另一支部队
   - Agent 可以调用 `go_around_party` 绕行回避某支部队
@@ -72,6 +73,7 @@
   - 无论玩家是国王、封臣还是平民，秘书处都可以使用（只是可用工具随身份变化）
   - 工具列表根据玩家身份动态过滤：国王获得外交工具，封臣只能写信等
   - **玩家可以经秘书处提交公开谏言**（`submit_advisory`）：以玩家名义写入本国谏言记录，可被史官写入编年史——玩家能借此影响历史记载。雇佣兵无权谏言
+  - **玩家国王可以经秘书处颁布公开诏令**（`submit_edict`）：以玩家名义向全国宣示方针、回应群臣或垂询政务，封臣进谏前会先读它
 - Agent 可调用 `send_letter` 给任意人物写信（支持中文名或 entity ID）
 - 收信端由 `AgentScheduler` 异步激活处理（每帧一个事件，最多 N 层级联）
 - 级联深度在 MCM 中可调（默认 5，超出的只存档不处理）
@@ -104,7 +106,7 @@
 - 游戏中的重大事件（宣战/议和/城镇易主/灭国/建国/贵族阵亡/氏族叛变/婚嫁/氏族领袖更替）被自动记录为**原始史料**
 - 原始史料以 JSONL 格式存储在 `NPCs/World/history/events_{年份}.txt`，永久保存
 - 每当年份推进时，**史官 Agent** 自动激活，读取原始史料并编纂**年度编年史**（间隔可在 MCM 中调整）
-- 氏族领袖、国王、玩家死亡时，史官自动编纂**列传**（人物传记）
+- 氏族领袖、国王、玩家死亡时，史官自动编纂**列传**（人物传记）。**传记精准定位**：`query_character` 支持**重名消歧**（多个同名者时列出全部候选人：编号/氏族/王国/年龄）与**按编号精确查询**（`CharacterObject_XXXX`）；传记事件携带死者编号，提示词要求史官用编号精查——修复了重名人物导致传记张冠李戴（氏族、生卒年全错）的 bug
 - 灭国、建国等重大事件触发**专题史**
 - 编年史存储于 `NPCs/World/history/chronicles/`，以《资治通鉴》白话风格书写，年末附「史官曰」评论
 - 战役地图上按 **H 键**打开史书 UI（1100×700 大屏，左侧目录右侧正文），字体大小可调
@@ -118,6 +120,7 @@
 - 重大外交行动（宣战/结盟/议和/贸易）若国王重视名分，应师出有名——无名之师、与僭越者结盟、求和于不义之邦会损害威信；是否看重名分由国王人格决定（`diplomacy_rules.txt`）
 - 封臣可在谏言中援引天命批判国王失德、兴无名之师、与僭越者结盟；直不直谏、出于真心还是个人谋划，由封臣自决（`advisory_rules.txt`）
 - NPC 性格新增「天命信仰」维度（`persona_meta.json`）：笃信 / 敬重 / 平常 / 假托 / 不信，随机分布（10/26/38/20/6），保持立场多元
+- NPC 性格新增「战争倾向」维度（`persona_meta.json`）：-2 极力避战（和平解决）/ -1 非万不得已不战 / 0 看形势利益 / +1 主动求战（能打就打）/ +2 穷兵黩武（不打仗就难受，哪怕劣势）。**分布（v2，有形的大手）：+2 占 50%、+1 占 30%、0 占 10%、-1 占 6%、-2 占 4%——80% 的人好战**，故意大幅拉高以激活 AI 战争循环——好战的国王发动战争不太权衡利弊，厌战的国王极力避战，保持少量立场多元；封臣谏言时也可借此施加政治压力（好战大臣谏言主战、厌战大臣谏言慎战）。**旧存档迁移**：已有 `persona_meta.json` 的 NPC 会被按新分布重掷战争倾向，并强制重新生成 persona（一次性，重生成后按新好战倾向行事）
 - 史官以「天命视角」编纂编年史（`historian_rules.txt`）：理解时人以天命评说兴衰，但保持中立，可在「史官曰」中借天命评王朝兴衰
 
 ### 内政审视与封地政治
@@ -139,8 +142,26 @@
 - 国王的外交提示词中自动注入"先阅读封臣谏言"的指引，但国王保留绝对决策权
 - 战役地图上按 **H 键**可查阅本国封臣的公开谏言
 - 史官可读取所有王国的公开谏言写入编年史
-- **秘密谏言**：封臣可用 `submit_secret_advisory` 密陈给国王（写 `World/secret_advisory/`，**仅本国王可读、不入史册**）——公开谏言表达立场进史，秘密谏言说那些不适合被历史记录或旁人知晓的事，封臣可公开一套、私下另一套
+- **秘密谏言**：封臣可用 `submit_secret_advisory` 密陈给国王（写 `World/secret_advisory/`，**仅本国国王可读、不入史册**——本国封臣与史官亦不可读）——公开谏言表达立场进史，秘密谏言说那些不适合被历史记录或旁人知晓的事，封臣可公开一套、私下另一套。**玩家国王**按 H 键可在史书中查看本国密陈（「国王密陈 · 王国 · 第X年」），玩家封臣/平民看不到
 - 提示词：`advisory_rules.txt` 支持热重载；`tools.json`/`agent_tools.json` 删除时自动回退内嵌最小工具集
+
+### 国王诏令（国内政务闭环）
+
+- 国王 Agent 政务审视时，可向国内颁布**公开诏令**（`submit_edict` 工具）：宣示治国方针、回应群臣谏言、或向封臣垂询政务
+- 诏令公开归档到 `World/edict/{王国}_{年份}.txt`（带时间戳、姓名、头衔，按年分文件封存），**只有王国统治者可颁布**——非国王调用会被系统拒绝
+- **史官可读任何国家的诏令**（作为补充视角，与谏言相互印证）；本国封臣/国王可读本国诏令，**他国人员不可读**；**玩家 H 键可查看本国诏令**（「国王诏令 · 王国 · 第X年」）
+- **闭环**：封臣进谏前先读国王的公开诏令，了解王上的旨意与垂询；若国王在诏令中垂询某事，封臣应在谏言中回应——国王诏令与封臣谏言构成国内政务的往来闭环
+- **政务激活时国王不再写信**：`send_letter` 回归"仅私人通信"（回信仍可用），外交审视期间禁止主动写信——向国内发声用诏令，外交动作用对应 function
+
+### 国王外交问询（跨国外交有限沟通）
+
+- 国王可**遣使问询另一王国国王**（`consult_king`）：求证谣言、试探意图、在重大决策前弄清对方立场。**任何国家都可问**（含敌国）
+- 对方国王被激活回应（可用 `reply_consult` 答复，可据实、可虚与委蛇、可置之不理），答复在问询方**下次政务审视时拉取看到**（慢一轮，符合中世纪信息传递）
+- **严格单向防环**：被问询方（问询会话）拿不到 `consult_king`，不能发起新问询——链深恒为 1，杜绝无限激活
+- 问询线程存档于 `World/diplomacy/consults/{A国}_and_{B国}.txt`：**史官可读任何国家**（作为编年史补充视角），参与双方国王可读自己的线程，**第三方不可读**
+- **每王国对冷却**（7 游戏天）：冷却中再问询会被明确告知「使者尚在途中」
+- 玩家国王被问询时收到提示，可经秘书处（M 键）读取本国问询线程并回复
+- 离间计这类计谋因此有了**失败的可能**——被离间的国王可直接问询求证，谣言可被否认
 
 ### 工具分类系统
 
@@ -148,12 +169,12 @@
 
 | 分类 | 包含工具 | 默认激活场景 |
 |------|---------|:--|
-| universal | update_knowledge, cancel_action | 全部 |
-| query | query_character, query_settlement, query_settlement_geography, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_clan_fiefs, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills | 全部 |
+| universal | update_knowledge, cancel_action, create_clan（仅天意） | 全部 |
+| query | query_character, query_settlement, query_settlement_geography, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_clan_fiefs, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills, query_influence | 全部 |
 | social | change_relation, give_gold, request_gold, give_item, request_items, let_go | conversation |
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous |
-| military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops | autonomous |
-| diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal, gift_fief, change_kingdom | diplomacy |
+| military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops, form_army, release_prisoner, execute_prisoner | autonomous |
+| diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal, gift_fief, change_kingdom, submit_edict, consult_king, reply_consult | diplomacy |
 | file | read_file, write_file, append_file, edit_file, delete_file, move_file, list_dir, glob, grep | letter, autonomous, conversation |
 | communication | send_letter | letter |
 
@@ -161,14 +182,33 @@ Agent 任何时候都可以调 `browse_tools("military")` 解锁某类工具，�
 
 ### 征兵与部队管理
 
-- Agent 可以调用 `query_party_troops` 查看部队详情。**军情迷雾**：自己与同阵营部队全量（金币、日薪、兵力/伤兵/上限、各兵种数量经验升级路径、俘虏可招募性、物品栏、装备栏）；异国部队仅侦察估计——近距给兵力带与兵种构成（约 ±20%），远距给宽泛区间与定性描述，跨海/远处只有传闻，不泄露军饷、经验、装备等机密
+- Agent 可以调用 `query_party_troops` 查看部队详情。**军情迷雾**：自己与同阵营部队全量（金币、日薪、兵力/伤兵/上限、各兵种数量经验升级路径、俘虏可招募性、物品栏、装备栏）；异国部队仅侦察估计——近距给兵力带、**规模上限**与兵种构成（约 ±20%），远距给宽泛区间与定性描述（含规模上限区间），跨海/远处只有传闻，不泄露军饷、经验、装备等机密
 - Agent 可以调用 `query_available_troops` 查看当前定居点可招募兵种（需在定居点内，被劫掠/敌对村庄无法招兵）
 - Agent 可以调用 `query_settlement_villages` 查看城镇/城堡下属村庄——可用作征兵路线规划
 - Agent 可以调用 `recruit_troops(兵种名, 数量)` 招募士兵（需在该定居点，自动扣金币）
 - Agent 可以调用 `upgrade_troops(原兵种, 目标, 数量)` 升级兵种（自动检查经验、金币、所需装备和特长）
 - Agent 可以调用 `buy_food(天数)` 在定居点自动采购最便宜的粮到够吃 N 天
 - Agent 可以调用 `query_hero_skills` 查看任意人物的 18 个技能等级和 6 个属性值
+- Agent 可以调用 `query_influence` 查看本族当前影响力——政治资财，主要用于拉军团（超过 100 时可召集本国领主）与推行政策
 - `move_to_settlement` 现在可以移动到村庄（之前只能到城镇/城堡）
+
+### 俘虏管理
+
+- `query_party_troops` 现在会列出部队中**所有俘虏**：贵族英雄（标记 `[贵族]`，含所属氏族）+ 普通士兵（含可招募性）
+- Agent 可以调用 `release_prisoner(名字)` 释放自己部队中的单个俘虏（支持中英文名）；`release_prisoner(all: true)` 一次释放全部
+  - 释放**贵族英雄** → 对方成为逃亡者返回领地（`EndCaptivityAction`，可成为善意的外交信号）
+  - 释放**普通士兵** → 直接从俘虏名册移除，可用 `count` 参数只释放一部分
+- Agent 可以调用 `execute_prisoner(名字)` 处决自己部队中的**贵族俘虏**（仅限贵族英雄，普通士兵与玩家本人、玩家同伴不可处决）
+  - 处决受 MCM「处决无惩罚」控制（**默认开**）：开启时处决不承担任何政治代价（斩首者名誉不降、全图贵族好感不降），玩家与 NPC 均生效；关闭时恢复原版/模组惩罚（名誉大降 + 受害者氏族/亲友/同阵营贵族好感大降）
+  - 处决事件记入史料（`hero_killed`），受害者家族可能寻仇——由 Agent 自行权衡
+
+### 家族补充系统
+
+- 当**封臣家族**（非雇佣兵、非叛军的贵族氏族）数量低于下限（默认 70，MCM 可调）或**雇佣兵家族**低于下限（默认 8，MCM 可调）时，激活「天意」agent 补充新的贵族家族——防止大屠杀导致世家凋零、世界崩解
+- **天意**（`__fate__` 虚拟实体，与史官并列）：决定家族名称（符合文化）、投效哪个王国（看世界局势）、家族定位；家族成员由**程序随机生成 3-6 人（偏向年轻：族长 25-40、其余 14-35）**，**家族等级 2**（恰好够当封臣又看得出是新族）
+- 新家族族长自动获得部队（`LordPartyComponent`），可正常参战；投效方式可选正式封臣或雇佣兵（`is_mercenary`）
+- 家族建立只记入**原始史料**（`clan_created`：X建立、投效Y、族长为Z），**不激活史官、不改史官提示词**——简单记一笔即可
+- 每次激活补 1 个家族，差距过大时连续激活；受 MCM「启用家族补充」开关控制
 
 ### 计划系统
 
@@ -188,10 +228,13 @@ Agent 任何时候都可以调 `browse_tools("military")` 解锁某类工具，�
 
 所有提示词均为**中文文本文件**，存储在模组目录下，玩家可随时编辑，游戏内实时生效（热重载）。
 
+提示词分三层：**世界层**（`world_info.txt`，大陆背景与天命）、**人物层**（persona 与记忆）、**游戏规则层**（`game_rules.txt`，卡拉迪亚的实际运转机制——机动/金钱/部队上限/兵种/招募/战争/影响力）。规则层让 agent 按游戏机制而非现实经验做决策（例：士兵阵亡随时可补，真正约束是钱、部队上限、兵种等级；机动性远高于现实，滞守一隅常无收益）。规则层注入稳定前缀（缓存友好），**史官不注入**。
+
 ```
 _Module/Prompts/
 ├── system_prompt.txt            # 默认系统提示词模板（新战役复制为初始值）
 ├── world_info.txt               # 默认世界背景介绍
+├── game_rules.txt               # 游戏运转规则（agent 按游戏机制决策，玩家可编辑，热重载）
 ├── tools.json                   # 游戏工具定义（热重载）
 ├── agent_system.txt             # Agent 系统提示词模板
 ├── agent_tools.json             # Agent 文件工具定义（热重载）
@@ -217,6 +260,7 @@ _Module/Prompts/
     └── {战役名}/                 # 每个存档独立的目录
         ├── system_prompt.txt     # 本战役的系统提示词（可独立编辑，热重载）
         ├── world_info.txt        # 本战役的世界背景（可编辑，热重载）
+        ├── game_rules.txt        # 本战役的游戏运转规则（可编辑，热重载）
         ├── agent_system.txt      # 本战役 Agent 提示词（热重载）
         ├── persona_generation.txt # 本战役性格生成提示词（热重载）
         ├── context_template.txt  # 本战役 Context 模板（热重载）
@@ -245,11 +289,12 @@ _Module/Prompts/
 > **史官例外**：史官 intent 不拆易变块，保持单一 system 消息——文笔是模组核心，结构与旧版一致，绝对保真。
 > 旧版模板（无标记）整体按稳定处理，行为与旧版一致；模板改动随 newer-wins 同步到战役副本。
 > `conversation_rules.txt`/`letter_rules.txt` 采用**条件式记忆读取**：基本信息/当前目标/对对方的认知已由【当前状况】提供，不再每回合机械重复 query/read，仅当需要更新的实时信息时才查询。
+> 聊天/书信上下文只携带最近 N 条消息（MCM「聊天历史上限」可调）；agent 被明确告知完整往来记录在 `chat_logs/{对方ID}.txt`——若上下文被裁掉后感到困惑（对方提到记不清的旧事），可主动 `grep`/`read_file` 检索完整记录。**当历史确实被截断时，还会在【当前状况】易变块中注入一句系统提示**（告知截断、引导检索、并明示不得向对方提及），注入在易变块而非稳定前缀，不影响前缀缓存命中。
 
 - **Agent 系统**：每个 NPC 有独立文件系统，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`list_dir`/`glob`/`grep`/`send_letter` 工具管理记忆
 - **信息隔离**：Agent 只能操作自己目录下的文件 + World/ 目录，不能读取其他 NPC 的信息
 - **解耦存储**：聊天记录（`chat_logs/`）、对 Entity 认知（`knowledge/`）、NPC 性格（`persona.txt`）全部独立文件，Agent 按需精确读取
-- **LLM 生成 persona**：首次对话时自动调用 LLM 为 NPC 生成结构化 persona（玩家角色除外，使用静态占位文本）
+- **LLM 生成 persona**：首次对话时自动调用 LLM 为 NPC 生成结构化 persona（玩家角色除外，使用静态占位文本）。生成使用 `reasoning_effort=low` + 4096 token 上限（机械任务不需要深度思考，防止思考占满 token 导致正文截断）；加载时若检测到 persona.txt 缺失标准段落标记（被截断的残缺文件）会自动重新生成
 - **ContextBuilder**：根据交互双方动态组装提示词，通过 `context_template.txt` 模板注入 persona 和能力信息；输出拆分为稳定前缀（system）+ 易变块（【当前状况】user 消息），史官 intent 例外（合并为单一 system）
 - **世界信息系统**：卡拉迪亚大陆介绍，每个战役可独立编辑
 - **系统提示词**：控制 AI 行为风格的核心提示，每个战役独立
@@ -285,6 +330,7 @@ _Module/Prompts/
 | Agent 并发数 | 同时运行的 Agent 任务数上限。越大吞吐越高，但工具在主线程串行执行，过大会帧卡顿 | `5` |
 | 聊天历史上限（条） | 保留最近 N 条消息发给 AI | `20` |
 | 注入世界背景 | 是否在提示词中加入卡拉迪亚背景 | 开启 |
+| 注入游戏规则 | 是否在提示词中加入卡拉迪亚实际运转规则（机动/金钱/部队上限/兵种/招募/战争/影响力），让 agent 按游戏机制而非现实经验决策。史官不注入 | 开启 |
 | 最大好感变化 | Agent 单次修改好感度的上限 | `5` |
 | 信件级联深度上限 | NPC 间连环写信的最大层数 | `5` |
 | 环境扫描半径（km） | query_surroundings 扫描半径硬上限 | `20` |
@@ -296,6 +342,10 @@ _Module/Prompts/
 | 启用封臣谏言 | 开启后封臣按概率陆续进谏 | 开启 |
 | 封臣谏言概率/天 | 每个王国每天触发封臣进谏的概率 | `0.1` |
 | 所有贵族立传 | 死后立传范围：所有氏族贵族 或 仅氏族领袖和国王 | 开启 |
+| 处决无惩罚 | 开启后处决贵族不承担任何政治代价（名誉不降、好感不降），玩家与 NPC 均生效 | 开启 |
+| 启用家族补充 | 封臣/雇佣兵家族低于阈值时激活「天意」补充新家族 | 开启 |
+| 封臣家族补充阈值 | 封臣家族数低于此值触发补充（单位：家族，原版约 70） | `70` |
+| 雇佣兵家族补充阈值 | 雇佣兵家族数低于此值触发补充（单位：家族，原版约 8） | `8` |
 | 史书字体大小 | 史书 UI 中编年史正文的字体大小 | `28` |
 | 强制开始外交 | 立即激活所有国王 Agent 进行外交审视，重置计时器（按钮） | — |
 | 强制封臣进谏 | 立即重置所有王国的封臣谏言计时器（按钮） | — |
@@ -384,6 +434,7 @@ MyFirstMod/
 │   └── Prompts/
 │       ├── system_prompt.txt      # 系统提示词模板（玩家可编辑，热重载）
 │       ├── world_info.txt         # 默认世界背景
+│       ├── game_rules.txt         # 游戏运转规则（热重载）
 │       ├── tools.json             # 游戏工具定义（热重载）
 │       ├── agent_system.txt       # Agent 系统提示词模板
 │       ├── agent_tools.json       # Agent 文件工具（热重载）

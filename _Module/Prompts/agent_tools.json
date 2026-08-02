@@ -202,5 +202,51 @@
         "description": "The body of your secret advisory in Chinese, addressed only to the king."
       }
     ]
+  },
+  {
+    "name": "submit_edict",
+    "category": "diplomacy",
+    "description": "Publish a public edict to your whole kingdom — a royal decree, a policy statement, or a question posed to your vassals. The system will record it with a timestamp and archive it in the kingdom's edict records; your vassals read it before they advise, and the court historian may cite it in the annals. Only the ruler of the kingdom may issue edicts; anyone else is rejected by the system.\n\nUsage:\n- Call this when you have something to declare to the realm: a guiding policy, an answer to your vassals' advisories, or a question you want your vassals to address.\n- The content should be the edict text itself — no greeting, no signature, no meta commentary.\n- The system automatically adds your name, title and the current time before your words.\n- After calling this, reply with a brief closing line only; do not repeat the edict in your reply text.",
+    "parameters": [
+      {
+        "name": "content",
+        "type": "string",
+        "description": "The body of your edict in Chinese. Declare your will directly, or pose the question you want your vassals to answer."
+      }
+    ]
+  },
+  {
+    "name": "consult_king",
+    "category": "diplomacy",
+    "description": "Send an envoy to another kingdom's ruler to ask a question or verify information. The other ruler may answer, and their answer reaches you when you next review your kingdom's affairs. This inquiry is recorded as public diplomatic correspondence that the court historian may consult.\n\nUsage:\n- Call this when you want to ask another ruler something directly: to verify a rumor, sound out an intention, probe before an alliance or peace, or question a betrayal.\n- Only the ruler of a kingdom may send envoys; anyone else is rejected.\n- The target can be any kingdom, allied or enemy.\n- There is a short cooldown between envoys to the same kingdom; if the envoy is still traveling you will be told.",
+    "parameters": [
+      {
+        "name": "target_kingdom",
+        "type": "string",
+        "description": "The name of the kingdom to ask (e.g. \"北帝国\" or \"Battania\")."
+      },
+      {
+        "name": "message",
+        "type": "string",
+        "description": "The question or message to send to the other ruler, in Chinese."
+      }
+    ]
+  },
+  {
+    "name": "reply_consult",
+    "category": "diplomacy",
+    "description": "Reply to a diplomatic inquiry from another kingdom's ruler. Your answer is delivered back and recorded in the public diplomatic correspondence.\n\nUsage:\n- Call this when another ruler has sent you an envoy and you have decided what to answer.\n- You may answer truthfully, mislead, or decline to say — the choice is yours.\n- Only the ruler of a kingdom may reply; anyone else is rejected.",
+    "parameters": [
+      {
+        "name": "target_kingdom",
+        "type": "string",
+        "description": "The name of the kingdom whose ruler asked you."
+      },
+      {
+        "name": "message",
+        "type": "string",
+        "description": "Your answer to the other ruler, in Chinese."
+      }
+    ]
   }
 ]

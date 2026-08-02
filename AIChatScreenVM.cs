@@ -262,8 +262,10 @@ namespace MyFirstMod
             Messages.Add(new ChatMessageVM("你", userMsg, "user", "#5DADE2FF", now,
                 _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
                 _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
-            _sessionMessages.Add(new ChatHistoryEntry { Role = "user", Content = userMsg, IsLetter = true });
-            PromptManager.AppendChatLogFor(_agentId, _targetId, "user", userMsg, true);
+            // 修复：只有写信（_intent=="letter"）才标记为书信；普通对话不加【信】前缀（原实现硬编码 true 导致正常对话也被标成书信）
+            var isLetter = _intent == "letter";
+            _sessionMessages.Add(new ChatHistoryEntry { Role = "user", Content = userMsg, IsLetter = isLetter });
+            PromptManager.AppendChatLogFor(_agentId, _targetId, "user", userMsg, isLetter);
 
             if (_intent == "letter")
             {
@@ -360,6 +362,7 @@ namespace MyFirstMod
                                     "wait_at_settlement" => $"决定在当前位置停留",
                                     "raid_settlement" => $"下令劫掠 {set}",
                                     "besiege_settlement" => $"下令围攻 {set}",
+                                    "form_army" => "召集了军团",
                                     "engage_party" => $"下令追击 {tname} 的部队",
                                     "defend_settlement" => $"下令驻防 {set}",
                                     "patrol_settlement" => $"下令巡逻 {set} 周边",
@@ -380,6 +383,7 @@ namespace MyFirstMod
                                     "query_recent_events" => "查询了近期事件",
                                     "query_surroundings" => "扫描了周围环境",
                                     "query_war_status" => "查询了战争状态",
+                                    "query_influence" => "查询了影响力",
                                     "declare_war" => "宣战了",
                                     "propose_peace" => "提出了议和",
                                     "propose_alliance" => "提出了结盟",
@@ -390,6 +394,12 @@ namespace MyFirstMod
                                     "gift_fief" => $"将 {set} 转让了",
                                     "submit_advisory" => "向国王进谏了",
                                     "submit_secret_advisory" => "向国王密陈了",
+                                    "submit_edict" => "颁布了诏令",
+                                    "consult_king" => "遣使问询了",
+                                    "reply_consult" => "回复了外交问询",
+                                    "release_prisoner" => $"释放了俘虏 {a["prisoner_name"]?.ToString()}",
+                                    "execute_prisoner" => $"处决了俘虏 {a["prisoner_name"]?.ToString()}",
+                                    "create_clan" => $"降下了新的贵族血脉 {a["clan_name"]?.ToString()}",
                                     _ => $"调用了 {tc.Name}"
                                 };
                             }

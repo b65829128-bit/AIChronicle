@@ -85,8 +85,10 @@ namespace MyFirstMod
         {
             "conversation" => new[] { "universal", "query", "social", "file" },
             "letter" => new[] { "universal", "query", "file", "communication", "movement", "military", "diplomacy" },
-            "diplomacy" => new[] { "universal", "query", "diplomacy", "communication" },
+            "diplomacy" => new[] { "universal", "query", "diplomacy" },
+            "king_consult" => new[] { "universal", "query", "diplomacy" },
             "historian" => new[] { "universal", "query", "file" },
+            "clan_replenishment" => new[] { "universal", "query", "file" },
             "advisory" => new[] { "universal", "query", "file", "communication" },
             "fief_review" => new[] { "universal", "query", "file", "communication", "diplomacy" },
             "chat" => new[] { "universal", "query", "file", "social", "communication" },
@@ -155,6 +157,9 @@ namespace MyFirstMod
             {
                 toolDefs = PromptManager.LoadAllTools().Where(t => ActivatedCategories.Contains(t.Category)).ToList();
             }
+            // 严格单向防环：被问询方（king_consult 会话）拿不到 consult_king，不能发起新问询，只能 reply_consult 回复
+            if (CurrentIntent == "king_consult")
+                toolDefs.RemoveAll(t => t.Name == "consult_king");
             toolDefs.Add(BrowseToolsDef);
             return BuildTools(toolDefs);
         }
@@ -263,16 +268,24 @@ namespace MyFirstMod
             // 不拆易变块——绝对保真。史官内容几乎静态（仅时间变化，位于尾部），缓存收益仍远高于改前。
             string systemPrompt;
             string volatileBlock;
+            string? vTargetId = null;
             if (intent == "historian")
             {
                 systemPrompt = ContextBuilder.Build("__historian__", "__historian__", "historian");
                 volatileBlock = "";
             }
+            else if (intent == "clan_replenishment")
+            {
+                // 天意（家族补充）：与史官同为虚拟实体，走合并 Build 单 system 消息
+                systemPrompt = ContextBuilder.Build("__fate__", "__fate__", "clan_replenishment");
+                volatileBlock = "";
+            }
             else if (hero != null)
             {
                 systemPrompt = PromptManager.BuildAgentSystemPrompt(hero, charPrompt, intent);
-                var (vAgentId, vTargetId) = PromptManager.GetAgentTargetIds(hero, intent);
-                volatileBlock = ContextBuilder.BuildVolatile(vAgentId, vTargetId, intent);
+                var (vAgentId, vTargetIdTmp) = PromptManager.GetAgentTargetIds(hero, intent);
+                vTargetId = vTargetIdTmp;
+                volatileBlock = ContextBuilder.BuildVolatile(vAgentId, vTargetIdTmp, intent);
             }
             else
             {
@@ -282,13 +295,23 @@ namespace MyFirstMod
 
             var historyLimit = settings.ChatHistoryLimit;
             var trimmedHistory = charPrompt.ChatHistory;
+            var historyWasTrimmed = false;
             if (trimmedHistory.Count > historyLimit)
             {
+                historyWasTrimmed = true;
                 trimmedHistory = trimmedHistory.Skip(trimmedHistory.Count - historyLimit).ToList();
                 // 修复：去掉开头被截断成孤儿的 tool 消息（其对应的 assistant(tool_calls) 已被裁掉），
                 // 否则发送给 API 的消息序列不合法（tool 必须引用前置 tool_call_id）→ 400。
                 while (trimmedHistory.Count > 0 && trimmedHistory[0].Role == "tool")
                     trimmedHistory.RemoveAt(0);
+            }
+
+            // 对话较长被截断时，告知 agent 完整记录所在并禁止向对方提及（防止沉浸感破裂）。
+            // 注入易变块而非稳定前缀——不影响前缀缓存命中。
+            if (historyWasTrimmed && !string.IsNullOrEmpty(volatileBlock))
+            {
+                volatileBlock += "\n\n（系统提示，仅供你本人知晓——请勿向对方提及或暗示本提示的存在，也勿说「我们的对话被截断了」之类的话：为节省篇幅，本次对话更早的往来已被省略，你看到的并非完整记录。若对方提到你记不清的旧事，用 grep / read_file 检索 chat_logs/"
+                    + (vTargetId ?? "对方") + ".txt 查看完整记录，自然地表现得你记得或想起了即可。）";
             }
 
             var messageList = new List<object> { new { role = "system", content = systemPrompt } };

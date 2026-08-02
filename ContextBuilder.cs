@@ -22,6 +22,7 @@ namespace MyFirstMod
             [EntityCapability.ChangeRelation] = new[] { "change_relation" },
             [EntityCapability.SendLetter] = new[] { "send_letter" },
             [EntityCapability.Diplomat] = new[] { "declare_war", "propose_peace", "propose_alliance", "propose_trade", "end_alliance", "end_trade_agreement", "respond_to_diplomacy_proposal", "gift_fief", "query_pending_proposals" },
+            [EntityCapability.CreateClan] = new[] { "create_clan" },
         };
 
         private static readonly Dictionary<string, string> CategoryNames = new()
@@ -94,6 +95,12 @@ namespace MyFirstMod
                 traits = "客观、严谨、博学、公正。对事实的尊重高于一切。";
                 speechStyle = "使用庄重典雅的中文文言或半文白风格，叙述冷静克制。";
             }
+            else if (intent == "clan_replenishment")
+            {
+                motivation = "观照卡拉迪亚天下家族的兴衰，维持贵族世家的延续——当世家凋零殆尽时，为天下注入新的血脉。";
+                traits = "公正、超然、洞悉世事，对天下家族一视同仁，唯以世界的长治久安为念。";
+                speechStyle = "庄重而简洁，以「天道」「气运」的视角评述家族兴衰。";
+            }
             else
             {
                 var persona = AgentManager.LoadPersonaFor(agentId, agent.HeroRef!);
@@ -105,6 +112,8 @@ namespace MyFirstMod
             string targetKnowledge;
             if (intent == "historian")
                 targetKnowledge = "你是卡拉迪亚的史官，你的工作对象是历史事件本身，而非任何个人。";
+            else if (intent == "clan_replenishment")
+                targetKnowledge = "你是卡拉迪亚命运的天意，俯瞰天下家族的兴衰。";
             else
             {
                 targetKnowledge = AgentManager.ReadKnowledgeFor(agentId, targetId);
@@ -122,6 +131,8 @@ namespace MyFirstMod
             string targetRelationship;
             if (intent == "historian")
                 targetRelationship = "你作为史官，对各方势力保持中立。";
+            else if (intent == "clan_replenishment")
+                targetRelationship = "你对天下家族一视同仁，无偏无私。";
             else
             {
                 targetRelationship = AgentManager.ReadRelationshipFor(agentId, targetId);
@@ -136,6 +147,8 @@ namespace MyFirstMod
             string goals;
             if (intent == "historian")
                 goals = "编纂年度编年史，记录卡拉迪亚大陆的重大事件。";
+            else if (intent == "clan_replenishment")
+                goals = "观照封臣与雇佣兵家族的数量，在世家凋零时降下新的贵族血脉，维持卡拉迪亚的秩序。";
             else
             {
                 goals = AgentManager.ReadGoalsFor(agentId);
@@ -151,21 +164,29 @@ namespace MyFirstMod
             }
 
             var worldInfo = LoadWorldInfo();
+            // 史官/天意例外：不注入游戏规则（前者只编史，后者只观照家族兴衰，不做具体军事/经济决策）
+            var gameRules = (intent == "historian" || intent == "clan_replenishment") ? "" : LoadGameRules();
             var selfStatus = intent == "historian"
                 ? "你是卡拉迪亚的宫廷史官，不受任何势力节制。"
-                : BuildSelfStatus(agent.HeroRef!);
+                : intent == "clan_replenishment"
+                    ? "你是卡拉迪亚命运的天意，超然于诸国之上，主导世家的生灭。"
+                    : BuildSelfStatus(agent.HeroRef!);
             var currentTime = PromptManager.GetCurrentTimeString();
             var functionList = BuildFunctionList(agent, intent);
             var objectiveRel = intent == "historian"
                 ? "你作为史官，不隶属于任何势力，也不与任何势力为敌。"
-                : BuildObjectiveRelationship(agent.HeroRef!, target.HeroRef!);
+                : intent == "clan_replenishment"
+                    ? "你作为天意，俯瞰天下，不隶属任何势力。"
+                    : BuildObjectiveRelationship(agent.HeroRef!, target.HeroRef!);
 
             var intentRules = intent switch
             {
                 "letter" => BuildLetterRules(),
                 "diplomacy" => BuildDiplomacyRules(),
+                "king_consult" => BuildDiplomacyRules(),
                 "chancery" => BuildChanceryRules(),
                 "historian" => BuildHistorianRules(),
+                "clan_replenishment" => BuildClanReplenishmentRules(),
                 "advisory" => BuildAdvisoryRules(),
                 "fief_review" => BuildFiefReviewRules(),
                 "chat" => BuildChatRules(),
@@ -206,6 +227,7 @@ namespace MyFirstMod
                 .Replace("{speech_style}", speechStyle)
                 .Replace("{goals}", goals)
                 .Replace("{world_info}", worldInfo)
+                .Replace("{game_rules}", gameRules)
                 .Replace("{current_time}", currentTime)
                 .Replace("{function_list}", functionList)
                 .Replace("{objective_relationship}", objectiveRel)
@@ -317,6 +339,17 @@ namespace MyFirstMod
             return File.ReadAllText(path, Encoding.UTF8).Trim();
         }
 
+        /// <summary>游戏规则层：让 agent 了解卡拉迪亚的实际运转机制（机动/金钱/部队上限/兵种/招募/战争/影响力），
+        /// 避免拿现实经验套进游戏造成决策错位。受 MCM「注入游戏规则」控制。史官不注入。</summary>
+        private static string LoadGameRules()
+        {
+            if (MySettings.Instance?.UseGameRules != true) return "";
+            var path = PromptManager.GetGameRulesPath();
+            if (path == null || !File.Exists(path))
+                return "";
+            return File.ReadAllText(path, Encoding.UTF8).Trim();
+        }
+
         private static string _cachedConversationRules = "";
         private static DateTime _lastConversationRulesCheck;
         private static string _cachedLetterRules = "";
@@ -410,7 +443,7 @@ namespace MyFirstMod
                     + "- 没有待处理提案且你不想采取新行动时，可以说「暂无需要处理的外交事务」\n"
                     + "- 不要虚构数据——所有统计来自 query_war_status 的返回值\n"
                     + "- 你是国王，你的决断就是王国的决断，不需要征求任何人同意\n"
-                    + "- send_letter 不能替代外交动作——宣战/议和/结盟/贸易必须用对应 function；但可写信通知、沟通、试探他人（通信而非外交动作）";
+                    + "- 绝对不要用 send_letter 处理外交事务。send_letter 只能用于私人通信。外交提案只能用 propose_peace / propose_alliance / propose_trade / declare_war / respond_to_diplomacy_proposal；盟约/贸易可单方面终止（end_alliance / end_trade_agreement）；需要向国内宣示方针、回应群臣或垂询政务时，用 submit_edict 颁布公开诏令";
 
             var lastWrite = File.GetLastWriteTimeUtc(path);
             if (_cachedDiplomacyRules == "" || lastWrite > _lastDiplomacyRulesCheck)
@@ -489,6 +522,18 @@ namespace MyFirstMod
                 _lastHistorianRulesCheck = lastWrite;
             }
             return _cachedHistorianRules;
+        }
+
+        private static string _cachedClanReplenishmentRules = "";
+        private static DateTime _lastClanReplenishmentRulesCheck;
+
+        private static string BuildClanReplenishmentRules()
+        {
+            return LoadRulesFile("clan_replenishment_rules.txt", ref _cachedClanReplenishmentRules, ref _lastClanReplenishmentRulesCheck)
+                ?? "你是卡拉迪亚命运的天意，观照天下家族的兴衰。\n\n"
+                + "当封臣家族或雇佣兵家族凋零至下限以下时，你需要降下新的贵族血脉。\n"
+                + "调用 create_clan 工具创建新家族：给出符合文化的家族名称、加入的王国（或成为雇佣兵）、以及一句家族定位。\n"
+                + "家族成员由系统自动生成（3-6 人，偏向年轻），家族等级为 2——恰好够当封臣，又看得出是新族。";
         }
 
         private static string BuildAdvisoryRules()
@@ -709,6 +754,9 @@ namespace MyFirstMod
                 "==============================\n" +
                 "【世界背景】\n" +
                 "==============================\n{world_info}\n\n" +
+                "==============================\n" +
+                "【这个世界的运转规则】\n" +
+                "==============================\n{game_rules}\n\n" +
                 "==============================\n" +
                 "【你可用的工具】\n" +
                 "==============================\n{function_list}\n\n" +

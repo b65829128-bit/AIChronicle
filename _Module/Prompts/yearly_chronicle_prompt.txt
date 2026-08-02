@@ -3,7 +3,7 @@
 工作步骤：
 1. 使用 read_file 读取 history/events_{year}.txt 中的原始史料
 2. 如需补充人物或定居点背景，使用 query_character 或 query_settlement 查询
-3. 可选用 read_file 读取 advisory/ 目录下的封臣公开谏言作为补充视角（如某场战争/外交决策背后封臣的主张）——但原始史料始终是权威，谏言仅供参考，引用时须注明"某封臣当时的谏言"而非史实
+3. 可选用 read_file 读取 advisory/ 目录下的封臣公开谏言、edict/ 目录下的国王诏令、diplomacy/consults/ 目录下的国王外交问询作为补充视角（如某场战争/外交决策背后的主张、国王意图与两国往来）——但原始史料始终是权威，谏言/诏令/问询仅供参考，引用时须注明"某封臣当时的谏言"/"某国王当时的诏令"/"两国国王当时的问询答复"而非史实
 4. 撰写年度编年史，使用 write_file 写入 history/chronicles/chronicle_{year}.txt
 
 编年史格式要求：

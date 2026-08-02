@@ -3,9 +3,9 @@
 请为此人编纂一篇列传（人物传记）。
 
 工作步骤：
-1. 使用 query_character 查询该人物的生平信息（姓名、家族、王国、身份/地位、生卒年、百科描述）——该人物可能已故，query_character 同样能查到（会标注"已故"与卒年）
+1. 使用 query_character 查询该人物的生平信息（姓名、家族、王国、身份/地位、生卒年、百科描述）——该人物可能已故，query_character 同样能查到（会标注"已故"与卒年）。**若事件描述中给出了该人物的编号（形如 CharacterObject_XXXX，写在名字后的括号里），必须用编号精确查询 query_character("CharacterObject_XXXX")**——卡拉迪亚重名人物很多，仅凭姓名查询可能查到同名异人，导致氏族、生卒年张冠李戴
 2. 使用 read_file 读取相关年份的原始史料 history/events_*.txt，了解该人物在历史上参与的事件
-3. 使用 query_recent_events 查询该人物的近期事迹
+3. 使用 query_recent_events 查询该人物的近期事迹（同样优先传编号）
 4. 撰写列传，使用 write_file 写入 history/chronicles/ 目录，文件名自定
 
 列传写作要求：

@@ -109,18 +109,19 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **书信模式** | 支持书信 intent，O 键唤起收信人列表 |
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 54 个工具定义在 `tools.json`（43 个游戏工具）和 `agent_tools.json`（11 个文件/通信工具，含 `submit_advisory`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
+| **工具定义文件化** | 65 个工具定义在 `tools.json`（50 个游戏工具）和 `agent_tools.json`（15 个文件/通信工具，含 `submit_advisory`/`submit_edict`/`consult_king`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
 | **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁 |
 | **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`persona_generation.txt`、`context_template.txt`、`chancery_rules.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环，模型调用工具 → 执行 → 追加结果 → 重请求，直到模型自然停止（无轮数限制，仅保留极高安全阀防死循环） |
 | **主线程分发** | LLM 工具循环跑在后台线程，但**所有修改游戏状态的工具**经 `MainThreadExecutor` 排队到主线程 `OnApplicationTick` 执行（后台线程阻塞等待结果）；仅 `request_gold`/`request_items`/`browse_tools` 留在后台线程（前两者需主线程弹窗等待玩家，后者改本流程上下文）。背景：Bannerlord 游戏对象（MobileParty/Hero/Kingdom）是主线程独占的 |
 | **上下文隔离（AsyncLocal）** | `CurrentHero`/`CurrentIntent`/`ActivatedCategories`（AIChatClient）、`_agentEntityId`/`_targetEntityId`（AgentManager）、`_activeAgentId`/`_activeTargetId`（EntityManager）均为 `AsyncLocal`——聊天与后台信件/谏言/外交多个流程并发时上下文互不覆盖；实体缓存用 `ConcurrentDictionary`（线程安全） |
 | **秘书处** | M 键打开，玩家的个人行政助手。固定 persona（无条件服从），不读玩家 persona。国王/封臣/平民均可使用，可用工具取决于玩家当前身份。玩家可经秘书处调 `submit_advisory` 提交公开谏言（雇佣兵除外） |
+| **天意** | 虚拟实体（ID: `__fate__`，HeroRef=null，与史官并列）。家族补充系统：封臣/雇佣兵家族低于下限时被激活，决定新家族名称/文化/投效势力（`create_clan`，能力门控仅天意可用），成员程序生成、等级 2、族长带兵，入原始史料但不激活史官 |
 | **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
 
 > **提示词同步规则（newer-wins）**：基础目录 `_Module/Prompts/` 是模板源，战役创建时复制到 `Campaigns/{战役}/`。每次进档（`OnSessionLaunched` → `PromptManager.StartCampaign`）会做同步——**只要基础目录文件比战役副本新，就覆盖战役副本**。玩家在战役副本上的手动编辑（时间戳更新）会被保留。
 >
-> **上下文模板结构（缓存优化）**：`context_template.txt` 以 `<!--VOLATILE-->` 标记分界。标记前为**稳定前缀**（身份/persona/世界背景/工具清单/行为守则）→ system 消息；标记后为**易变块**（当前时间/自身状态/对对方认知/目标/客观关系/内政报告）→ 单独作为【当前状况】user 消息插在最新消息前。目的：让 system+历史构成逐字节稳定的前缀，最大化 DeepSeek 前缀缓存命中（命中输入 0.02元/M vs 未命中 1元/M，价差 50 倍）。`ContextBuilder` 相应提供 `BuildStable`/`BuildVolatile`（合并 `Build` 保留兼容）。**史官 intent 例外**：不拆易变块，走合并 `Build()` 保持单一 system 消息——文笔是模组核心，结构与旧版一致。旧版模板（无标记）整体按稳定处理，行为不变。
+> **上下文模板结构（缓存优化）**：`context_template.txt` 以 `<!--VOLATILE-->` 标记分界。标记前为**稳定前缀**（身份/persona/世界背景/游戏规则/工具清单/行为守则）→ system 消息；标记后为**易变块**（当前时间/自身状态/对对方认知/目标/客观关系/内政报告）→ 单独作为【当前状况】user 消息插在最新消息前。目的：让 system+历史构成逐字节稳定的前缀，最大化 DeepSeek 前缀缓存命中（命中输入 0.02元/M vs 未命中 1元/M，价差 50 倍）。`ContextBuilder` 相应提供 `BuildStable`/`BuildVolatile`（合并 `Build` 保留兼容）。**史官 intent 例外**：不拆易变块，走合并 `Build()` 保持单一 system 消息——文笔是模组核心，结构与旧版一致。旧版模板（无标记）整体按稳定处理，行为不变。
 >
 > **已知边界情况（待解决）**：如果玩家在战役副本自定义了某文件（副本时间戳更新），之后基础目录又修改了（基础更晚）→ newer-wins 会覆盖副本，玩家自定义丢失。当前对开发期是期望行为；未来如需保护战役自定义，需引入"用户修改标记"机制（如哈希比对或 .custom 标记文件）。
 >
@@ -147,6 +148,11 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | `NPCs/{自己}/mailbox/**` | 读 + 写 + 追加 + 编辑 + 删除 |
 | `World/factions.txt` | 只读 |
 | `World/settlements.txt` | 只读 |
+| `World/history/**`（原始史料/编年史） | 只读 |
+| `World/advisory/`（封臣公开谏言） | 只读：史官可读任何国家；其他 agent 仅本国 |
+| `World/edict/`（国王诏令） | 只读：史官可读任何国家；其他 agent 仅本国 |
+| `World/secret_advisory/`（秘密谏言） | 只读：**仅本国国王**；本国封臣与史官不可读 |
+| `World/diplomacy/consults/`（国王外交问询） | 只读：史官可读任何国家；参与双方国王可读；第三方不可读 |
 | 其他 NPC 的任何文件 | **禁止** |
 
 ### 扩展方式
@@ -190,16 +196,22 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 - **用开放性表述**：「若你觉得…」「是否如此由你的性格与处境决定」，而非「必须/应当/禁止」的强制清单
 - **个人立场不强制度**：天命信仰、名分、谏言批判等，由人格与处境自然涌现，不写成统一规则（为此 persona 维度用随机掷定而非 LLM 自定，见 AgentManager 天命信仰）
 - **不注入上下文**：能靠提示词提醒 LLM 调用工具（如读写 diary、检索），就不要注入内容——注入会温水煮青蛙式稀释所有提示。这条有先例教训：别的 AI 模组因持续注入而系统崩坏
+- **游戏规则层是例外**：`game_rules.txt` 注入卡拉迪亚的实际运转机制（机动/金钱/部队上限/兵种/招募/战争/影响力），让 agent 按游戏机制而非现实经验做决策（如士兵阵亡随时可补，真正约束是钱/上限/兵种等级）。它与「注入叙事/记忆内容」不同——是**稳定参考知识**（同世界背景），不是易变剧情；不规定行为，只说明世界如何运转，反而让行为涌现更准。注入稳定前缀（缓存友好）；**史官不注入**（只编史不做游戏决策）。受 MCM「注入游戏规则」开关控制
 - **度**：提示词给方向但不给答案。玩家可编辑的提示词默认按此原则起草
 
 ### 记忆系统设计思想：日记即索引
 
-长期记忆的核心突破点是每个 Agent 的 `decisions/diary.txt`——格式 `[年季节日] 类型：内容`（类型：决定/承诺/情报/计策/评价）。
+长期记忆的核心突破点是每个 Agent 的 `decisions/diary.txt`——格式 `[年季节日] 类型：内容`（类型：决定/承诺/情报/计策/评价/结果）。
 
 **日记是记忆的索引，聊天记录是全文**：
 - 日记时间戳（`[1089春16]`）与 `chat_logs/` 时间戳（`[第1089年，春季第16日]`）**天然对应**
 - 回忆路径：先读日记定位某条决定/计策 → 需要细节时 grep 在 `chat_logs/` 搜对应日期或关键词 → 看到完整对话
 - 时间戳就是日记和聊天的「外键」，grep 按日期 join——比读整个聊天省 token，比只读日记有上下文
+
+**结果追踪（防止旧计划永悬）**：提示词强制「计策/承诺/计划必须追踪结果」——日记里没有「结果」条目对应的计策/承诺/计划会被当作仍在进行中。规则：
+1. 每次对话/审视开始先回顾日记里**没有结果标记**的条目，确认其当前实况
+2. 一旦得知某个计策/承诺/计划的结果（成功/失败/中止/改变/已兑现），立即补记 `[年季节日] 结果：…`
+3. 一件事的现状以日记里关于它的最后一条记录为准——有了结果就别再当它进行中
 
 **设计优先级**：未来设计记忆相关系统（记忆巩固/当日小结、生活史/生平记事、关键事件自动入忆、FiefReview 审视记录、承诺簿等）时，**优先以日记为锚点**，围绕「日记索引 + 聊天全文」的互证结构展开，不要另起炉灶。日记格式必须保持 `[年季节日] 类型：内容` 一致，否则检索失效。
 
@@ -255,6 +267,7 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │   └── Prompts/
 │       ├── system_prompt.txt  ← 系统提示词模板（玩家可编辑，热重载）
 │       ├── world_info.txt     ← 默认世界背景
+│       ├── game_rules.txt     ← 游戏运转规则（玩家可编辑，热重载）
 │       ├── tools.json         ← 游戏工具定义（热重载）
 │       ├── agent_system.txt   ← Agent 系统提示词模板
 │       ├── agent_tools.json   ← Agent 文件工具定义（热重载）
@@ -267,13 +280,14 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │           └── {战役名}/
 │               ├── system_prompt.txt    ← 本战役系统提示词（可独立编辑，热重载）
 │               ├── world_info.txt       ← 本战役世界背景（可独立编辑，热重载）
+│               ├── game_rules.txt       ← 本战役游戏运转规则（可独立编辑，热重载）
 │               ├── agent_system.txt     ← 本战役 Agent 提示词（热重载）
 │               ├── persona_generation.txt ← 本战役性格生成提示词（热重载）
 │               ├── context_template.txt ← 本战役 Context 模板（热重载）
 │               └── NPCs/          ← Agent 管理的 NPC 文件系统
 │                   └── {entity_id}/                 ← {Name}_{StringId}（如 博泰罗_CharacterObject_1664）
 │                       ├── persona.txt   ← [MOTIVATION]/[TRAITS]/[SPEECH_STYLE]
-│                       ├── persona_meta.json ← 自定义人格维度（权力欲/归属重心/冒险倾向/天命信仰）
+│                       ├── persona_meta.json ← 自定义人格维度（权力欲/归属重心/冒险倾向/天命信仰/战争倾向）
 │                       ├── knowledge/
 │                       ├── chat_logs/
 │                       ├── mailbox/
@@ -648,6 +662,7 @@ OnApplicationTick → AgentScheduler.Tick() → 若并发槽未满 → 取最高
 - `ActivationEvent.Depth` 控制级联深度（`AsyncLocal` 按任务隔离，MCM 可调默认 5）
 - 支持事件类型：`LetterReceived`（来信）、`BehaviorCheckIn`（签到）、`KingDiplomacy`（国王内外政务）、`PlanCheckIn`（计划）、`YearlyChronicle`/`SpecialChronicle`（史官）、`Advisory`（谏言）、`FiefReview`（封地审视，被夺方激活触发内政矛盾）
 - **检查站冷却**：签到类激活（BehaviorCheckIn/PlanCheckIn）每 agent 至少间隔 **15 真实分钟**（`PartyBehaviorManager._lastCheckInByAgent`，用真实时间而非游戏时间——游戏时间加速时游戏小时冷却无效）。防止「move/wait 到达→立刻签到→再发指令」的 token 死循环
+- **卡死保险（持久行为）**：驻防/巡逻/护送（`CheckInHours > 0`）若下发后长时间**未到达目标点**（被拦截/目标遥不可及/巡逻绕圈不进 5 单位判定圈），签到永不触发、`PendingAction` 永不移除、mod 每帧重发覆盖原版、agent 永不激活 → 静默卡死。兜底：`PendingAction.CreatedAt` 记录下发时间，超时（`2× 签到周期`，驻防 6 天/巡逻 4 天/护送 2 天）且仍未到达 → 强制触发一次 BehaviorCheckIn（提示"你一直未能到达 X，是否放弃"）并释放 PendingAction，部队回归原版 AI。正常到达时此分支永不触发，零额外成本
 - 被俘/逃亡的国王统治者现在也会被激活（仅跳过已死亡和 null 的），`BuildSelfStatus` 中会提示"你仍是王国统治者"
 - 玩家可见：左下角弹 `xxx 给 xxx 写了一封信` / `xxx 正在思考下一步行动...` / `xxx 正在处理内外政务...` / `xxx 发现自己被夺封了...`
 - 防递归：书信规则强调"除非必要不回信" + 深度硬上限
@@ -678,6 +693,8 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 - `submit_advisory` 是 agent_tools.json 里的专用工具，归档格式由代码控制，agent 只需填内容
 - 私人笔记 `decisions/personal_notes.txt` 非强制；若 LLM 写成了别的文件名，`ProcessAdvisory` 会强制合并归位
 - 国王外交激活（`KingDiplomacy`）的提示词自动注入"先 read_file World/advisory/ 了解封臣谏言"，但国王决策权不受限
+- **国王↔封臣闭环（诏令）**：国王政务审视时可颁布公开诏令（`submit_edict`，归档 `World/edict/{王国}_{年}.txt`，仅王国统治者可用、非国王被拒）；封臣进谏前先读国王诏令（`ProcessAdvisory` 提示词 + `advisory_rules.txt`），若国王垂询某事应在谏言中回应；诏令读取走 `IsPublicDocAllowed`（史官任何国家、其他 agent 仅本国），玩家 H 键可见本国诏令
+- **国王外交问询（跨国王互通）**：国王可用 `consult_king` 遣使问询他国国王（`KingConsult` 事件 P1，落盘 `World/diplomacy/consults/{A}_and_{B}.txt`），对方以 `reply_consult` 答复，问询方下次政务激活拉取看到。**严格单向防环**：问询会话（intent=`"king_consult"`）中 `consult_king` 被 BuildTools 排除，链深恒 1。史官可读任何国家问询线程（`IsConsultAllowed`），参与双方国王可读，第三方不可读。每王国对 7 游戏天冷却（`TryConsult`/`RecordConsult`）
 - 事件队列积压 >3 时暂停生成新的国王外交/封臣谏言，先消化积压（Tick 中 `PendingEventCount() <= 3` 门槛）
 - **token 截断重试**：`SendMessage` 捕获 `finish_reason`（`"length"`=被 `max_tokens` 截断）。谏言/史官若被截断且未提交/未落盘 → 自动重试一次（更坚决的提示直接进谏/直接 write_file）；主动沉默（`finish_reason="stop"`）不重试。MCM「最大 Token 数」上限 65536、默认 32768（DeepSeek V4 最高支持 384K 输出，旧 8192 上限已过时），史官长编年史亦不易截断
 - 历史（H 键）可读本国公开谏言；史官 `_readableWorldDirs` 含 `"advisory"` 可读取
@@ -790,7 +807,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | dotnet CLI | `dotnet` | 编译、创建新项目 |
 | Rider | `C:\Program Files\JetBrains\JetBrains Rider 2026.2\bin\rider64.exe` | IDE |
 
-### 游戏工具（tools.json，45 个）
+### 游戏工具（tools.json，50 个）
 
 | 工具 | 类别 | 说明 |
 |------|------|------|
@@ -809,12 +826,14 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | `wait_at_settlement` | 行军 | 在定居点停留指定时长（支持 activate:true 参数到期自动唤醒） |
 | `raid_settlement` | 军事 | 劫掠村庄 |
 | `besiege_settlement` | 军事 | 围攻城镇/城堡 |
+| `form_army` | 军事 | 召集军团（以攻城/劫掠/防御目标为指向，召集本国领主成军团，交还原版 AI 指挥；需影响力>100、王国交战、氏族领袖） |
 | `engage_party` | 军事 | 追击并攻击另一支部队 |
 | `defend_settlement` | 军事 | 驻防守卫定居点（持续性，72h 签到） |
 | `patrol_settlement` | 军事 | 巡逻定居点周边（持续性，48h 签到） |
 | `escort_party` | 军事 | 护送跟随另一支部队（持续性，24h 签到） |
 | `go_around_party` | 行军 | 绕行回避某支部队 |
 | `query_war_status` | 查询 | 查询王国战争统计（双方阵亡/攻城/劫掠数） |
+| `query_influence` | 查询 | 查询本族当前影响力（政治资财，主要用于拉军团[超 100 可召集]与推行政策） |
 | `query_pending_proposals` | 查询 | 列出当前王国待处理的外交提案（无需参数，自动按当前 Entity 过滤） |
 | `declare_war` | 外交 | 向另一王国宣战（单向，国王专属） |
 | `propose_peace` | 外交 | 向另一王国提议议和（双向，附赔偿方案，国王专属） |
@@ -825,7 +844,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | `respond_to_diplomacy_proposal` | 外交 | 接受或拒绝收到的外交提案（国王专属） |
 | `gift_fief` | 外交 | 国王敕令将封地直接转让给指定封臣家族领袖（国王专属，不经过选举） |
 | `cancel_action` | 控制 | 取消当前任务，回归自主 AI |
-| `query_party_troops` | 查询 | 查看部队详情（自己/同阵营全量：金币/兵力/各兵种经验升级路径/俘虏/物品/装备；异国仅侦察估计：按距离与可达性分近距/远距/传闻三档，不泄露军饷/经验/装备等机密） |
+| `query_party_troops` | 查询 | 查看部队详情（自己/同阵营全量：金币/兵力/上限/各兵种经验升级路径/俘虏/物品/装备；异国仅侦察估计：按距离与可达性分近距/远距/传闻三档，近距/远距含规模上限估计，不泄露军饷/经验/装备等机密） |
 | `query_available_troops` | 查询 | 查看当前定居点可招募兵种（需在定居点内） |
 | `query_settlement_villages` | 查询 | 查看城镇/城堡的附属村庄列表 |
 | `query_hero_skills` | 查询 | 查询人物 18 个技能等级和 6 个属性值 |
@@ -835,8 +854,11 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | `give_item` | 社交 | 将自己物品/装备交给任意人物 |
 | `request_items` | 社交 | 向任意人物索要物品（NPC 直接划转，玩家弹确认框） |
 | `let_go` | 社交 | 遭遇战中放走玩家（仅当己方兵力占优时可用，含冷却期） |
+| `release_prisoner` | 军事 | 释放自己部队中的俘虏（贵族英雄→逃亡者回领地，普通士兵→移除；支持按名单个释放或 all 全放） |
+| `execute_prisoner` | 军事 | 处决自己部队中的贵族俘虏（仅限贵族；受 MCM「处决无惩罚」控制，默认开=无惩罚） |
+| `create_clan` | 通用 | 天意建族（家族补充系统）：建新贵族家族（成员 3-6 人程序生成、家族等级 2、族长带兵、入原始史料但不激活史官）。仅 `__fate__` 实体可用（能力门控） |
 
-### 文件工具（agent_tools.json，12 个）
+### 文件工具（agent_tools.json，15 个）
 
 | 工具 | 说明 |
 |------|------|
@@ -852,6 +874,9 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | `send_letter` | 给其他 Entity 写信 |
 | `submit_advisory` | 向国王提交公开谏言（封臣谏言专用，系统自动归档，史官可读） |
 | `submit_secret_advisory` | 向国王密陈秘密谏言（不入史册，仅本国王可读） |
+| `submit_edict` | 国王颁布公开诏令/垂询群臣（公开归档 `World/edict/{王国}_{年}.txt`，史官可读，仅王国统治者可用） |
+| `consult_king` | 国王遣使问询他国国王（`World/diplomacy/consults/{A}_and_{B}.txt`，激活对方回应，史官可读，仅王国统治者可用，每王国对 7 游戏天冷却） |
+| `reply_consult` | 国王回复他国外交问询（落盘到问询线程，史官可读，仅王国统治者可用） |
 
 ## 故障排查
 
