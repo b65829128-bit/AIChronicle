@@ -718,7 +718,7 @@ namespace MyFirstMod
                     {
                         var replySenderName = EntityManager.GetEntityById(evt.AgentId)?.Name ?? "对方";
                         MainThreadExecutor.DisplayMessage(new InformationMessage(
-                            $"你收到了{replySenderName}的回信，按 O 键打开信箱查看。", Colors.Green));
+                            $"你收到了{replySenderName}的回信，按 O 键打开书信面板查看。", Colors.Green));
                     }
                 }
             }
@@ -751,7 +751,7 @@ namespace MyFirstMod
             if (evt.Type == ActivationEventType.LetterReceived)
             {
                 MainThreadExecutor.DisplayMessage(new InformationMessage(
-                    $"你收到了来自 {senderEntity.Name} 的一封信。按 O 键打开信箱查看。",
+                    $"你收到了来自 {senderEntity.Name} 的一封信。按 O 键打开书信面板查看。",
                     Colors.Cyan));
                 return;
             }

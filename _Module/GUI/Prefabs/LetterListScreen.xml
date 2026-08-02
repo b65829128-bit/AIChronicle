@@ -14,7 +14,7 @@
               <Children>
                 <TextWidget WidthSizePolicy="CoverChildren" HeightSizePolicy="CoverChildren"
                             VerticalAlignment="Center" MarginLeft="15"
-                            Text="选择收信人" Brush="FullScreenNotice.Title" />
+                            Text="书信往来" Brush="FullScreenNotice.Title" />
                 <ButtonWidget WidthSizePolicy="Fixed" HeightSizePolicy="Fixed"
                               SuggestedWidth="28" SuggestedHeight="28"
                               HorizontalAlignment="Right" VerticalAlignment="Center"

@@ -106,7 +106,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **Entity 平等** | 玩家和所有 NPC 统一为 Entity，由 EntityController（Human/Agent）区分 |
 | **动态 Context** | ContextBuilder 根据当前交互双方动态组装系统提示词 |
 | **能力过滤** | 每个 Entity 有 EntityCapability 集合，工具列表按能力自动过滤 |
-| **书信模式** | 支持书信 intent，O 键唤起收信人列表 |
+| **书信模式** | 支持书信 intent，O 键唤起书信往来面板（统一线程列表 + 未读角标） |
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
 | **工具定义文件化** | 65 个工具定义在 `tools.json`（50 个游戏工具）和 `agent_tools.json`（15 个文件/通信工具，含 `submit_advisory`/`submit_edict`/`consult_king`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
@@ -118,6 +118,8 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **秘书处** | M 键打开，玩家的个人行政助手。固定 persona（无条件服从），不读玩家 persona。国王/封臣/平民均可使用，可用工具取决于玩家当前身份。玩家可经秘书处调 `submit_advisory` 提交公开谏言（雇佣兵除外） |
 | **天意** | 虚拟实体（ID: `__fate__`，HeroRef=null，与史官并列）。家族补充系统：封臣/雇佣兵家族低于下限时被激活，决定新家族名称/文化/投效势力（`create_clan`，能力门控仅天意可用），成员程序生成、等级 2、族长带兵，入原始史料但不激活史官 |
 | **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
+
+> **AI 聊天对话入口**：`LordChatBehavior` 在 `hero_main_options`（普通领主对话）与 `player_responds_to_surrender_demand`（被强敌擒获的投降/应战对话）两个节点注册【AI 聊天】选项。后者让被擒玩家可谈判，agent 可用 `let_go` 放行；`AIChatScreenVM` 在回复完成后检测 `PlayerEncounter.LeaveEncounter` 为真时自动关闭聊天并 `EndConversation()` 结束对话（对话中遭遇不会自动 tick 结束），玩家获释。
 
 > **提示词同步规则（newer-wins）**：基础目录 `_Module/Prompts/` 是模板源，战役创建时复制到 `Campaigns/{战役}/`。每次进档（`OnSessionLaunched` → `PromptManager.StartCampaign`）会做同步——**只要基础目录文件比战役副本新，就覆盖战役副本**。玩家在战役副本上的手动编辑（时间戳更新）会被保留。
 >
@@ -145,7 +147,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | `NPCs/{自己}/goals/*.txt` | 读 + 写 + 追加 + 编辑 + 删除 |
 | `NPCs/{自己}/chat_logs/*.txt` | 只读（不可修改） |
 | `NPCs/{自己}/decisions/*.txt` | 读 + 写 + 追加 + 编辑 + 删除 |
-| `NPCs/{自己}/mailbox/**` | 读 + 写 + 追加 + 编辑 + 删除 |
+| `NPCs/{自己}/mailbox/**` | 已废弃（仅旧档遗留，不再写入） |
 | `World/factions.txt` | 只读 |
 | `World/settlements.txt` | 只读 |
 | `World/history/**`（原始史料/编年史） | 只读 |
@@ -154,6 +156,8 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | `World/secret_advisory/`（秘密谏言） | 只读：**仅本国国王**；本国封臣与史官不可读 |
 | `World/diplomacy/consults/`（国王外交问询） | 只读：史官可读任何国家；参与双方国王可读；第三方不可读 |
 | 其他 NPC 的任何文件 | **禁止** |
+
+> 玩家的实体目录（`{Name}_main_hero`）含 `thread_read_state.json`（各线程已读水位，O 键未读角标依据）——仅玩家可写，Agent 在信息隔离下不可访问。
 
 ### 扩展方式
 
@@ -290,9 +294,9 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │                       ├── persona_meta.json ← 自定义人格维度（权力欲/归属重心/冒险倾向/天命信仰/战争倾向）
 │                       ├── knowledge/
 │                       ├── chat_logs/
-│                       ├── mailbox/
+│                       ├── mailbox/          ← 已废弃（仅旧档首次迁移，不再写入）
 │                       │   ├── inbox/
-│                       │   └── outbox/
+│                       │   └── sent/         ← 实际目录名（此前文档误写 outbox）
 │                       ├── relationships/
 │                       ├── goals/
 │                       └── decisions/
@@ -716,6 +720,8 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 ### 盟约/贸易协定到期记录（轻量拉取式，无 LLM）
 
 盟约（84 天）与贸易协定（1 年）由原版定时到期。模组接管外交后**不主动激活 Agent 处理到期**（避免 token 消耗），改为拉取式记录，国王下次激活时自行看到：
+
+> **盟约"号召盟友宣战"投票已拦截**：`SubModule.OnGameStart` 手动 patch `ProposeCallToWarAgreementDecision`/`AcceptCallToWarAgreementDecision` 的 `IsAllowed()`（Prefix 强制返回 false，`ShouldBeCancelled()` 在投票触发前将其取消；Election 类 PatchAll 会静默跳过，须手动注册）；并 patch `LordConversationsCampaignBehavior.conversation_player_wants_to_sponsor_call_to_war_on_condition` 隐藏玩家对话里的原版"号召盟友"选项（否则玩家会花影响力/金币却无声失效）。军事同盟只保留名义作用——是否号召盟友/宣战由国王 Agent 激活时自行决定。受 MCM「禁止原版外交」开关控制。
 
 - **记录**：`AgentScheduler.Tick` 每游戏日一次调 `DiplomacyService.CheckExpiringAgreements()`（无 LLM）——扫描剩余不足 1 天的盟约/贸易协定，写入 `World/diplomacy/expiry_log.txt`（行格式 `类型|王国1ID|王国2ID|到期日day|人类可读文本`，每对王国+类型一条，超 90 游戏天清除防堆积）
 - **查看**：`query_world_state` 输出各王国名下附带「📜 盟约 X与Y 于…到期」；到期前不记录不提示，国王不查就不知道

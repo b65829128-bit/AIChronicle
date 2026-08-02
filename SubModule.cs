@@ -61,7 +61,7 @@ namespace MyFirstMod
             base.OnGameStart(game, gameStarter);
 
             InformationManager.DisplayMessage(new InformationMessage(
-                "[MyFirstMod] O键=信箱 | H键=史书 | M键=秘书处",
+                "[MyFirstMod] O键=书信往来 | H键=史书 | M键=秘书处",
                 Colors.Green));
 
             if (game.GameType is Campaign && gameStarter is CampaignGameStarter starter)
@@ -96,6 +96,41 @@ namespace MyFirstMod
 
                     var tradeM = kdpbType.GetMethod("GetRandomTradeAgreementDecision", BindingFlags.Instance | BindingFlags.NonPublic);
                     if (tradeM != null) harmony.Patch(tradeM, prefix: prefix);
+                }
+
+                // 号召盟友宣战投票（盟约 CallToWar 机制）：拦截原版"号召盟友向敌国宣战"的国内投票，
+                // 让军事同盟只保留名义作用——是否号召盟友/宣战由国王 Agent 激活时自行决定（或玩家经秘书处）。
+                // ProposeCallToWarAgreementDecision / AcceptCallToWarAgreementDecision 是 Election 类，
+                // PatchAll 在 OnSubModuleLoad 会静默跳过，必须这里手动注册。
+                // 原理：KingdomDecision.ShouldBeCancelled() 在投票触发前检查 IsAllowed()，强制其返回 false 即取消投票。
+                foreach (var callToWarTypeName in new[]
+                {
+                    "TaleWorlds.CampaignSystem.Election.ProposeCallToWarAgreementDecision, TaleWorlds.CampaignSystem",
+                    "TaleWorlds.CampaignSystem.Election.AcceptCallToWarAgreementDecision, TaleWorlds.CampaignSystem"
+                })
+                {
+                    var callToWarType = Type.GetType(callToWarTypeName);
+                    if (callToWarType == null) continue;
+                    var isAllowedM = callToWarType.GetMethod("IsAllowed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (isAllowedM == null) continue;
+                    var ctHarmony = new Harmony("MyFirstMod.CallToWar");
+                    ctHarmony.Patch(isAllowedM,
+                        prefix: new HarmonyMethod(typeof(SubModule).GetMethod(nameof(BlockCallToWarVote), BindingFlags.Static | BindingFlags.NonPublic)));
+                }
+
+                // 玩家对话里的原版"号召盟友宣战"选项也一并隐藏——其投票已被拦截，若选项仍显示，
+                // 玩家会花影响力/金币却无声失效。隐藏主选项后，其下的列王国/拒绝子流程都不可达。
+                // LordConversationsCampaignBehavior 是 CampaignBehaviors 类，PatchAll 会静默跳过，须手动注册。
+                var lordConversationsType = Type.GetType("TaleWorlds.CampaignSystem.CampaignBehaviors.LordConversationsCampaignBehavior, TaleWorlds.CampaignSystem");
+                if (lordConversationsType != null)
+                {
+                    var callToWarDialogM = lordConversationsType.GetMethod("conversation_player_wants_to_sponsor_call_to_war_on_condition", BindingFlags.Instance | BindingFlags.NonPublic);
+                    if (callToWarDialogM != null)
+                    {
+                        var dialogHarmony = new Harmony("MyFirstMod.CallToWarDialog");
+                        dialogHarmony.Patch(callToWarDialogM,
+                            prefix: new HarmonyMethod(typeof(SubModule).GetMethod(nameof(BlockCallToWarDialog), BindingFlags.Static | BindingFlags.NonPublic)));
+                    }
                 }
 
                 // 册封由 Agent 主导：拦截攻城后投票（SettlementClaimantCampaignBehavior 是 CampaignBehaviors 类，
@@ -301,9 +336,40 @@ namespace MyFirstMod
             return true;
         }
 
+        /// <summary>
+        /// 拦截盟约"号召盟友宣战"投票（CallToWar）：强制 IsAllowed() 返回 false，使决策被 ShouldBeCancelled() 取消。
+        /// 军事同盟只保留名义作用——是否号召盟友/宣战由国王 Agent 激活时自行决定（或玩家经秘书处）。
+        /// </summary>
+        private static bool BlockCallToWarVote(ref bool __result)
+        {
+            if (MySettings.Instance?.BanVanillaDiplomacy == true)
+            {
+                __result = false;
+                return false; // 跳过原 IsAllowed → 决策在触发前被取消，不再出现国内投票
+            }
+            return true;
+        }
+
+        /// <summary>隐藏玩家对话里的原版"号召盟友宣战"选项（其投票已被拦截，避免玩家花影响力/金币却无声失效）。</summary>
+        private static bool BlockCallToWarDialog(ref bool __result)
+        {
+            if (MySettings.Instance?.BanVanillaDiplomacy == true)
+            {
+                __result = false;
+                return false; // 跳过原条件 → 对话选项不再出现
+            }
+            return true;
+        }
+
         public static List<string> GetKnownNpcIds()
         {
             return _chatBehavior?.KnownNpcIds ?? new List<string>();
+        }
+
+        /// <summary>登记一个已知 NPC（联系人）。NPC 主动给玩家写信时调用，使对方出现在 O 键书信面板。</summary>
+        public static void MarkNpcKnown(string entityId)
+        {
+            _chatBehavior?.AddKnownNpc(entityId);
         }
     }
 

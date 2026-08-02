@@ -59,6 +59,7 @@ namespace MyFirstMod
 
             _vm.OnClose = () =>
             {
+                _vm?.MarkThreadReadIfPlayerThread(); // 窗口关闭时同步已读水位（秘书处为 no-op）
                 if (_layer != null && _parentScreen != null)
                     _parentScreen.RemoveLayer(_layer);
                 _vm?.OnFinalize();
@@ -103,6 +104,7 @@ namespace MyFirstMod
 
             _vm.OnClose = () =>
             {
+                _vm?.MarkThreadReadIfPlayerThread(); // 窗口关闭时同步已读水位
                 if (_layer != null && _parentScreen != null)
                 {
                     _parentScreen.RemoveLayer(_layer);

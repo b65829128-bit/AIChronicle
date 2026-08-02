@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Encounters;
 using TaleWorlds.Library;
 
 namespace MyFirstMod
@@ -213,6 +214,7 @@ namespace MyFirstMod
             {
                 var history = PromptManager.LoadChatLogFor(_agentId, _targetId);
                 _sessionMessages.AddRange(history);
+                MarkThreadReadIfPlayerThread(); // 打开线程即视为已读
 
                 var loadTime = PromptManager.GetCurrentTimeString();
                 foreach (var entry in _sessionMessages)
@@ -241,6 +243,23 @@ namespace MyFirstMod
             OnClose?.Invoke();
         }
 
+        /// <summary>
+        /// 若当前线程是玩家与某 NPC 的往来线程，推进该线程的已读水位（玩家打开/发送/看到新回复时调用）。
+        /// 秘书处（双侧都是玩家）或虚拟实体线程不做处理。只在主线程调用。
+        /// </summary>
+        internal void MarkThreadReadIfPlayerThread()
+        {
+            if (Hero.MainHero == null) return;
+            var playerId = EntityManager.GetOrCreateEntity(Hero.MainHero).Id;
+            var agentIsPlayer = _agentId == playerId;
+            var targetIsPlayer = _targetId == playerId;
+            if (agentIsPlayer == targetIsPlayer) return; // 秘书处（双侧都玩家）或无效线程
+            var npcId = agentIsPlayer ? _targetId : _agentId;
+            var npc = EntityManager.GetOrCreateEntityById(npcId);
+            if (npc?.HeroRef == null) return;
+            AgentManager.MarkThreadRead(npcId, playerId);
+        }
+
         public void ExecuteSend()
         {
             if (_isLoading || string.IsNullOrWhiteSpace(_inputText))
@@ -266,6 +285,7 @@ namespace MyFirstMod
             var isLetter = _intent == "letter";
             _sessionMessages.Add(new ChatHistoryEntry { Role = "user", Content = userMsg, IsLetter = isLetter });
             PromptManager.AppendChatLogFor(_agentId, _targetId, "user", userMsg, isLetter);
+            MarkThreadReadIfPlayerThread(); // 自己刚发的消息不算未读
 
             if (_intent == "letter")
             {
@@ -434,6 +454,21 @@ namespace MyFirstMod
                             MySettings.Instance?.ContentIndent ?? 15,
                             MySettings.Instance?.SenderTopGap ?? 6,
                             MySettings.Instance?.ContentTopGap ?? 6));
+                        MarkThreadReadIfPlayerThread(); // 回复已显示 → 该线程已读
+
+                        // agent 已用 let_go 放行（遭遇放行）：关闭聊天并结束底层对话，玩家获释，
+                        // 避免玩家回到"投降/应战"的死角选项（对话中遭遇不会自动 tick 结束）。
+                        if (PlayerEncounter.Current != null && PlayerEncounter.LeaveEncounter)
+                        {
+                            AIChatScreen.Close();
+                            try
+                            {
+                                if (Campaign.Current?.ConversationManager != null
+                                    && Campaign.Current.ConversationManager.IsConversationInProgress)
+                                    Campaign.Current.ConversationManager.EndConversation();
+                            }
+                            catch { }
+                        }
                     });
                 }
                 catch (Exception ex)

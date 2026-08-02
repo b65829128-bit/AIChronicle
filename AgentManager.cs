@@ -1056,40 +1056,179 @@ namespace MyFirstMod
             });
         }
 
-        public static void StoreOutgoingLetter(string senderId, string recipientId, string content)
+        /// <summary>
+        /// 统一线程模型：信件写入双方的书信往来线程（chat_logs），不再投递 mailbox。
+        /// 线程始终存放在"agent 侧"：收信人是玩家时，线程在发信 NPC 目录下（玩家视角线程）；
+        /// 收信人是 NPC 时，线程在收信 NPC 目录下。role 以存放目录所有者的视角为准。
+        /// </summary>
+        public static void StoreLetterInThread(string senderId, string recipientId, string content, bool recipientIsPlayer)
         {
-            var senderDir = Path.Combine(_baseDir, SanitizeDir(senderId));
-            var recipientDir = Path.Combine(_baseDir, SanitizeDir(recipientId));
-
-            Directory.CreateDirectory(Path.Combine(senderDir, "mailbox", "sent"));
-            Directory.CreateDirectory(Path.Combine(recipientDir, "mailbox", "inbox"));
-
-            var sentPath = Path.Combine(senderDir, "mailbox", "sent", SanitizeFile(recipientId) + ".txt");
-            var inboxPath = Path.Combine(recipientDir, "mailbox", "inbox", SanitizeFile(senderId) + ".txt");
-
-            var timestamp = PromptManager.GetCurrentTimeString();
-            var entry = "[" + timestamp + "]\n" + content.Trim() + "\n";
-
-            File.AppendAllText(sentPath, entry, Encoding.UTF8);
-            File.AppendAllText(inboxPath, entry, Encoding.UTF8);
+            if (recipientIsPlayer)
+                PromptManager.AppendChatLogFor(senderId, recipientId, "assistant", content, isLetter: true); // NPCs/{sender}/chat_logs/{player}.txt（NPC 的声音）
+            else
+                PromptManager.AppendChatLogFor(recipientId, senderId, "user", content, isLetter: true);      // NPCs/{recipient}/chat_logs/{sender}.txt（对方的声音）
         }
 
-        public static List<string> ListInbox(string entityId)
+        // ============ 每线程已读/未读追踪（玩家端） ============
+
+        private static readonly object _threadReadLock = new();
+
+        private static string GetThreadReadStatePath(string playerId)
         {
-            var inboxDir = Path.Combine(_baseDir, entityId, "mailbox", "inbox");
-            if (!Directory.Exists(inboxDir))
-                return new List<string>();
-            return Directory.GetFiles(inboxDir, "*.txt")
-                .Select(f => Path.GetFileNameWithoutExtension(f))
-                .Where(n => !string.IsNullOrEmpty(n))
-                .ToList()!;
+            return Path.Combine(_baseDir, SanitizeDir(playerId), "thread_read_state.json");
         }
 
-        public static string? ReadInboxLetter(string entityId, string fileName)
+        /// <summary>玩家与某 NPC 的往来线程恒在 NPC 侧：NPCs/{npcId}/chat_logs/{playerId}.txt。</summary>
+        private static string GetPlayerThreadPath(string npcId, string playerId)
         {
-            var path = Path.Combine(_baseDir, entityId, "mailbox", "inbox", SanitizeFile(fileName) + ".txt");
-            if (!File.Exists(path)) return null;
-            return File.ReadAllText(path, Encoding.UTF8).Trim();
+            return GetChatLogPathFor(npcId, playerId) ?? "";
+        }
+
+        /// <summary>线程文件中的消息行数（与 LoadChatLogFor 解析一致：以 [ 开头且含 ": " 的行）。</summary>
+        private static int CountThreadMessages(string threadPath)
+        {
+            if (!File.Exists(threadPath)) return 0;
+            try
+            {
+                return SafeFileIO.ReadAllLines(threadPath).Count(l => l.StartsWith("[") && l.Contains(": "));
+            }
+            catch { return 0; }
+        }
+
+        private static Dictionary<string, int> LoadThreadReadState(string playerId)
+        {
+            var path = GetThreadReadStatePath(playerId);
+            if (!File.Exists(path)) return new Dictionary<string, int>();
+            try
+            {
+                return JsonConvert.DeserializeObject<Dictionary<string, int>>(SafeFileIO.ReadAllText(path))
+                       ?? new Dictionary<string, int>();
+            }
+            catch { return new Dictionary<string, int>(); }
+        }
+
+        private static void SaveThreadReadState(string playerId, Dictionary<string, int> state)
+        {
+            var path = GetThreadReadStatePath(playerId);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            SafeFileIO.WriteAllText(path, JsonConvert.SerializeObject(state, Formatting.Indented));
+        }
+
+        /// <summary>某 NPC 与玩家的线程中的未读消息数（= 总消息行数 - 已读水位）。</summary>
+        public static int GetThreadUnreadCount(string npcId, string playerId)
+        {
+            var total = CountThreadMessages(GetPlayerThreadPath(npcId, playerId));
+            int stored;
+            lock (_threadReadLock)
+            {
+                var state = LoadThreadReadState(playerId);
+                stored = state.TryGetValue(npcId, out var v) ? v : 0;
+            }
+            return Math.Max(0, total - stored);
+        }
+
+        /// <summary>把某线程的已读水位推进到当前行数（玩家打开线程或自己发信时调用）。</summary>
+        public static void MarkThreadRead(string npcId, string playerId)
+        {
+            var total = CountThreadMessages(GetPlayerThreadPath(npcId, playerId));
+            lock (_threadReadLock)
+            {
+                var state = LoadThreadReadState(playerId);
+                state[npcId] = total;
+                SaveThreadReadState(playerId, state);
+            }
+        }
+
+        // ============ 旧档迁移：mailbox → 线程 ============
+
+        /// <summary>
+        /// 把玩家遗留的 mailbox（inbox + sent）合并进书信往来线程。幂等：完成后写 .inbox_migrated 标记文件。
+        /// 保留原时间戳；收件箱来源的信按 NPC 的声音（assistant）入线程，发件箱来源按玩家（user）入线程。
+        /// </summary>
+        public static void MigrateLegacyPlayerInbox(string playerId)
+        {
+            var playerDir = Path.Combine(_baseDir, SanitizeDir(playerId));
+            var marker = Path.Combine(playerDir, ".inbox_migrated");
+            if (File.Exists(marker)) return;
+
+            try
+            {
+                var inboxDir = Path.Combine(playerDir, "mailbox", "inbox");
+                if (Directory.Exists(inboxDir))
+                {
+                    foreach (var file in Directory.GetFiles(inboxDir, "*.txt"))
+                    {
+                        var senderId = Path.GetFileNameWithoutExtension(file);
+                        if (string.IsNullOrEmpty(senderId)) continue;
+                        foreach (var (ts, body) in ParseLegacyMailboxFile(file))
+                            PromptManager.AppendChatLogFor(senderId, playerId, "assistant", body, isLetter: true, timestamp: ts);
+                        SubModule.MarkNpcKnown(senderId);                 // 旧联系人进 O 面板
+                        MarkThreadRead(senderId, playerId);               // 旧信在旧 UI 已读，不刷未读角标
+                        try { File.Delete(file); } catch { }
+                    }
+                }
+
+                var sentDir = Path.Combine(playerDir, "mailbox", "sent");
+                if (Directory.Exists(sentDir))
+                {
+                    foreach (var file in Directory.GetFiles(sentDir, "*.txt"))
+                    {
+                        var recipientId = Path.GetFileNameWithoutExtension(file);
+                        if (string.IsNullOrEmpty(recipientId)) continue;
+                        foreach (var (ts, body) in ParseLegacyMailboxFile(file))
+                            PromptManager.AppendChatLogFor(recipientId, playerId, "user", body, isLetter: true, timestamp: ts);
+                        try { File.Delete(file); } catch { }
+                    }
+                }
+
+                SafeFileIO.WriteAllText(marker, "migrated");
+            }
+            catch (Exception ex)
+            {
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
+                    $"[MyFirstMod] 旧信箱迁移失败：{ex.Message}", Colors.Red));
+            }
+        }
+
+        /// <summary>解析旧 mailbox 文件（[{时间戳}]\n{正文，可能多行}\n 重复追加）。返回 (时间戳, 正文) 列表。</summary>
+        private static List<(string, string)> ParseLegacyMailboxFile(string path)
+        {
+            var result = new List<(string, string)>();
+            try
+            {
+                var lines = SafeFileIO.ReadAllLines(path);
+                string? currentTs = null;
+                var body = new StringBuilder();
+                foreach (var raw in lines)
+                {
+                    var line = raw.TrimEnd('\r');
+                    if (IsMailboxTimestampLine(line))
+                    {
+                        if (currentTs != null)
+                            result.Add((currentTs, body.ToString().Trim()));
+                        currentTs = line.Trim('[', ']');
+                        body.Clear();
+                    }
+                    else if (currentTs != null)
+                    {
+                        if (body.Length > 0) body.Append('\n');
+                        body.Append(line);
+                    }
+                }
+                if (currentTs != null)
+                    result.Add((currentTs, body.ToString().Trim()));
+            }
+            catch { }
+            return result;
+        }
+
+        /// <summary>旧格式时间戳行：整行 [第XXXX年，春季第N日，上午] 之类（游戏时间戳必含"年"）。</summary>
+        private static bool IsMailboxTimestampLine(string line)
+        {
+            var trimmed = line.Trim();
+            return trimmed.Length > 2
+                && trimmed.StartsWith("[") && trimmed.EndsWith("]")
+                && trimmed.Contains("年");
         }
 
         public static string GetDiplomacyDir()

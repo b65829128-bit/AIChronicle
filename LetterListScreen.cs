@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Engine.GauntletUI;
 using TaleWorlds.Library;
@@ -15,7 +14,6 @@ namespace MyFirstMod
         private string _npcLabel = "";
         private readonly LetterListVM _parent;
         private readonly Hero? _writerHero;
-        private readonly string _inboxFileName;
 
         [DataSourceProperty]
         public string NpcLabel
@@ -29,23 +27,11 @@ namespace MyFirstMod
             _npcLabel = label;
             _writerHero = hero;
             _parent = parent;
-            _inboxFileName = "";
-        }
-
-        public LetterListEntryVM(string label, string inboxFileName, LetterListVM parent)
-        {
-            _npcLabel = label;
-            _writerHero = null;
-            _parent = parent;
-            _inboxFileName = inboxFileName;
         }
 
         public void ExecuteSelect()
         {
-            if (!string.IsNullOrEmpty(_inboxFileName))
-                _parent.OnInboxSelected(_inboxFileName);
-            else
-                _parent.OnEntrySelected(_writerHero);
+            _parent.OnEntrySelected(_writerHero);
         }
     }
 
@@ -56,26 +42,15 @@ namespace MyFirstMod
 
         public Action? OnClose { get; set; }
         public Action<Hero?>? OnSelectNpc { get; set; }
-        public Action<string>? OnSelectInbox { get; set; }
 
         public void AddEntry(string label, Hero? hero)
         {
             Messages.Add(new LetterListEntryVM(label, hero, this));
         }
 
-        public void AddInboxEntry(string label, string fileName)
-        {
-            Messages.Add(new LetterListEntryVM(label, fileName, this));
-        }
-
         public void OnEntrySelected(Hero? hero)
         {
             OnSelectNpc?.Invoke(hero);
-        }
-
-        public void OnInboxSelected(string fileName)
-        {
-            OnSelectInbox?.Invoke(fileName);
         }
 
         public void ExecuteClose()
@@ -105,28 +80,54 @@ namespace MyFirstMod
             if (Hero.MainHero != null)
                 playerId = EntityManager.GetOrCreateEntity(Hero.MainHero).Id;
 
-            var inboxFiles = AgentManager.ListInbox(playerId);
-            foreach (var fileName in inboxFiles)
+            // 旧档迁移（幂等）：把遗留 mailbox 合并进书信往来线程
+            try { AgentManager.MigrateLegacyPlayerInbox(playerId); }
+            catch (Exception ex)
             {
-                var senderName = GetSenderName(fileName);
-                _vm.AddInboxEntry("[来信] " + senderName, fileName);
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"[MyFirstMod] 旧信箱迁移异常：{ex.Message}", Colors.Red));
             }
 
-            var knownIds = SubModule.GetKnownNpcIds();
-            foreach (var entityId in knownIds)
+            // 统一联系人列表：KnownNpcIds（面对面聊过 + 来信过的 NPC），每行附未读角标
+            var rows = new List<(string label, Hero? hero, int unread, DateTime lastWrite)>();
+            foreach (var entityId in SubModule.GetKnownNpcIds())
             {
                 var entity = EntityManager.GetOrCreateEntityById(entityId);
                 if (entity == null || entity.HeroRef == null) continue;
+
+                var unread = AgentManager.GetThreadUnreadCount(entityId, playerId);
+
                 var label = entity.Name;
                 if (!string.IsNullOrEmpty(entity.Title))
                     label += "  " + entity.Title;
-                _vm.AddEntry(label, entity.HeroRef);
+                if (unread > 0)
+                    label += $"  · {unread} 条未读";
+
+                var lastWrite = DateTime.MinValue;
+                try
+                {
+                    var threadPath = AgentManager.GetChatLogPathFor(entityId, playerId);
+                    if (threadPath != null && File.Exists(threadPath))
+                        lastWrite = File.GetLastWriteTimeUtc(threadPath);
+                }
+                catch { }
+
+                rows.Add((label, entity.HeroRef, unread, lastWrite));
             }
+
+            // 排序：未读优先 → 线程最近活跃优先
+            rows = rows
+                .OrderByDescending(r => r.unread > 0)
+                .ThenByDescending(r => r.lastWrite)
+                .ToList();
+
+            foreach (var row in rows)
+                _vm.AddEntry(row.label, row.hero);
 
             if (_vm.Messages.Count == 0)
             {
                 InformationManager.DisplayMessage(new InformationMessage(
-                    "[MyFirstMod] 你还没有对话过任何领主，也没有收到过信件。", Colors.Yellow));
+                    "[MyFirstMod] 你还没有往来过任何领主。", Colors.Yellow));
                 _parentScreen = null;
                 _vm = null;
                 return;
@@ -140,36 +141,6 @@ namespace MyFirstMod
                 if (player != null)
                     EntityManager.ActivateInteraction(hero, player);
                 AIChatScreen.RequestOpenLetter(hero);
-            };
-
-            _vm.OnSelectInbox = (fileName) =>
-            {
-                Close();
-                var playerEntity = Hero.MainHero != null
-                    ? EntityManager.GetOrCreateEntity(Hero.MainHero)
-                    : null;
-                if (playerEntity == null) return;
-
-                var letterContent = AgentManager.ReadInboxLetter(playerEntity.Id, fileName);
-                if (string.IsNullOrEmpty(letterContent)) return;
-
-                var senderName = GetSenderName(fileName);
-                var senderEntity = ResolveSenderEntity(fileName);
-
-                InformationManager.ShowInquiry(new InquiryData(
-                    "来信 — " + senderName,
-                    letterContent.Length > 800 ? letterContent.Substring(0, 800) + "..." : letterContent,
-                    true, true, "回复", "关闭",
-                    () =>
-                    {
-                        if (senderEntity?.HeroRef == null) return;
-                        var player = Hero.MainHero;
-                        if (player != null)
-                            EntityManager.ActivateInteraction(senderEntity.HeroRef, player);
-                        AIChatScreen.RequestOpenLetter(senderEntity.HeroRef);
-                    },
-                    () => { }
-                ), false, false);
             };
 
             _vm.OnClose = () =>
@@ -196,18 +167,6 @@ namespace MyFirstMod
                     $"[MyFirstMod] 打开书信列表失败：{ex.Message}", Colors.Red));
                 _layer = null;
             }
-        }
-
-        private static string GetSenderName(string fileName)
-        {
-            var entity = EntityManager.GetEntityById(fileName);
-            if (entity != null) return entity.Name;
-            return fileName;
-        }
-
-        private static Entity? ResolveSenderEntity(string fileName)
-        {
-            return EntityManager.GetOrCreateEntityById(fileName);
         }
 
         public static void Close()

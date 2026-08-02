@@ -1832,8 +1832,20 @@ namespace MyFirstMod
                 if (recipientHero.IsFugitive) return $"[错误] {recipientName} 正在逃亡中，无法收信";
                 if (recipientHero.IsDisabled) return $"[错误] {recipientName} 处于不可用状态，无法收信";
             }
-            // 修复：先校验收信人可收信，再落盘发件箱——避免"已发出但永远不送达"脏记录
-            AgentManager.StoreOutgoingLetter(senderEntity.Id, resolvedId, content);
+            // 统一线程模型：信件写入双方的书信往来线程（chat_logs），不再投递 mailbox。
+            // send 时即落线程——即使事件被深度上限丢弃，信件也不会丢（与写信窗口行为一致，收信方处理时去重）。
+            var recipientIsPlayer = recipientHero != null && recipientHero == Hero.MainHero;
+            AgentManager.StoreLetterInThread(senderEntity.Id, resolvedId, content, recipientIsPlayer);
+
+            if (recipientIsPlayer)
+                SubModule.MarkNpcKnown(senderEntity.Id); // NPC 主动给玩家写信 → 玩家 O 面板可见
+
+            // 玩家自己发信时推进已读水位，避免把自己刚写的信算成未读
+            if (AIChatClient.CurrentHero == Hero.MainHero && !recipientIsPlayer)
+            {
+                var playerId = EntityManager.GetOrCreateEntity(Hero.MainHero).Id;
+                AgentManager.MarkThreadRead(resolvedId, playerId);
+            }
 
             var nextDepth = AgentScheduler.IsProcessing
                 ? AgentScheduler.CurrentProcessingDepth + 1

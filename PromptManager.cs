@@ -598,15 +598,16 @@ namespace MyFirstMod
             AppendChatLogFor(EntityManager.ActiveAgentId ?? "", EntityManager.ActiveTargetId ?? "", role, content);
         }
 
-        public static void AppendChatLogFor(string agentId, string targetId, string role, string content, bool isLetter = false)
+        public static void AppendChatLogFor(string agentId, string targetId, string role, string content, bool isLetter = false, string? timestamp = null)
         {
             var path = AgentManager.GetChatLogPathFor(agentId, targetId);
             if (path == null) return;
-            var timestamp = GetCurrentTimeString();
+            // 可选原始时间戳（旧档 mailbox 迁移时保留信件原发出时间）；缺省用当前时间
+            var ts = timestamp ?? GetCurrentTimeString();
             // 带重试：同一 chat_log 可能被该 agent 的两个并发事件同时追加（文件正被使用），重试而非报错
             // 信件消息加标记前缀，加载时剥掉用于 UI 区分（不污染给 LLM 的内容）
             var text = (isLetter ? ChatLog.LetterMarker : "") + content.Replace("\n", "\\n");
-            SafeFileIO.AppendAllText(path, $"[{timestamp}] {role}: " + text + Environment.NewLine);
+            SafeFileIO.AppendAllText(path, $"[{ts}] {role}: " + text + Environment.NewLine);
         }
 
         public static string? ExtractLearnedTag(string response, out string cleanedResponse)

@@ -12,8 +12,23 @@ namespace MyFirstMod
     {
         private string? _campaignId;
         private List<string> _knownNpcIds = new();
+        private readonly object _knownLock = new();
 
-        public List<string> KnownNpcIds => _knownNpcIds;
+        public List<string> KnownNpcIds
+        {
+            get { lock (_knownLock) return new List<string>(_knownNpcIds); }
+        }
+
+        /// <summary>线程安全地登记一个已知 NPC（去重）。主线程（对话/写信工具）与后台信件送达都可调用。</summary>
+        public void AddKnownNpc(string entityId)
+        {
+            if (string.IsNullOrEmpty(entityId)) return;
+            lock (_knownLock)
+            {
+                if (!_knownNpcIds.Contains(entityId))
+                    _knownNpcIds.Add(entityId);
+            }
+        }
 
         public override void RegisterEvents()
         {
@@ -58,6 +73,27 @@ namespace MyFirstMod
                 "{=MFM_chat_done}（领主等待你开口……）",
                 null,
                 null);
+
+            // 被强敌擒获（投降/应战）场景也提供 AI 聊天：玩家可谈判，agent 可用 let_go 放行。
+            // 节点 player_responds_to_surrender_demand 是投降/应战/买路的选择节点——原版此处无对话入口。
+            starter.AddPlayerLine(
+                "myfirstmod_ai_chat_dialog_surrender",
+                "player_responds_to_surrender_demand",
+                "myfirstmod_ai_chat_dialog_surrender_output",
+                "{=MFM_chat_option_surrender}【AI 聊天】",
+                new ConversationSentence.OnConditionDelegate(ChatDialogCondition),
+                new ConversationSentence.OnConsequenceDelegate(ChatDialogConsequence),
+                100,
+                null,
+                null);
+
+            starter.AddDialogLine(
+                "myfirstmod_ai_chat_dialog_surrender_done",
+                "myfirstmod_ai_chat_dialog_surrender_output",
+                "player_responds_to_surrender_demand",
+                "{=MFM_chat_done_surrender}（领主等待你开口……）",
+                null,
+                null);
         }
 
         private bool ChatDialogCondition()
@@ -73,8 +109,7 @@ namespace MyFirstMod
             if (hero == null) return;
 
             var entity = EntityManager.GetOrCreateEntity(hero);
-            if (!_knownNpcIds.Contains(entity.Id))
-                _knownNpcIds.Add(entity.Id);
+            AddKnownNpc(entity.Id);
 
             AIChatScreen.RequestOpen(hero);
         }
