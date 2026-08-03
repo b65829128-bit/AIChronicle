@@ -3398,10 +3398,36 @@ namespace MyFirstMod
         /// 家族等级 2（恰好够当封臣又看得出是新族），投效指定王国（封臣或雇佣兵），族长自动获得部队。
         /// 仅「天意」（__fate__）实体可调用。
         /// </summary>
+        /// <summary>
+        /// 天意单次激活的建族预算：一次只建一族。
+        /// 背景：天意提示词虽写明"一次只创建一个家族"，但 LLM 可能连建多族——
+        /// 曾出现一次激活连建 5 族（每族 3-6 英雄 + 族长部队），与游戏其他状态变更撞车导致原生层崩溃。
+        /// 这里用代码强制限流：每次天意激活（ProcessClanReplenishmentEvent 开头）重置预算，超限即拒绝。
+        /// </summary>
+        private static int _fateClanBudget;
+        private static readonly object _fateClanBudgetLock = new();
+
+        public static void ResetFateClanBudget()
+        {
+            lock (_fateClanBudgetLock) _fateClanBudget = 0;
+        }
+
+        private static bool TryConsumeFateClanBudget()
+        {
+            lock (_fateClanBudgetLock)
+            {
+                if (_fateClanBudget >= 1) return false;
+                _fateClanBudget++;
+                return true;
+            }
+        }
+
         private static string ExecuteCreateClan(string clanName, string kingdomName, string culture, string motivation, bool isMercenary)
         {
             if (AgentManager.ActiveAgentId != "__fate__")
                 return "[拒绝] 只有天意（家族补充系统）能创建家族。";
+            if (!TryConsumeFateClanBudget())
+                return "[提示] 你本次唤醒已经降下过一支贵族血脉。世家兴衰非一日之功——请静待日后再次被唤起，届时再观天下之势补充。不要连续创建。";
             if (string.IsNullOrEmpty(clanName))
                 return "[错误] 请提供家族名称。";
             if (Campaign.Current == null)
@@ -3451,6 +3477,10 @@ namespace MyFirstMod
                 clan.SetInitialHomeSettlement(homeSettlement);
 
                 // 2. 生成成员（3-6，偏向年轻：族长 25-40，其余 14-35）
+                // 对齐游戏叛乱建族的模式：先建英雄（clan=null，暂不挂族），
+                // 全部创建成功后再统一 hero.Clan = clan 注册进族 + ChangeState(Active) 激活。
+                // 原实现直接把 clan 传进 CreateSpecialHero 且不激活，英雄与族关联可能不完整，
+                // 游戏后续迭代该族/英雄时可能原生崩溃。
                 var memberCount = 3 + _rng.Next(4);
                 var heroes = new List<Hero>();
                 for (var i = 0; i < memberCount; i++)
@@ -3460,13 +3490,18 @@ namespace MyFirstMod
                         var age = i == 0 ? _rng.Next(25, 41) : _rng.Next(14, 36);
                         var template = Campaign.Current.Models.HeroCreationModel.GetRandomTemplateByOccupation(Occupation.Lord, homeSettlement);
                         if (template == null) continue;
-                        var h = HeroCreator.CreateSpecialHero(template, homeSettlement, clan, null, age);
+                        var h = HeroCreator.CreateSpecialHero(template, homeSettlement, null, null, age);
                         if (h != null) heroes.Add(h);
                     }
                     catch { }
                 }
                 if (heroes.Count == 0)
                     return "[错误] 未能生成家族成员。";
+                foreach (var h in heroes)
+                {
+                    h.Clan = clan;
+                    h.ChangeState(Hero.CharacterStates.Active);
+                }
                 clan.SetLeader(heroes[0]);
 
                 // 3. 投效（封臣或雇佣兵）

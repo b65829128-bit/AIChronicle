@@ -189,6 +189,7 @@ namespace MyFirstMod
                 "clan_replenishment" => BuildClanReplenishmentRules(),
                 "advisory" => BuildAdvisoryRules(),
                 "fief_review" => BuildFiefReviewRules(),
+                "consolidation" => BuildConsolidationRules(),
                 "chat" => BuildChatRules(),
                 _ => BuildConversationRules()
             };
@@ -424,6 +425,8 @@ namespace MyFirstMod
         private static DateTime _lastAdvisoryRulesCheck;
         private static string _cachedFiefReviewRules = "";
         private static DateTime _lastFiefReviewRulesCheck;
+        private static string _cachedConsolidationRules = "";
+        private static DateTime _lastConsolidationRulesCheck;
 
         private static string BuildDiplomacyRules()
         {
@@ -564,6 +567,17 @@ namespace MyFirstMod
                 + "- 遇到不确定的事时，先用 glob/grep/read_file 查阅自己的记忆文件，再进行判断\n"
                 + "- 对方就是你自己（自省），你的输出是你自己的思考和决策，不是对别人说的话\n"
                 + "- 不需要角色扮演——这是你的私人思考，直接、务实即可";
+        }
+
+        private static string BuildConsolidationRules()
+        {
+            return LoadRulesFile("consolidation_rules.txt", ref _cachedConsolidationRules, ref _lastConsolidationRulesCheck)
+                ?? ("你就是{name}，{title}。你正在进行一次私下的记忆巩固（系统触发的记忆整理）。\n\n"
+                    + "规则：\n"
+                    + "- 只做记忆整理：用 read_file 读取你的日记与系统指出的较新往来记录，用 append_file 把值得长期记住的内容补记进 decisions/diary.txt\n"
+                    + "- 只追加、不删除、不改写旧条目；旧决定被推翻时补记 [日期] 结果：…\n"
+                    + "- 不要写信、不要做任何外交或军事动作，不要回复任何人\n"
+                    + "- 若没有值得记录的往来，直接回复「无需记录」");
         }
 
         private static string BuildSelfStatus(Hero hero)

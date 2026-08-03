@@ -43,6 +43,7 @@
 - Agent 可以调用 `give_item` 将自己物品/装备交给任意人物（直接转账）
 - Agent 可以调用 `request_items` 向任意人物索要物品（向玩家索要时弹出确认框）
 - Agent 可以调用 `let_go` 在遭遇战中放玩家一马（仅当 NPC 兵力占优时可用，设置冷却期避免立即追击）——玩家被强敌擒获时，投降/应战对话中会出现【AI 聊天】选项，可谈判让 agent 放行；放行后对话自动结束、玩家获释
+- **对话即全功能通道**：AI 聊天时其可用工具由身份与能力决定——国王可当场宣战/议和/结盟/颁诏，氏族领袖可当场换国/出兵/驻防/招募，被擒的敌方家族领袖也可在谈判中履行"加入某国"的承诺（先 `change_kingdom` 离旧国、再 `join_kingdom` 投效）。对话中谈成的协议都能立刻兑现，不会"口头答应却做不到"
 - **已知限制：** `request_gold` 和 `request_items` 向 NPC 索要时直接划转，NPC 不会经过 LLM 决策——未来应改为异步事件，让 NPC Agent 自行判断是否给
   - Agent 可以调用 `query_character` 查询任意人物的公开信息
   - Agent 可以调用 `query_clan_fiefs` 查询任意家族的封地情况（城镇/城堡列表、族长、所属王国）
@@ -174,11 +175,13 @@
 | universal | update_knowledge, cancel_action, create_clan（仅天意） | 全部 |
 | query | query_character, query_settlement, query_settlement_geography, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_clan_fiefs, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills, query_influence | 全部 |
 | social | change_relation, give_gold, request_gold, give_item, request_items, let_go | conversation |
-| movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous |
-| military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops, form_army, release_prisoner, execute_prisoner | autonomous |
-| diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal, gift_fief, change_kingdom, submit_edict, consult_king, reply_consult | diplomacy |
+| movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous（conversation 亦激活） |
+| military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops, form_army, release_prisoner, execute_prisoner | autonomous（conversation 亦激活） |
+| diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal, gift_fief, change_kingdom, submit_edict, consult_king, reply_consult | diplomacy（conversation 亦激活） |
 | file | read_file, write_file, append_file, edit_file, delete_file, move_file, list_dir, glob, grep | letter, autonomous, conversation |
-| communication | send_letter | letter |
+| communication | send_letter | letter（conversation 亦激活） |
+
+**玩家发起的聊天（conversation）是全功能通道**——所有分类默认激活。理由：AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全，对话里达成的承诺（议和/出兵/换国/写信/放人）就无法兑现。能力门控照旧：国王专属工具（宣战/议和/结盟/诏令/问询）仍只有国王拿到，部队工具仍只有带兵者拿到，`change_kingdom` 仅氏族领袖可用——所以对话里每个 NPC 的可用工具由身份决定。
 
 Agent 任何时候都可以调 `browse_tools("military")` 解锁某类工具，下一轮即可使用。
 
@@ -206,11 +209,12 @@ Agent 任何时候都可以调 `browse_tools("military")` 解锁某类工具，�
 
 ### 家族补充系统
 
-- 当**封臣家族**（非雇佣兵、非叛军的贵族氏族）数量低于下限（默认 70，MCM 可调）或**雇佣兵家族**低于下限（默认 8，MCM 可调）时，激活「天意」agent 补充新的贵族家族——防止大屠杀导致世家凋零、世界崩解
+- 当**在世贵族家族**数量低于下限（默认 70，MCM 可调）或**受雇雇佣兵家族**低于下限（默认 8，MCM 可调）时，激活「天意」agent 补充新的贵族家族——防止大屠杀导致世家凋零、世界崩解。**计数口径 = 所有在世贵族家族**（含无主/换国过渡中的，排除雇佣兵公司与叛军）——只有真正灭族才拉低计数；家族换国/叛变不误触发补充
 - **天意**（`__fate__` 虚拟实体，与史官并列）：决定家族名称（符合文化）、投效哪个王国（看世界局势）、家族定位；家族成员由**程序随机生成 3-6 人（偏向年轻：族长 25-40、其余 14-35）**，**家族等级 2**（恰好够当封臣又看得出是新族）
 - 新家族族长自动获得部队（`LordPartyComponent`），可正常参战；投效方式可选正式封臣或雇佣兵（`is_mercenary`）
 - 家族建立只记入**原始史料**（`clan_created`：X建立、投效Y、族长为Z），**不激活史官、不改史官提示词**——简单记一笔即可
-- 每次激活补 1 个家族，差距过大时连续激活；受 MCM「启用家族补充」开关控制
+- **代码强制每次激活只补 1 个家族**（提示词虽已写明"一次只创建一族"，LLM 仍可能连建多族——曾一次激活连建 5 族、每族 3-6 英雄+部队，与游戏其他状态变更撞车导致原生层崩溃）。家族成员生成对齐游戏叛乱建族模式（先建英雄、注册进族、置为 Active），族长建队后入原始史料（`clan_created`），不激活史官
+- 差距过大时在后续激活中逐个补齐；受 MCM「启用家族补充」开关控制
 
 ### 计划系统
 
@@ -226,11 +230,20 @@ Agent 任何时候都可以调 `browse_tools("military")` 解锁某类工具，�
 - Agent 可以调用 `request_items(目标, 物品名, 数量)` 向任意人物索要物品（NPC 直接划转，玩家弹确认框）
 - 已知限制：`request_gold` 和 `request_items` 向 NPC 索要时直接划转，NPC 不经过 LLM 决策
 
+### 记忆权威化与记忆巩固
+
+- **记忆优先级**：查询工具实时数据（`query_character`/`query_world_state`，系统权威）> **日记**（`decisions/diary.txt`，自我记忆权威）> 认知（`knowledge/{对方}.txt`）。长期战略不再单列文件，以日记「战略」类型条目形式存在（strategy.txt 已并入日记）
+- **日记可被比它更新的聊天记录修正**：chat_logs 是系统自动保存的客观往来记录（Agent 只读、不会漏），日记是 Agent 自写的索引（可能漏记）。若聊天记录比日记新，以聊天为准，并补记日记（旧决定被推翻则补记 `[日期] 结果：…`，只追加不改写）
+- **记忆巩固（`MemoryConsolidator.cs`，保底机制）**：自我审视激活前（国王政务 / 封地审视 / 外交问询回应 / 封臣进谏），先比较日记最新条目日期与 chat_logs 最新消息日期——若存在"比日记更新的往来"，先跑一次**巩固 pass**：Agent 自读日记与较新往来，把值得记住的决定/承诺/计策/结果/战略 `append_file` 补记进日记，再开始正事
+  - 只在日记落后时触发，多数时候零成本；静默执行，不写聊天记录、不弹玩家消息
+  - 开关：MCM「启用记忆巩固」（默认开）
+  - 提示词可热重载：`consolidation_rules.txt`（行为规则）+ `memory_consolidation.txt`（激活指令）
+
 ### 提示词系统（文件化、可热重载）
 
 所有提示词均为**中文文本文件**，存储在模组目录下，玩家可随时编辑，游戏内实时生效（热重载）。
 
-提示词分三层：**世界层**（`world_info.txt`，大陆背景与天命）、**人物层**（persona 与记忆）、**游戏规则层**（`game_rules.txt`，卡拉迪亚的实际运转机制——机动/金钱/部队上限/兵种/招募/战争/影响力）。规则层让 agent 按游戏机制而非现实经验做决策（例：士兵阵亡随时可补，真正约束是钱、部队上限、兵种等级；机动性远高于现实，滞守一隅常无收益）。规则层注入稳定前缀（缓存友好），**史官不注入**。
+提示词分三层：**世界层**（`world_info.txt`，大陆背景与天命）、**人物层**（persona 与记忆）、**游戏规则层**（`game_rules.txt`，卡拉迪亚的实际运转机制——机动/金钱/部队上限/兵种/招募/战争/影响力/**阵营归属**（氏族加入哪国全在族长自决，无须国王准许））。规则层让 agent 按游戏机制而非现实经验做决策（例：士兵阵亡随时可补，真正约束是钱、部队上限、兵种等级；机动性远高于现实，滞守一隅常无收益）。规则层注入稳定前缀（缓存友好），**史官不注入**。
 
 ```
 _Module/Prompts/
@@ -248,6 +261,8 @@ _Module/Prompts/
 ├── historian_rules.txt          # 史官编年史规则（玩家可编辑，热重载）
 ├── advisory_rules.txt            # 封臣谏言规则（热重载）
 ├── fief_review_rules.txt         # 封地审视规则（被夺方激活，热重载）
+├── consolidation_rules.txt      # 记忆巩固行为规则（热重载）
+├── memory_consolidation.txt     # 记忆巩固激活指令（热重载）
 ├── yearly_chronicle_prompt.txt  # 年度编年史激活提示词（热重载）
 ├── biography_prompt.txt         # 人物列传激活提示词（热重载）
 ├── special_chronicle_prompt.txt # 专题史激活提示词（热重载）
@@ -268,6 +283,8 @@ _Module/Prompts/
         ├── context_template.txt  # 本战役 Context 模板（热重载）
         ├── diplomacy_rules.txt   # 本战役外交决策规则（热重载）
         ├── historian_rules.txt  # 本战役史官编年史规则（热重载）
+        ├── consolidation_rules.txt # 本战役记忆巩固行为规则（热重载）
+        ├── memory_consolidation.txt # 本战役记忆巩固激活指令（热重载）
         └── NPCs/                 # Agent 管理的 NPC 文件系统
             └── {entity_id}/        # 每个 Entity 独立目录
                 ├── character.json # 基础 ID 信息（只读，自动生成）
@@ -334,7 +351,7 @@ _Module/Prompts/
 | Agent 并发数 | 同时运行的 Agent 任务数上限。越大吞吐越高，但工具在主线程串行执行，过大会帧卡顿 | `5` |
 | 聊天历史上限（条） | 保留最近 N 条消息发给 AI | `20` |
 | 注入世界背景 | 是否在提示词中加入卡拉迪亚背景 | 开启 |
-| 注入游戏规则 | 是否在提示词中加入卡拉迪亚实际运转规则（机动/金钱/部队上限/兵种/招募/战争/影响力），让 agent 按游戏机制而非现实经验决策。史官不注入 | 开启 |
+| 注入游戏规则 | 是否在提示词中加入卡拉迪亚实际运转规则（机动/金钱/部队上限/兵种/招募/战争/影响力/阵营归属——氏族加入哪国全在族长自决，无须国王准许），让 agent 按游戏机制而非现实经验决策。史官不注入 | 开启 |
 | 最大好感变化 | Agent 单次修改好感度的上限 | `5` |
 | 信件级联深度上限 | NPC 间连环写信的最大层数 | `5` |
 | 环境扫描半径（km） | query_surroundings 扫描半径硬上限 | `20` |
@@ -348,8 +365,9 @@ _Module/Prompts/
 | 所有贵族立传 | 死后立传范围：所有氏族贵族 或 仅氏族领袖和国王 | 开启 |
 | 处决无惩罚 | 开启后处决贵族不承担任何政治代价（名誉不降、好感不降），玩家与 NPC 均生效 | 开启 |
 | 启用家族补充 | 封臣/雇佣兵家族低于阈值时激活「天意」补充新家族 | 开启 |
-| 封臣家族补充阈值 | 封臣家族数低于此值触发补充（单位：家族，原版约 70） | `70` |
+| 封臣家族补充阈值 | 在世贵族家族数低于此值触发补充（单位：家族，原版约 70）。统计所有在世贵族家族（含无主/换国过渡中的，排除雇佣兵与叛军）——只有真正灭族才会拉低计数 | `70` |
 | 雇佣兵家族补充阈值 | 雇佣兵家族数低于此值触发补充（单位：家族，原版约 8） | `8` |
+| 启用记忆巩固 | 自我审视（国王政务/封地审视/外交问询/封臣进谏）激活前，若日记落后于聊天记录，先跑一次巩固——把最近往来中值得记住的决定/承诺/计策/战略补记进 decisions/diary.txt，避免照陈旧日记行事。只在日记落后时触发 | 开启 |
 | 史书字体大小 | 史书 UI 中编年史正文的字体大小 | `28` |
 | 强制开始外交 | 立即激活所有国王 Agent 进行外交审视，重置计时器（按钮） | — |
 | 强制封臣进谏 | 立即重置所有王国的封臣谏言计时器（按钮） | — |
@@ -424,6 +442,7 @@ MyFirstMod/
 ├── HistoryRecorder.cs    # 历史记录器（监听游戏事件自动写入原始史料）
 ├── HistoryScreenVM.cs    # 史书 UI ViewModel（编年史列表、内容加载）
 ├── MainThreadExecutor.cs # 主线程分发器（后台线程工具执行回主线程，防跨线程崩溃）
+├── MemoryConsolidator.cs # 记忆巩固（diary 权威化保底：自我审视前检测日记落后并补记）
 ├── DebugLogger.cs        # 调试日志（LLM 调用摘要/思维链摘录 → 战役 debug_logs/）
 ├── SafeFileIO.cs         # 带重试的文件 IO（并发读写同一文件时避免"文件正被使用"异常）
 ├── AGENTS.md             # AI 开发工作流文档
@@ -453,7 +472,14 @@ MyFirstMod/
 ## 版本
 
 - 游戏版本：Bannerlord v1.4.7
-- 模组版本：v1.6.0
+- 模组版本：v1.7.0
+
+### v1.7.0 更新要点
+
+- **记忆权威化 + 记忆巩固**：日记 `decisions/diary.txt` 升格为自我记忆权威（查询工具实时数据 > 日记 > 认知）；长期战略并入日记（strategy.txt 废除）；新增 `MemoryConsolidator.cs`——自我审视（国王政务/封地审视/外交问询/封臣进谏）激活前检测日记是否落后于聊天记录，落后时先跑一次巩固 pass 补记决定/承诺/计策/结果/战略，避免照陈旧日记行事。MCM「启用记忆巩固」默认开
+- **聊天=全功能通道**：玩家发起的对话默认激活全部工具分类（外交/行军/军事/通信），能力门控照旧——国王可当场宣战议和、氏族领袖可当场换国出兵、俘虏可在谈判中履行"加入某国"承诺
+- **game_rules.txt 新增阵营规则**：氏族投效哪个王国权力全在族长，无须国王准许、不必等册封，封臣可自由择主
+- **新提示词文件**：`consolidation_rules.txt`（记忆巩固行为规则）、`memory_consolidation.txt`（记忆巩固激活指令），均热重载、可独立编辑
 
 ### v1.6.0 更新要点
 

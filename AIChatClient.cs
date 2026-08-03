@@ -83,7 +83,10 @@ namespace MyFirstMod
 
         private static string[] GetDefaultCategories(string intent) => intent switch
         {
-            "conversation" => new[] { "universal", "query", "social", "file" },
+            // 玩家发起的聊天是全功能通道：AI 几乎不主动聊天，绝大多数对话由玩家发起，
+            // 若工具不全，对话里达成的承诺（议和/出兵/换国/写信）就无法兑现。
+            // 能力门控照旧——国王专属工具仍只有国王拿到，部队工具只有带兵者拿到。
+            "conversation" => new[] { "universal", "query", "social", "file", "diplomacy", "movement", "military", "communication" },
             "letter" => new[] { "universal", "query", "file", "communication", "movement", "military", "diplomacy" },
             "diplomacy" => new[] { "universal", "query", "diplomacy" },
             "king_consult" => new[] { "universal", "query", "diplomacy" },
@@ -91,6 +94,7 @@ namespace MyFirstMod
             "clan_replenishment" => new[] { "universal", "query", "file" },
             "advisory" => new[] { "universal", "query", "file", "communication" },
             "fief_review" => new[] { "universal", "query", "file", "communication", "diplomacy" },
+            "consolidation" => new[] { "universal", "file" },
             "chat" => new[] { "universal", "query", "file", "social", "communication" },
             _ => new[] { "universal", "query", "social", "military", "movement", "diplomacy", "file", "communication" },
         };

@@ -60,6 +60,12 @@ namespace MyFirstMod
         }
         private static readonly Dictionary<Kingdom, CampaignTime> _lastKingActivation = new();
         private static readonly Dictionary<Kingdom, CampaignTime> _lastKingDailyCheck = new();
+        // 同一国王的自我审视（KingDiplomacy）去重：已排队或进行中的审视期间，新 KingDiplomacy 只并入内容、
+        // 不重复入队——防止「每日随机激活 + 攻城册封激活」同时触发导致国王重复审视、重复行动
+        // （重复转移封地、意外夺封）。不同国王仍可并行。
+        private static readonly object _diplomacyLock = new();
+        private static readonly HashSet<string> _diplomacyReviewAgents = new();
+        private static readonly Dictionary<string, StringBuilder> _diplomacySupplements = new();
         private static int _warmupFrames = 120;
         private static int _nextKingIndex = 0;
         private static readonly Dictionary<string, CampaignTime> _lastProposalActivation = new();
@@ -108,6 +114,11 @@ namespace MyFirstMod
             _lastAdvisorySpeaker.Clear();
             _lastAdvisoryCheck.Clear();
             _lastConsultByPair.Clear();
+            lock (_diplomacyLock)
+            {
+                _diplomacyReviewAgents.Clear();
+                _diplomacySupplements.Clear();
+            }
             _nextKingIndex = 0;
             _warmupFrames = 120;
             _warmupFramesHistorian = 60;
@@ -196,6 +207,27 @@ namespace MyFirstMod
 
         public static void QueueEvent(ActivationEvent evt)
         {
+            if (evt.Type == ActivationEventType.KingDiplomacy)
+            {
+                lock (_diplomacyLock)
+                {
+                    if (!_diplomacyReviewAgents.Add(evt.AgentId))
+                    {
+                        // 同一国王已有审视排队或进行中——只并入本次内容（如新攻城归属指示），不重复激活
+                        if (!string.IsNullOrEmpty(evt.Content))
+                        {
+                            if (!_diplomacySupplements.TryGetValue(evt.AgentId, out var sb))
+                            {
+                                sb = new StringBuilder();
+                                _diplomacySupplements[evt.AgentId] = sb;
+                            }
+                            sb.AppendLine().Append(evt.Content);
+                        }
+                        return;
+                    }
+                }
+            }
+
             var p = Math.Max(0, Math.Min(4, evt.Priority));
             _priorityQueues[p].Enqueue(evt);
         }
@@ -265,7 +297,9 @@ namespace MyFirstMod
             DiplomacyService.CheckExpiringAgreements();
         }
 
-        /// <summary>统计当前封臣/雇佣兵家族数量。</summary>
+        /// <summary>统计当前在世封臣/雇佣兵家族数量。
+        /// 封臣口径 = 所有在世贵族家族（含无主/换国过渡中的），排除雇佣兵与叛军——只有真正灭族才会拉低计数，
+        /// 符合「防世家凋零」的本意（原口径只算"当前挂在王国名下"的，家族一换国/叛变计数就掉，导致天意误判凋零而疯狂补族）。</summary>
         private static (int Vassals, int Mercenaries) CountClans()
         {
             if (Campaign.Current == null) return (0, 0);
@@ -276,7 +310,7 @@ namespace MyFirstMod
                 if (clan == null || clan.Leader == null) continue;
                 if (clan.IsUnderMercenaryService)
                     mercenaries++;
-                else if (clan.Kingdom != null && !clan.IsRebelClan && clan.IsNoble)
+                else if (!clan.IsRebelClan && clan.IsNoble)
                     vassals++;
             }
             return (vassals, mercenaries);
@@ -421,7 +455,7 @@ namespace MyFirstMod
                     + proposalLines
                     + advisoryNote
                     + consultNote
-                    + $"\n（提示：你可以在 goals/strategy.txt 中记录你的长期战略方针，如交好谁、提防谁、扩张方向等。每次外交审视前，先 read_file 查看已有战略，据此做出连贯的决策；局势变化时可 edit_file 调整。）\n\n"
+                    + $"\n（提示：你的长期战略方针、承诺、计策都记在 decisions/diary.txt（条目类型含「战略」）。每次审视先 read_file 读取日记回顾你的战略走向与既往承诺，据此做连贯决策；若 chat_logs/ 有比日记更新的往来，以它们为准，并把新决定/新战略补记进日记。）\n\n"
                     + $"然后依据你自己的判断采取行动——以下是你可用的外交工具：\n"
                     + "- propose_peace：结束一场战争（可附带赔款条件）\n"
                     + "- propose_alliance：与中立王国结盟\n"
@@ -576,6 +610,19 @@ namespace MyFirstMod
 
             try
             {
+                // 并入去重期间累积的补充内容（如攻城归属指示），再构建审视上下文
+                if (evt.Type == ActivationEventType.KingDiplomacy)
+                {
+                    lock (_diplomacyLock)
+                    {
+                        if (_diplomacySupplements.TryGetValue(evt.AgentId, out var sb))
+                        {
+                            evt.Content += "\n\n" + sb;
+                            _diplomacySupplements.Remove(evt.AgentId);
+                        }
+                    }
+                }
+
                 if (evt.Type == ActivationEventType.YearlyChronicle || evt.Type == ActivationEventType.SpecialChronicle)
                 {
                     await ProcessHistorianEvent(evt);
@@ -688,6 +735,16 @@ namespace MyFirstMod
 
                 EntityManager.ActivateInteraction(agentEntity.HeroRef, targetEntity.HeroRef);
 
+                // 记忆巩固（diary 权威化的保底）：自我审视类激活前，若日记落后于聊天记录，先补记 diary。
+                // 否则国王照陈旧日记/战略行事（如"上次还要请和库赛特"，实则在最新聊天里已改为专攻库赛特）。
+                // 静默执行，仅日记落后时触发一次便宜的巩固 pass，多数时候零成本。
+                if (evt.Type is ActivationEventType.KingDiplomacy
+                    or ActivationEventType.FiefReview
+                    or ActivationEventType.KingConsult)
+                {
+                    await MemoryConsolidator.EnsureDiaryCurrentAsync(evt.AgentId);
+                }
+
                 var charPrompt = new CharacterPrompt
                 {
                     HeroId = agentEntity.Id,
@@ -729,6 +786,15 @@ namespace MyFirstMod
             }
             finally
             {
+                // 审视结束，释放该国王的去重标记（下次可再激活）
+                if (evt.Type == ActivationEventType.KingDiplomacy)
+                {
+                    lock (_diplomacyLock)
+                    {
+                        _diplomacyReviewAgents.Remove(evt.AgentId);
+                        _diplomacySupplements.Remove(evt.AgentId);
+                    }
+                }
                 _currentProcessingDepth.Value = -1;
                 if (prevAgentId != null && prevTargetId != null)
                 {
@@ -866,6 +932,9 @@ namespace MyFirstMod
                     Colors.Cyan));
 
                 EntityManager.ActivateFate();
+
+                // 单次激活只建一族（代码强制限流，防连建多族导致游戏状态剧变而原生崩溃）
+                ToolExecutor.ResetFateClanBudget();
 
                 if (string.IsNullOrEmpty(evt.Content))
                 {
@@ -1167,6 +1236,10 @@ namespace MyFirstMod
                 try
                 {
                     EntityManager.ActivateInteraction(vassal.HeroRef!, vassal.HeroRef!);
+
+                    // 封臣链路也做记忆巩固：进谏前若日记落后于聊天记录，先补记 diary，
+                    // 否则谏言可能反映的是过时立场。静默执行，仅落后时触发。
+                    await MemoryConsolidator.EnsureDiaryCurrentAsync(vassal.Id);
 
                     var advisoryDir = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "advisory");
                     Directory.CreateDirectory(advisoryDir);

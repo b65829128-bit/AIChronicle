@@ -636,6 +636,24 @@ namespace MyFirstMod
             }
         }
 
+        private bool _memoryConsolidationEnabled = true;
+
+        [SettingPropertyBool("启用记忆巩固", Order = 20, RequireRestart = false,
+            HintText = "开启：自我审视（国王政务/封地审视/外交问询）激活前，若日记落后于聊天记录，先跑一次巩固——把最近往来中值得记住的决定/承诺/计策/战略补记进 decisions/diary.txt，避免照着陈旧日记行事。只在日记落后时触发。")]
+        [SettingPropertyGroup("游戏设置")]
+        public bool MemoryConsolidationEnabled
+        {
+            get => _memoryConsolidationEnabled;
+            set
+            {
+                if (_memoryConsolidationEnabled != value)
+                {
+                    _memoryConsolidationEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private int _maxTokens = 32768;
 
         [SettingPropertyInteger("最大 Token 数", 50, 65536, Order = 5, RequireRestart = false,

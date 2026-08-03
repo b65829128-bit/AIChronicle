@@ -110,7 +110,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
 | **工具定义文件化** | 65 个工具定义在 `tools.json`（50 个游戏工具）和 `agent_tools.json`（15 个文件/通信工具，含 `submit_advisory`/`submit_edict`/`consult_king`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
-| **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁 |
+| **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁。**玩家发起的聊天（conversation）是全功能通道——全部分类默认激活**（AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全则对话里达成的承诺无法兑现；能力门控照旧，国王专属工具仍只有国王拿到） |
 | **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`persona_generation.txt`、`context_template.txt`、`chancery_rules.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环，模型调用工具 → 执行 → 追加结果 → 重请求，直到模型自然停止（无轮数限制，仅保留极高安全阀防死循环） |
 | **主线程分发** | LLM 工具循环跑在后台线程，但**所有修改游戏状态的工具**经 `MainThreadExecutor` 排队到主线程 `OnApplicationTick` 执行（后台线程阻塞等待结果）；仅 `request_gold`/`request_items`/`browse_tools` 留在后台线程（前两者需主线程弹窗等待玩家，后者改本流程上下文）。背景：Bannerlord 游戏对象（MobileParty/Hero/Kingdom）是主线程独占的 |
@@ -200,7 +200,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 - **用开放性表述**：「若你觉得…」「是否如此由你的性格与处境决定」，而非「必须/应当/禁止」的强制清单
 - **个人立场不强制度**：天命信仰、名分、谏言批判等，由人格与处境自然涌现，不写成统一规则（为此 persona 维度用随机掷定而非 LLM 自定，见 AgentManager 天命信仰）
 - **不注入上下文**：能靠提示词提醒 LLM 调用工具（如读写 diary、检索），就不要注入内容——注入会温水煮青蛙式稀释所有提示。这条有先例教训：别的 AI 模组因持续注入而系统崩坏
-- **游戏规则层是例外**：`game_rules.txt` 注入卡拉迪亚的实际运转机制（机动/金钱/部队上限/兵种/招募/战争/影响力），让 agent 按游戏机制而非现实经验做决策（如士兵阵亡随时可补，真正约束是钱/上限/兵种等级）。它与「注入叙事/记忆内容」不同——是**稳定参考知识**（同世界背景），不是易变剧情；不规定行为，只说明世界如何运转，反而让行为涌现更准。注入稳定前缀（缓存友好）；**史官不注入**（只编史不做游戏决策）。受 MCM「注入游戏规则」开关控制
+- **游戏规则层是例外**：`game_rules.txt` 注入卡拉迪亚的实际运转机制（机动/金钱/部队上限/兵种/招募/战争/影响力/阵营归属——氏族加入哪国全在族长自决、无须国王准许），让 agent 按游戏机制而非现实经验做决策（如士兵阵亡随时可补，真正约束是钱/上限/兵种等级）。它与「注入叙事/记忆内容」不同——是**稳定参考知识**（同世界背景），不是易变剧情；不规定行为，只说明世界如何运转，反而让行为涌现更准。注入稳定前缀（缓存友好）；**史官不注入**（只编史不做游戏决策）。受 MCM「注入游戏规则」开关控制
 - **度**：提示词给方向但不给答案。玩家可编辑的提示词默认按此原则起草
 
 ### 记忆系统设计思想：日记即索引
@@ -220,6 +220,19 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 **设计优先级**：未来设计记忆相关系统（记忆巩固/当日小结、生活史/生平记事、关键事件自动入忆、FiefReview 审视记录、承诺簿等）时，**优先以日记为锚点**，围绕「日记索引 + 聊天全文」的互证结构展开，不要另起炉灶。日记格式必须保持 `[年季节日] 类型：内容` 一致，否则检索失效。
 
 **为什么是日记而不是注入**：日记是拉取式（agent 自觉读写，见克制原则），不占上下文；注入任何记忆内容都会膨胀上下文、稀释提示。检索工具（grep 的 context_lines/max_results）为此设计。
+
+### 日记权威化与记忆巩固（diary-as-authority，v1.7）
+
+**记忆优先级（解决"看到日记、战略、知识就茫然"）**：查询工具实时数据（query_character/query_world_state，系统权威）> 日记（`decisions/diary.txt`，自我记忆权威）> 认知（`knowledge/{对方}.txt`，对第三方的了解）。长期战略不再单列文件，以日记「战略」类型条目形式存在（strategy.txt 已并入日记）。
+
+**日记可被比它更新的聊天记录修正**：chat_logs 是系统自动写入的客观往来记录（Agent 只读、不会漏），日记是 LLM 自写的索引（可能漏记/滞后）。若 chat_logs/ 中有比日记新的往来，**以聊天记录为准**，并补记日记（旧决定被推翻则补记 `[日期] 结果：…`，只追加不改写旧条目）。
+
+**记忆巩固机制（`MemoryConsolidator.cs`，保底而非依赖自觉）**：
+- 自我审视类激活前（**国王政务 KingDiplomacy / 封地审视 FiefReview / 外交问询回应 KingConsult / 封臣进谏 Advisory**），先比较日记最新条目日期与 chat_logs 各文件最新消息日期
+- 若日记落后（存在"比日记更新的往来"），跑一次**巩固 pass**：agent 自读日记 + 较新往来 → 把值得记住的决定/承诺/计策/结果/战略 `append_file` 补记进 diary。静默执行，不写 chat_logs、不弹玩家消息
+- 只在落后时触发，多数时候零成本；受 MCM「启用记忆巩固」开关控制（默认开）
+- 日期解析兼容两种写法：日记 `[1090春3]`/`[1090年冬第9日]`、聊天 `[第1090年，春季第15日]`——日记格式务必保持统一，否则程序无法可靠判断"谁更新"
+- 巩固提示词文件化、可热重载：`consolidation_rules.txt`（intent 规则）+ `memory_consolidation.txt`（激活指令）
 
 ---
 
@@ -259,6 +272,7 @@ C:\Users\yangui\BLMods\MyFirstMod\
 ├── AgentScheduler.cs          ← 信件异步事件驱动调度器 + 每日盟约/贸易到期检测
 ├── HistoryRecorder.cs         ← 历史记录器（监听游戏事件写入原始史料）
 ├── MainThreadExecutor.cs      ← 主线程分发器（后台线程的工具执行排队回主线程，防跨线程崩溃）
+├── MemoryConsolidator.cs      ← 记忆巩固（diary 权威化保底：自我审视前检测日记落后并补记）
 ├── DebugLogger.cs             ← 调试日志（LLM 调用摘要/思维链摘录 → 战役 debug_logs/）
 ├── SafeFileIO.cs              ← 带重试的文件 IO（并发读写同一文件时避免"文件正被使用"异常）
 ├── CLAUDE.md                  ← Claude Code 入口文档（指向本文件与 README_MOD.md）
@@ -278,6 +292,8 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │       ├── persona_generation.txt ← NPC性格生成提示词（玩家可编辑，热重载）
 │       ├── advisory_rules.txt  ← 封臣谏言规则（热重载）
 │       ├── fief_review_rules.txt ← 封地审视规则（被夺方激活，热重载）
+│       ├── consolidation_rules.txt ← 记忆巩固行为规则（热重载）
+│       ├── memory_consolidation.txt ← 记忆巩固激活指令（热重载）
 │       ├── Templates/         ← NPC 目录模板
 │       │   ├── context_template.txt ← Context 模板
 │       └── Campaigns/         ← 各战役目录（运行时创建）
@@ -862,7 +878,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | `let_go` | 社交 | 遭遇战中放走玩家（仅当己方兵力占优时可用，含冷却期） |
 | `release_prisoner` | 军事 | 释放自己部队中的俘虏（贵族英雄→逃亡者回领地，普通士兵→移除；支持按名单个释放或 all 全放） |
 | `execute_prisoner` | 军事 | 处决自己部队中的贵族俘虏（仅限贵族；受 MCM「处决无惩罚」控制，默认开=无惩罚） |
-| `create_clan` | 通用 | 天意建族（家族补充系统）：建新贵族家族（成员 3-6 人程序生成、家族等级 2、族长带兵、入原始史料但不激活史官）。仅 `__fate__` 实体可用（能力门控） |
+| `create_clan` | 通用 | 天意建族（家族补充系统）：建新贵族家族（成员 3-6 人程序生成、家族等级 2、族长带兵、入原始史料但不激活史官）。仅 `__fate__` 实体可用（能力门控）。**代码强制每次激活只建一族**（LLM 可能连建多族，曾致原生崩溃）；英雄创建对齐游戏叛乱建族模式（先建英雄→注册进族→置 Active） |
 
 ### 文件工具（agent_tools.json，15 个）
 

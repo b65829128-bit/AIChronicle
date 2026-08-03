@@ -102,6 +102,8 @@ namespace MyFirstMod
         private static DateTime _lastSpecialChroniclePromptCheck;
         private static string _cachedBiographyPrompt = "";
         private static DateTime _lastBiographyPromptCheck;
+        private static string _cachedMemoryConsolidationPrompt = "";
+        private static DateTime _lastMemoryConsolidationPromptCheck;
 
         public static string PromptsBaseDir => _promptsBaseDir;
         public static string CampaignDir => _campaignDir;
@@ -197,6 +199,8 @@ namespace MyFirstMod
             CopyPromptToCampaign("advisory_rules.txt");
             CopyPromptToCampaign("fief_review_rules.txt");
             CopyPromptToCampaign("clan_replenishment_rules.txt");
+            CopyPromptToCampaign("consolidation_rules.txt");
+            CopyPromptToCampaign("memory_consolidation.txt");
             CopyTemplateToCampaign("context_template.txt");
         }
 
@@ -668,6 +672,13 @@ namespace MyFirstMod
         {
             return LoadPromptFile("biography_prompt.txt", ref _cachedBiographyPrompt, ref _lastBiographyPromptCheck)
                 ?? "重要人物之死：{event_summary}\n\n请为此人编纂一篇列传。";
+        }
+
+        /// <summary>记忆巩固激活指令（自我审视前，日记落后于聊天记录时触发）。{newer_files} 由调用方替换为较新往来文件清单。</summary>
+        public static string LoadMemoryConsolidationPrompt()
+        {
+            return LoadPromptFile("memory_consolidation.txt", ref _cachedMemoryConsolidationPrompt, ref _lastMemoryConsolidationPromptCheck)
+                ?? "你的日记（decisions/diary.txt）可能落后于你的往来记录。以下往来记录比日记新：\n{newer_files}\n\n请阅读这些记录，把其中值得长期记住的决定/承诺/计策/约定/结果/战略用 append_file 补记进 decisions/diary.txt（格式 [年季节日] 类型：内容，类型用 决定/承诺/计策/情报/评价/结果/战略）；旧决定被推翻时补记 [日期] 结果：…。不值得记录就回复「无需记录」。";
         }
 
         private static string? LoadPromptFile(string filename, ref string cache, ref DateTime lastCheck)
