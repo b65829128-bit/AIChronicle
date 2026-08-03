@@ -1,0 +1,401 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Text;
+using System.Threading;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.Library;
+
+namespace AIChronicle
+{
+    public static partial class AgentManager
+{
+        public static string ExecuteReadFile(string path, int? lineStart, int? lineCount)
+        {
+            if (!IsPathAllowed(path, read: true))
+                return "[拒绝] 没有权限读取：" + path;
+
+            var fullPath = ResolvePath(path);
+            if (fullPath == null)
+                return "[错误] 路径解析失败：" + path;
+
+            if (!File.Exists(fullPath))
+                return "[不存在] " + path;
+
+            var lines = SafeFileIO.ReadAllLines(fullPath);
+
+            var start = (lineStart ?? 1) - 1;
+            if (start < 0) start = 0;
+            if (start >= lines.Length) return "[空] " + path + " 只有 " + lines.Length + " 行";
+
+            var count = lineCount ?? (lines.Length - start);
+            var end = Math.Min(start + count, lines.Length);
+
+            var result = new StringBuilder();
+            for (var i = start; i < end; i++)
+                result.AppendLine((i + 1) + ": " + lines[i]);
+
+            return result.ToString().TrimEnd();
+        }
+
+        public static string ExecuteAppendFile(string path, string content)
+        {
+            if (!IsPathAllowed(path, read: true, write: true))
+                return "[拒绝] 没有写入权限：" + path;
+
+            var cleanPath = path.Replace('\\', '/').Trim('/');
+            if (cleanPath.StartsWith("chat_logs/") || cleanPath == "chat_logs")
+                return "[拒绝] 聊天记录不可修改";
+            if (_immutableFiles.Contains(Path.GetFileName(cleanPath)))
+                return "[拒绝] 此文件不可修改：" + path;
+
+            var fullPath = ResolvePath(path);
+            if (fullPath == null)
+                return "[错误] 路径解析失败";
+
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+
+            var line = content.Replace("\r", "").Replace("\n", " ").Trim();
+            SafeFileIO.AppendAllText(fullPath, line + Environment.NewLine);
+            return "已写入。";
+        }
+
+        public static string ExecuteGrep(string pattern, string path, int maxResults, int contextLines, bool caseSensitive)
+        {
+            if (string.IsNullOrEmpty(pattern))
+                return "[错误] 搜索模式不能为空";
+            if (maxResults <= 0 || maxResults > 100)
+                maxResults = 20;
+            if (contextLines < 0 || contextLines > 10)
+                contextLines = 2;
+
+            var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+            var results = new StringBuilder();
+            int matchCount = 0;
+
+            if (path == "World")
+            {
+                var worldDir = Path.Combine(_baseDir, "World");
+                if (Directory.Exists(worldDir))
+                {
+                    foreach (var file in Directory.GetFiles(worldDir, "*.txt", SearchOption.AllDirectories))
+                    {
+                        // 只搜当前 agent 有权读取的文件（防 grep World 绕过权限读到别国密陈/外交）
+                        var rel = file.Substring(worldDir.Length).TrimStart('\\', '/').Replace('\\', '/');
+                        if (!IsPathAllowed(rel, read: true)) continue;
+                        if (SearchFile(file, worldDir, "World", pattern, comparison, contextLines, maxResults, ref matchCount, results))
+                            break;
+                    }
+                }
+            }
+            else
+            {
+                if (!IsPathAllowed(path, read: true))
+                    return "[拒绝] 没有读取权限：" + path;
+
+                var searchDir = ResolvePath(path);
+                if (searchDir == null || string.IsNullOrEmpty(_agentDir))
+                    return "[错误] 路径解析失败";
+
+                if (Directory.Exists(searchDir))
+                {
+                    foreach (var file in Directory.GetFiles(searchDir, "*.*", SearchOption.AllDirectories))
+                        if (SearchFile(file, _agentDir, "", pattern, comparison, contextLines, maxResults, ref matchCount, results))
+                            break;
+                }
+                else if (File.Exists(searchDir))
+                {
+                    SearchFile(searchDir, _agentDir, "", pattern, comparison, contextLines, maxResults, ref matchCount, results);
+                }
+                else
+                {
+                    return "[不存在] " + path;
+                }
+            }
+
+            if (results.Length == 0)
+                return "(无匹配结果)";
+
+            var output = results.ToString().TrimEnd();
+            if (matchCount >= maxResults)
+                output += $"\n…（匹配较多，已显示前 {maxResults} 处；可用更精确的关键词或指定目录缩小范围）";
+            return output;
+        }
+
+        /// <summary>
+        /// 搜索单个文件，返回匹配行及其上下文（contextLines 前后 N 行）。匹配行用 ▶ 标记。
+        /// 达到 maxResults 时返回 true，让外层停止继续搜索。相邻匹配的上下文块去重。
+        /// </summary>
+        private static bool SearchFile(string filePath, string baseDir, string prefix, string pattern, StringComparison comparison, int contextLines, int maxResults, ref int matchCount, StringBuilder results)
+        {
+            var relPath = filePath.Substring(baseDir.Length).TrimStart('/', '\\').Replace('\\', '/').TrimStart('/');
+            if (!string.IsNullOrEmpty(prefix))
+                relPath = prefix + "/" + relPath;
+
+            var lines = SafeFileIO.ReadAllLines(filePath);
+            int lastShown = -1;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].IndexOf(pattern, comparison) < 0) continue;
+
+                matchCount++;
+                var start = Math.Max(0, i - contextLines);
+                var end = Math.Min(lines.Length - 1, i + contextLines);
+                for (int j = Math.Max(start, lastShown + 1); j <= end; j++)
+                {
+                    var marker = j == i ? "▶ " : "  ";
+                    results.AppendLine($"{relPath}:{j + 1}: {marker}{lines[j].Trim()}");
+                }
+                lastShown = Math.Max(lastShown, end);
+
+                if (matchCount >= maxResults)
+                    return true;
+            }
+            return false;
+        }
+
+        private static readonly HashSet<string> _immutableFiles = new()
+        {
+            "persona.txt", "character.json"
+        };
+
+        public static string ExecuteEditFile(string path, string oldString, string newString)
+        {
+            if (!IsPathAllowed(path, read: true, write: true))
+                return "[拒绝] 没有写入权限：" + path;
+
+            var cleanPath = path.Replace('\\', '/').Trim('/');
+            if (cleanPath.StartsWith("chat_logs/") || cleanPath == "chat_logs")
+                return "[拒绝] 聊天记录不可修改";
+            if (_immutableFiles.Contains(Path.GetFileName(cleanPath)))
+                return "[拒绝] 此文件不可修改：" + path;
+
+            var fullPath = ResolvePath(path);
+            if (fullPath == null)
+                return "[错误] 路径解析失败：" + path;
+
+            if (!File.Exists(fullPath))
+                return "[不存在] " + path;
+
+            var content = SafeFileIO.ReadAllText(fullPath);
+            var count = 0;
+            var idx = 0;
+            while ((idx = content.IndexOf(oldString, idx, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                idx += oldString.Length;
+            }
+
+            if (count == 0)
+                return "[未找到] 指定的文本在文件中不存在。请用 read_file 确认内容后再试。";
+            if (count > 1)
+                return $"[冲突] 找到 {count} 处匹配，请提供更多上下文使其唯一。";
+
+            var newContent = content.Replace(oldString, newString);
+            SafeFileIO.WriteAllText(fullPath, newContent);
+            return "已修改。";
+        }
+
+        public static string ExecuteDeleteFile(string path)
+        {
+            if (!IsPathAllowed(path, read: true, write: true))
+                return "[拒绝] 没有删除权限：" + path;
+
+            var cleanPath = path.Replace('\\', '/').Trim('/');
+            if (cleanPath.StartsWith("chat_logs/") || cleanPath == "chat_logs")
+                return "[拒绝] 聊天记录不可删除";
+            if (_immutableFiles.Contains(Path.GetFileName(cleanPath)))
+                return "[拒绝] 此文件不可删除：" + path;
+
+            var fullPath = ResolvePath(path);
+            if (fullPath == null)
+                return "[错误] 路径解析失败：" + path;
+
+            if (!File.Exists(fullPath))
+                return "[不存在] " + path;
+
+            File.Delete(fullPath);
+            return "已删除。";
+        }
+
+        public static string ExecuteMoveFile(string oldPath, string newPath)
+        {
+            if (!IsPathAllowed(oldPath, read: true, write: true) || !IsPathAllowed(newPath, read: true, write: true))
+                return "[拒绝] 没有移动权限";
+
+            var cleanOld = oldPath.Replace('\\', '/').Trim('/');
+            var cleanNew = newPath.Replace('\\', '/').Trim('/');
+            if (cleanOld.StartsWith("chat_logs/") || cleanOld == "chat_logs"
+                || cleanNew.StartsWith("chat_logs/") || cleanNew == "chat_logs")
+                return "[拒绝] 聊天记录不可移动";
+            if (_immutableFiles.Contains(Path.GetFileName(cleanOld))
+                || _immutableFiles.Contains(Path.GetFileName(cleanNew)))
+                return "[拒绝] 此文件不可移动";
+
+            var fullOld = ResolvePath(oldPath);
+            var fullNew = ResolvePath(newPath);
+            if (fullOld == null || fullNew == null)
+                return "[错误] 路径解析失败";
+
+            if (!File.Exists(fullOld))
+                return "[不存在] " + oldPath;
+            if (File.Exists(fullNew))
+                return "[已存在] " + newPath + "，目标文件已存在，请用其他名称";
+
+            Directory.CreateDirectory(Path.GetDirectoryName(fullNew)!);
+            File.Move(fullOld, fullNew);
+            return "已移动。";
+        }
+
+        public static string ExecuteWriteFile(string path, string content)
+        {
+            if (!IsPathAllowed(path, read: true, write: true))
+                return "[拒绝] 没有写入权限：" + path;
+
+            var cleanPath = path.Replace('\\', '/').Trim('/');
+            if (cleanPath.StartsWith("chat_logs/") || cleanPath == "chat_logs")
+                return "[拒绝] 聊天记录不可修改";
+            if (_immutableFiles.Contains(Path.GetFileName(cleanPath)))
+                return "[拒绝] 此文件不可修改：" + path;
+
+            var fullPath = ResolvePath(path);
+            if (fullPath == null)
+                return "[错误] 路径解析失败：" + path;
+
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+            SafeFileIO.WriteAllText(fullPath, content.Trim());
+            return "已写入。";
+        }
+
+        public static string ExecuteGlob(string pattern)
+        {
+            if (string.IsNullOrEmpty(pattern))
+                return "[错误] 模式不能为空";
+
+            pattern = pattern.Replace('\\', '/').Trim('/');
+
+            var isWorld = pattern.StartsWith("World/") || pattern == "World";
+            var isWorldHistory = pattern.StartsWith("history/") || pattern == "history";
+
+            string baseDir;
+            string searchPattern;
+
+            if (isWorld)
+            {
+                baseDir = Path.Combine(_baseDir, "World");
+                searchPattern = pattern.Substring(6).TrimStart('/');
+            }
+            else if (isWorldHistory)
+            {
+                baseDir = Path.Combine(_baseDir, "World");
+                searchPattern = pattern;
+            }
+            else
+            {
+                baseDir = _agentDir;
+                searchPattern = pattern;
+            }
+
+            if (string.IsNullOrEmpty(_agentDir) && !isWorld)
+                return "[错误] 未设置 agent 目录";
+            if (!Directory.Exists(baseDir))
+                return "(空)";
+
+            var results = new System.Text.StringBuilder();
+            var dir = new DirectoryInfo(baseDir);
+            try
+            {
+                var lastSlash = searchPattern.LastIndexOf('/');
+                if (lastSlash >= 0)
+                {
+                    var subDir = searchPattern.Substring(0, lastSlash);
+                    var filePattern = searchPattern.Substring(lastSlash + 1);
+                    var searchDir = Path.Combine(baseDir, subDir);
+                    if (Directory.Exists(searchDir))
+                    {
+                        var subDirInfo = new DirectoryInfo(searchDir);
+                        var files = subDirInfo.GetFiles(filePattern, SearchOption.TopDirectoryOnly);
+                        foreach (var f in files)
+                        {
+                            var rel = f.FullName.Substring(baseDir.Length).TrimStart('/', '\\').Replace('\\', '/').TrimStart('/');
+                            if (isWorld || isWorldHistory)
+                            {
+                                if (!IsPathAllowed(rel, read: true)) continue; // 只列出有权读取的文件
+                                rel = "World/" + rel;
+                            }
+                            results.AppendLine("[FILE] " + rel);
+                        }
+                    }
+                }
+                else
+                {
+                    var files = dir.GetFiles(searchPattern, SearchOption.AllDirectories);
+                    foreach (var f in files)
+                    {
+                        var rel = f.FullName.Substring(baseDir.Length).TrimStart('/', '\\').Replace('\\', '/').TrimStart('/');
+                        if (isWorld || isWorldHistory)
+                        {
+                            if (!IsPathAllowed(rel, read: true)) continue; // 只列出有权读取的文件
+                            rel = "World/" + rel;
+                        }
+                        results.AppendLine("[FILE] " + rel);
+                    }
+                }
+            }
+            catch { }
+
+            if (results.Length == 0)
+                return "(无匹配)";
+
+            return results.ToString().TrimEnd();
+        }
+
+        public static string ExecuteListDir(string path)
+        {
+            var fullPath = ResolvePath(path);
+            if (fullPath == null)
+                return "[错误] 路径解析失败";
+
+            if (!Directory.Exists(fullPath))
+                return "[不存在] " + path;
+
+            var entries = Directory.GetFileSystemEntries(fullPath);
+            if (entries.Length == 0)
+                return "(空)";
+
+            var result = new StringBuilder();
+            foreach (var entry in entries.OrderBy(e => e))
+            {
+                var fname = Path.GetFileName(entry);
+                if (Directory.Exists(entry))
+                    result.AppendLine("[DIR]  " + fname + "/");
+                else
+                    result.AppendLine("[FILE] " + fname);
+            }
+            return result.ToString().TrimEnd();
+        }
+
+        public static List<string> GetAllRelationshipIds()
+        {
+            if (string.IsNullOrEmpty(_agentDir)) return new List<string>();
+
+            var relDir = Path.Combine(_agentDir, "relationships");
+            if (!Directory.Exists(relDir)) return new List<string>();
+
+            var ids = new List<string>();
+            foreach (var file in Directory.GetFiles(relDir, "*.txt"))
+            {
+                var id = Path.GetFileNameWithoutExtension(file);
+                if (!string.IsNullOrEmpty(id))
+                    ids.Add(id);
+            }
+            return ids;
+        }
+    }
+}

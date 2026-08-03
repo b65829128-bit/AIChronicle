@@ -34,8 +34,12 @@ function readJson(rel) {
 }
 
 function toolSwitchNames() {
-  const src = path.join(root, "ToolExecutor.cs");
-  const content = fs.readFileSync(src, "utf8");
+  const toolsDir = path.join(root, "Tools");
+  let content = "";
+  for (const f of fs.readdirSync(toolsDir)) {
+    if (f.startsWith("ToolExecutor") && f.endsWith(".cs"))
+      content += "\n" + fs.readFileSync(path.join(toolsDir, f), "utf8");
+  }
   return [...content.matchAll(/case\s+"([^"]+)":/g)].map((m) => m[1]);
 }
 

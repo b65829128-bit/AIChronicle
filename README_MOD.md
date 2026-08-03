@@ -445,33 +445,45 @@ _Module/Prompts/
 
 ```
 AIChronicle/
-├── SubModule.cs          # 模组入口，Harmony 激活，初始化 PromptManager
-├── Settings.cs           # MCM 设置类（连接设置、场景配置组、双倍声望开关）
-├── ConnectionResolver.cs # 场景连接解析器（intent → 生效 URL/模型/密钥，逐字段兜底）
-├── AIChatClient.cs       # HTTP 客户端，SSE 流式请求，多轮工具调度
-├── ToolExecutor.cs       # 工具执行器，所有游戏工具的 switch 分发
-├── DiplomacyService.cs   # 外交服务（宣战/议和/结盟/贸易/回复提案）
-├── PartyBehaviorManager.cs # 部队行为状态机（PendingAction + Tick）
-├── AIChatScreen.cs       # 聊天屏幕管理器（GauntletLayer 挂载）
-├── AIChatScreenVM.cs     # 聊天 ViewModel（消息列表、输入绑定、function calling 处理）
-├── LordChatBehavior.cs   # CampaignBehavior：对话中插入聊天选项，管理战役 ID
-├── LetterListScreen.cs   # 书信系统屏幕管理器（战役地图 O 键入口）
-├── PromptManager.cs      # 提示词管理器（文件热重载、战役目录、角色 JSON 读写）
-├── AgentManager.cs       # Agent 管理器（NPC 文件系统、路径权限、工具执行）
-├── AgentScheduler.cs     # 信件异步事件驱动调度器
-├── DiplomacyBanPatch.cs  # Harmony 补丁，禁止原版 AI 外交（MCM 可开关）
-├── Entity.cs             # Entity 数据模型（统一玩家/NPC，附能力标签）
-├── EntityManager.cs      # Entity 生命周期管理、查找与缓存
-├── ContextBuilder.cs     # 动态上下文组装（persona + 能力 + 模板）
-├── HistoryRecorder.cs    # 历史记录器（监听游戏事件自动写入原始史料）
-├── HistoryScreenVM.cs    # 史书 UI ViewModel（编年史列表、内容加载）
-├── MainThreadExecutor.cs # 主线程分发器（后台线程工具执行回主线程，防跨线程崩溃）
-├── MemoryConsolidator.cs # 记忆巩固（diary 权威化保底：自我审视前检测日记落后并补记）
-├── DebugLogger.cs        # 调试日志（LLM 调用摘要/思维链摘录 → 战役 debug_logs/）
-├── SafeFileIO.cs         # 带重试的文件 IO（并发读写同一文件时避免"文件正被使用"异常）
-├── AGENTS.md             # AI 开发工作流文档
-├── README_MOD.md         # 本文件（功能说明）
-├── CLAUDE.md             # Claude Code 入口文档（指向 AGENTS.md / README_MOD.md）
+├── Core/                    # 引擎层：入口、设置、基础设施
+│   ├── SubModule.cs         # 模组入口，Harmony 激活，初始化 PromptManager
+│   ├── Settings.cs          # MCM 设置类（连接兜底 + 游戏设置）
+│   ├── Settings.Scenarios.cs # MCM 十个场景连接配置组（URL/模型/密钥 + 测试按钮）
+│   ├── ConnectionResolver.cs # 场景连接解析器（intent → 生效 URL/模型/密钥，逐字段兜底）
+│   ├── DebugLogger.cs       # 调试日志（LLM 调用摘要/思维链摘录 → 战役 debug_logs/）
+│   ├── SafeFileIO.cs        # 带重试的文件 IO（并发读写同一文件时避免"文件正被使用"异常）
+│   └── MainThreadExecutor.cs # 主线程分发器（后台线程工具执行回主线程，防跨线程崩溃）
+├── Agents/                  # Agent 核心：上下文、调度、记忆
+│   ├── AgentManager.cs      # Agent 管理器基类（NPC 文件系统、路径权限、persona 生成）
+│   ├── AgentManager.Files.cs / Threads.cs / Proposals.cs / Permissions.cs  # 文件工具/书信水位/外交提案/权限模型
+│   ├── ContextBuilder.cs    # 动态上下文组装（persona + 能力 + 模板）
+│   ├── AIChatClient.cs      # HTTP 客户端，SSE 流式请求，多轮工具调度
+│   ├── PromptManager.cs     # 提示词管理器（文件热重载、战役目录、角色 JSON 读写）
+│   ├── MemoryConsolidator.cs # 记忆巩固（diary 权威化保底）
+│   ├── AgentScheduler.cs    # 事件调度器基类（优先级队列、Tick）
+│   ├── AgentScheduler.Events.cs / Advisory.cs / Historian.cs / Fate.cs  # 事件处理/谏言/史官/天意
+│   └── PartyBehaviorManager.cs # 部队行为状态机（PendingAction + Tick）
+├── Entities/                # Entity 统一抽象
+│   ├── Entity.cs            # Entity 数据模型（统一玩家/NPC，附能力标签）
+│   └── EntityManager.cs     # Entity 生命周期管理、查找与缓存
+├── Tools/                   # 工具执行器（50+ 游戏工具，按领域拆 partial）
+│   ├── ToolExecutor.cs      # 基类（工具入口 ExecuteToolCall + 共享助手）
+│   ├── ToolExecutor.Query.cs / Intel.cs / Military.cs / Social.cs / Diplomacy.cs / Fate.cs
+├── UI/                      # 界面层
+│   ├── AIChatScreen.cs      # 聊天屏幕管理器（GauntletLayer 挂载）
+│   ├── AIChatScreenVM.cs    # 聊天 ViewModel（消息列表、输入绑定、function calling 处理）
+│   ├── LetterListScreen.cs  # 书信系统屏幕管理器（战役地图 O 键入口）
+│   └── HistoryScreenVM.cs   # 史书 UI ViewModel（编年史列表、内容加载）
+├── Systems/                 # 游戏系统与 Harmony 补丁
+│   ├── DiplomacyService.cs  # 外交服务（宣战/议和/结盟/贸易/回复提案）
+│   ├── HistoryRecorder.cs   # 历史记录器（监听游戏事件自动写入原始史料）
+│   ├── LordChatBehavior.cs  # CampaignBehavior：对话中插入聊天选项，管理战役 ID
+│   ├── DiplomacyBanPatch.cs # Harmony 补丁，禁止原版 AI 外交（MCM 可开关）
+│   ├── FiefAssignmentPatch.cs # 攻城后册封由 Agent 主导
+│   └── ExecutionNoPenaltyPatch.cs # 处决无惩罚
+├── AGENTS.md                # AI 开发工作流文档
+├── README_MOD.md            # 本文件（功能说明）
+├── CLAUDE.md                # Claude Code 入口文档（指向 AGENTS.md / README_MOD.md）
 ├── _Module/
 │   ├── SubModule.xml     # 模组元数据
 │   ├── GUI/Prefabs/

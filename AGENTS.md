@@ -262,29 +262,54 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 ```
 C:\Users\<用户名>\BLMods\AIChronicle\
-├── SubModule.cs              ← 模组入口，生命周期回调
 ├── AIChronicle.csproj          ← 项目配置（引用、框架、部署）
-├── Settings.cs                ← MCM 设置（连接设置/场景配置组/双倍声望开关）
-├── ConnectionResolver.cs      ← 场景连接解析器（intent → 生效 URL/模型/密钥，逐字段兜底到全局连接设置）
-├── AIChatClient.cs            ← LLM API 客户端（HTTP 流式请求、SSE 解析、多轮循环），工具调用委托给 ToolExecutor
-├── ToolExecutor.cs            ← 工具执行器（30+ 个游戏工具的具体实现 + browse_tools 元工具）
-├── DiplomacyService.cs        ← 外交服务（宣战/议和/结盟/贸易协定/回复提案 + FindKingdom + 盟约/贸易到期记录与清除）
-├── PartyBehaviorManager.cs    ← 部队行为管理器（PendingAction 状态机、Tick()、定时签到）
-├── AIChatScreen.cs            ← 聊天屏幕管理器（静态类，GauntletLayer 挂载）
-├── AIChatScreenVM.cs          ← 聊天 ViewModel（消息列表、输入绑定、function calling 处理）
-├── LordChatBehavior.cs        ← 对话中插入聊天选项，战役 ID 管理
-├── PromptManager.cs           ← 提示词管理器（文件热重载、战役目录、角色 JSON）
-├── AgentManager.cs            ← Agent 管理器（NPC 文件系统、路径权限、LLM 生成 persona）
-├── Entity.cs                  ← Entity 抽象（玩家/NPC 统一模型、EntityCapability）
-├── EntityManager.cs           ← Entity 生命周期管理
-├── ContextBuilder.cs          ← Context 动态组装器
-├── LetterListScreen.cs        ← 书信收信人列表屏幕
-├── AgentScheduler.cs          ← 信件异步事件驱动调度器 + 每日盟约/贸易到期检测
-├── HistoryRecorder.cs         ← 历史记录器（监听游戏事件写入原始史料）
-├── MainThreadExecutor.cs      ← 主线程分发器（后台线程的工具执行排队回主线程，防跨线程崩溃）
-├── MemoryConsolidator.cs      ← 记忆巩固（diary 权威化保底：自我审视前检测日记落后并补记）
-├── DebugLogger.cs             ← 调试日志（LLM 调用摘要/思维链摘录 → 战役 debug_logs/）
-├── SafeFileIO.cs              ← 带重试的文件 IO（并发读写同一文件时避免"文件正被使用"异常）
+├── Core/                       ← 引擎层：入口、设置、基础设施
+│   ├── SubModule.cs            ← 模组入口，生命周期回调
+│   ├── Settings.cs             ← MCM 设置基类（连接兜底 + 游戏设置）
+│   ├── Settings.Scenarios.cs   ← MCM 十个场景连接配置组（URL/模型/密钥 + 测试按钮）
+│   ├── ConnectionResolver.cs   ← 场景连接解析器（intent → 生效 URL/模型/密钥，逐字段兜底到全局连接设置）
+│   ├── DebugLogger.cs          ← 调试日志（LLM 调用摘要/思维链摘录 → 战役 debug_logs/）
+│   ├── SafeFileIO.cs           ← 带重试的文件 IO（并发读写同一文件时避免"文件正被使用"异常）
+│   └── MainThreadExecutor.cs   ← 主线程分发器（后台线程的工具执行排队回主线程，防跨线程崩溃）
+├── Agents/                     ← Agent 核心：上下文、调度、记忆
+│   ├── AgentManager.cs         ← Agent 管理器基类（NPC 文件系统、路径权限、persona 生成）
+│   ├── AgentManager.Files.cs   ← 文件工具执行（read/write/edit/delete/move/glob/grep/list）
+│   ├── AgentManager.Threads.cs ← 玩家书信线程已读水位
+│   ├── AgentManager.Proposals.cs ← 外交提案存储与解析
+│   ├── AgentManager.Permissions.cs ← 路径权限模型（信息隔离硬约束）
+│   ├── ContextBuilder.cs       ← Context 动态组装器
+│   ├── AIChatClient.cs         ← LLM API 客户端（HTTP 流式请求、SSE 解析、多轮循环），工具调用委托给 ToolExecutor
+│   ├── PromptManager.cs        ← 提示词管理器（文件热重载、战役目录、角色 JSON）
+│   ├── MemoryConsolidator.cs   ← 记忆巩固（diary 权威化保底：自我审视前检测日记落后并补记）
+│   ├── AgentScheduler.cs       ← 事件调度器基类（优先级队列、Tick、国王激活、盟约到期检测）
+│   ├── AgentScheduler.Events.cs  ← 事件处理（ProcessEvent/玩家事件/外交提案轮询）
+│   ├── AgentScheduler.Advisory.cs ← 封臣谏言系统（概率激活、权重抽选、ProcessAdvisory）
+│   ├── AgentScheduler.Historian.cs ← 史官事件处理（年度编年史 + 专题）
+│   ├── AgentScheduler.Fate.cs   ← 天意建族事件处理
+│   └── PartyBehaviorManager.cs ← 部队行为管理器（PendingAction 状态机、Tick()、定时签到）
+├── Entities/                   ← Entity 统一抽象
+│   ├── Entity.cs               ← Entity 抽象（玩家/NPC 统一模型、EntityCapability）
+│   └── EntityManager.cs        ← Entity 生命周期管理
+├── Tools/                      ← 工具执行器（50+ 游戏工具，按领域拆 partial）
+│   ├── ToolExecutor.cs         ← 基类（工具入口 ExecuteToolCall + 共享助手）
+│   ├── ToolExecutor.Query.cs   ← 查询类工具（人物/定居点/世界/内政/技能）
+│   ├── ToolExecutor.Intel.cs   ← 军情迷雾（query_party_troops + 距离/传闻三档模糊模型）
+│   ├── ToolExecutor.Military.cs ← 行军/军事（move/raid/besiege/form_army/驻防/招募/俘虏）
+│   ├── ToolExecutor.Social.cs  ← 社交/通信（金钱物品/好感/放行/书信/谏言/诏令/问询）
+│   ├── ToolExecutor.Diplomacy.cs ← 阵营变更（change_kingdom 全模式 + 家族等级限制）
+│   └── ToolExecutor.Fate.cs    ← 天意建族（create_clan + 预算限流）
+├── UI/                         ← 界面层
+│   ├── AIChatScreen.cs         ← 聊天屏幕管理器（静态类，GauntletLayer 挂载）
+│   ├── AIChatScreenVM.cs       ← 聊天 ViewModel（消息列表、输入绑定、function calling 处理）
+│   ├── LetterListScreen.cs     ← 书信收信人列表屏幕
+│   └── HistoryScreenVM.cs      ← 史书屏幕 ViewModel
+├── Systems/                    ← 游戏系统与 Harmony 补丁
+│   ├── DiplomacyService.cs     ← 外交服务（宣战/议和/结盟/贸易协定/回复提案 + FindKingdom + 盟约/贸易到期记录与清除）
+│   ├── HistoryRecorder.cs      ← 历史记录器（监听游戏事件写入原始史料）
+│   ├── LordChatBehavior.cs     ← 对话中插入聊天选项，战役 ID 管理
+│   ├── DiplomacyBanPatch.cs    ← 拦截原版外交（禁止原版外交开关）
+│   ├── FiefAssignmentPatch.cs  ← 攻城后册封由 Agent 主导
+│   └── ExecutionNoPenaltyPatch.cs ← 处决无惩罚
 ├── CLAUDE.md                  ← Claude Code 入口文档（指向本文件与 README_MOD.md）
 ├── README.md                  ← 开源主入口（英文简介，指向 README_MOD.md / AGENTS.md）
 ├── CONTRIBUTING.md            ← 贡献指南（构建方法、文档维护规则、PR 流程）
