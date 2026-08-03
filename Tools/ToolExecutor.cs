@@ -99,6 +99,12 @@ namespace AIChronicle
                         var wcontent = args["content"]?.ToString() ?? "";
                         return AgentManager.ExecuteWriteFile(wpath, wcontent);
 
+                    case "write_chronicle":
+                        return AgentManager.ExecuteWriteChronicle(
+                            args["genre"]?.ToString() ?? "",
+                            args["name"]?.ToString() ?? "",
+                            args["content"]?.ToString() ?? "");
+
                     case "glob":
                         var glpattern = args["pattern"]?.ToString() ?? "";
                         return AgentManager.ExecuteGlob(glpattern);

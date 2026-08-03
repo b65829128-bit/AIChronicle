@@ -375,7 +375,7 @@ namespace AIChronicle
             var name = kingdom.Name?.ToString() ?? "未知王国";
             RecordEvent("kingdom_destroyed", $"{name}灭亡");
 
-            AgentScheduler.QueueSpecialChronicle(name);
+            AgentScheduler.QueueSpecialChronicle($"王国灭亡：{name}。");
         }
 
         private void OnHeroKilled(Hero victim, Hero killer, KillCharacterAction.KillCharacterActionDetail detail, bool showNotifications = true)

@@ -19,7 +19,8 @@ namespace AIChronicle
         ChangeRelation,
         SendLetter,
         Diplomat,
-        CreateClan
+        CreateClan,
+        Chronicler
     }
 
     public class Entity

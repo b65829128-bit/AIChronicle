@@ -82,7 +82,8 @@ namespace AIChronicle
                     Capabilities = new HashSet<EntityCapability>
                     {
                         EntityCapability.FileSystem,
-                        EntityCapability.SendLetter
+                        EntityCapability.SendLetter,
+                        EntityCapability.Chronicler
                     }
                 };
                 _entityCache[historianId] = historian;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Engine.GauntletUI;
@@ -14,6 +15,7 @@ namespace AIChronicle
         private string _name = "";
         private string _filePath = "";
         private bool _isSelected;
+        private bool _isHeader;
 
         [DataSourceProperty]
         public string Name
@@ -29,19 +31,27 @@ namespace AIChronicle
             set => SetField(ref _isSelected, value, "IsSelected");
         }
 
+        [DataSourceProperty]
+        public bool IsHeader => _isHeader;
+
+        [DataSourceProperty]
+        public bool IsSelectable => !_isHeader;
+
         public string FilePath => _filePath;
 
         private readonly HistoryScreenVM _parent;
 
-        public ChronicleEntryVM(string name, string filePath, HistoryScreenVM parent)
+        public ChronicleEntryVM(string name, string filePath, HistoryScreenVM parent, bool isHeader = false)
         {
             _name = name;
             _filePath = filePath;
             _parent = parent;
+            _isHeader = isHeader;
         }
 
         public void ExecuteSelect()
         {
+            if (!IsSelectable) return;
             _parent.SelectChronicle(this);
         }
     }
@@ -102,30 +112,58 @@ namespace AIChronicle
         {
             FontSize = MySettings.Instance?.ChronicleFontSize ?? 28;
             LoadChronicleList();
-            if (Chronicles.Count > 0)
-                SelectChronicle(Chronicles[0]);
+            var firstSelectable = Chronicles.FirstOrDefault(c => c.IsSelectable);
+            if (firstSelectable != null)
+                SelectChronicle(firstSelectable);
         }
 
         private void LoadChronicleList()
         {
+            // 史书体例分组（仿正史：先本纪、次世家、后列传、终编年史/纪事）
+            var groups = new Dictionary<string, List<(string display, string path, int year)>>();
             var chronicleDir = FindChronicleDir();
             if (chronicleDir != null && Directory.Exists(chronicleDir))
             {
-                var files = Directory.GetFiles(chronicleDir, "*.txt");
-                Array.Sort(files, (a, b) => string.Compare(Path.GetFileName(a), Path.GetFileName(b), StringComparison.Ordinal));
-                Array.Reverse(files);
-
-                foreach (var file in files)
+                foreach (var file in Directory.GetFiles(chronicleDir, "*.txt"))
                 {
                     var fname = Path.GetFileNameWithoutExtension(file);
-                    var displayName = ParseChronicleName(fname);
-                    Chronicles.Add(new ChronicleEntryVM(displayName, file, this));
+                    var (group, display, year) = ParseChronicleName(fname);
+                    if (!groups.TryGetValue(group, out var list))
+                        groups[group] = list = new List<(string, string, int)>();
+                    list.Add((display, file, year));
                 }
+            }
+
+            foreach (var genre in GenreOrder)
+            {
+                if (!groups.TryGetValue(genre, out var list)) continue;
+                // 编年史按年份降序（最新在前），其余按名称升序
+                list.Sort((a, b) => a.year != b.year
+                    ? b.year.CompareTo(a.year)
+                    : string.Compare(a.display, b.display, StringComparison.Ordinal));
+                AddGroupHeader(genre);
+                foreach (var e in list)
+                    Chronicles.Add(new ChronicleEntryVM(e.display, e.path, this));
+            }
+
+            if (groups.TryGetValue("其他", out var others))
+            {
+                AddGroupHeader("其他");
+                foreach (var e in others)
+                    Chronicles.Add(new ChronicleEntryVM(e.display, e.path, this));
             }
 
             LoadAdvisoryList();
             LoadEdictList();
             LoadSecretAdvisoryList();
+        }
+
+        /// <summary>史书体例分组显示顺序。此顺序也决定了左侧目录的组排布。</summary>
+        private static readonly string[] GenreOrder = { "本纪", "世家", "列传", "编年史", "纪事" };
+
+        private void AddGroupHeader(string name)
+        {
+            Chronicles.Add(new ChronicleEntryVM(name, "", this, isHeader: true));
         }
 
         private void LoadAdvisoryList()
@@ -144,9 +182,11 @@ namespace AIChronicle
 
             var kingdomName = playerKingdom.Name.ToString();
             var files = Directory.GetFiles(advisoryDir, $"{kingdomName}_*.txt");
+            if (files.Length == 0) return;
             Array.Sort(files, (a, b) => string.Compare(Path.GetFileName(a), Path.GetFileName(b), StringComparison.Ordinal));
             Array.Reverse(files);
 
+            AddGroupHeader("政务文献");
             foreach (var file in files)
             {
                 var fname = Path.GetFileNameWithoutExtension(file);
@@ -183,9 +223,11 @@ namespace AIChronicle
 
             var kingdomName = playerKingdom.Name.ToString();
             var files = Directory.GetFiles(edictDir, $"{kingdomName}_*.txt");
+            if (files.Length == 0) return;
             Array.Sort(files, (a, b) => string.Compare(Path.GetFileName(a), Path.GetFileName(b), StringComparison.Ordinal));
             Array.Reverse(files);
 
+            AddGroupHeader("政务文献");
             foreach (var file in files)
             {
                 var fname = Path.GetFileNameWithoutExtension(file);
@@ -223,9 +265,11 @@ namespace AIChronicle
 
             var kingdomName = playerKingdom.Name.ToString();
             var files = Directory.GetFiles(secretDir, $"{kingdomName}_*.txt");
+            if (files.Length == 0) return;
             Array.Sort(files, (a, b) => string.Compare(Path.GetFileName(a), Path.GetFileName(b), StringComparison.Ordinal));
             Array.Reverse(files);
 
+            AddGroupHeader("政务文献");
             foreach (var file in files)
             {
                 var fname = Path.GetFileNameWithoutExtension(file);
@@ -245,29 +289,31 @@ namespace AIChronicle
             return $"国王密陈 · {filename}";
         }
 
-        private static string ParseChronicleName(string filename)
+        /// <summary>
+        /// 解析 chronicles 目录下的史文文件名。
+        /// 规范命名：{名称}{体例}.txt（如 1084编年史 / 拉盖娅本纪 / 南帝国世家 / 某某列传 / 帝国分裂纪事）。
+        /// 未能识别的自由命名文件归入「其他」组兜底显示，不影响阅读。
+        /// </summary>
+        private static (string group, string display, int year) ParseChronicleName(string filename)
         {
-            if (filename.StartsWith("chronicle_") && filename.Length >= 15)
+            foreach (var genre in new[] { "编年史", "本纪", "世家", "列传", "纪事" })
             {
-                var rest = filename.Substring(10);
-                var yearPart = rest.Length >= 4 ? rest.Substring(0, 4) : rest;
-                if (int.TryParse(yearPart, out int year))
+                if (filename.EndsWith(genre) && filename.Length > genre.Length)
                 {
-                    if (rest.Length == 4)
-                        return $"第{year}年编年史";
-
-                    var topic = rest.Substring(5).Replace("_", " ");
-                    if (topic.Length > 30)
-                        topic = topic.Substring(0, 30) + "...";
-                    return $"专题 · {topic}（{year}年）";
+                    var name = filename.Substring(0, filename.Length - genre.Length);
+                    if (genre == "编年史" && int.TryParse(name, out int year))
+                        return ("编年史", $"第{year}年编年史", year);
+                    return (genre, $"{name}{genre}", 0);
                 }
             }
 
-            return filename.Replace("_", " ").Replace("chronicle", "编年史");
+            return ("其他", filename.Replace("_", " "), 0);
         }
 
         public void SelectChronicle(ChronicleEntryVM entry)
         {
+            if (entry == null || entry.IsHeader) return;
+
             foreach (var c in Chronicles)
                 c.IsSelected = c == entry;
 

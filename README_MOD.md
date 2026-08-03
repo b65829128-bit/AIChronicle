@@ -113,12 +113,13 @@
 - 游戏中的重大事件（宣战/议和/城镇易主/灭国/建国/贵族阵亡/氏族叛变/婚嫁/氏族领袖更替）被自动记录为**原始史料**
 - 原始史料以 JSONL 格式存储在 `NPCs/World/history/events_{年份}.txt`，永久保存
 - 每当年份推进时，**史官 Agent** 自动激活，读取原始史料并编纂**年度编年史**（间隔可在 MCM 中调整）
-- 氏族领袖、国王、玩家死亡时，史官自动编纂**列传**（人物传记）。**传记精准定位**：`query_character` 支持**重名消歧**（多个同名者时列出全部候选人：编号/氏族/王国/年龄）与**按编号精确查询**（`CharacterObject_XXXX`）；传记事件携带死者编号，提示词要求史官用编号精查——修复了重名人物导致传记张冠李戴（氏族、生卒年全错）的 bug
-- 灭国、建国等重大事件触发**专题史**
-- 编年史存储于 `NPCs/World/history/chronicles/`，以《资治通鉴》白话风格书写，年末附「史官曰」评论
-- 战役地图上按 **H 键**打开史书 UI（1100×700 大屏，左侧目录右侧正文），字体大小可调
+- 氏族领袖、国王、玩家死亡时，史官自动编纂**列传/本纪**（人物传记）。**传记精准定位**：`query_character` 支持**重名消歧**（多个同名者时列出全部候选人：编号/氏族/王国/年龄）与**按编号精确查询**（`CharacterObject_XXXX`）；传记事件携带死者编号，提示词要求史官用编号精查——修复了重名人物导致传记张冠李戴（氏族、生卒年全错）的 bug
+- 灭国触发**世家**（该王国前世今生的兴衰史），建国、大战役等重大事件触发**纪事**（专题始末）
+- **史书体例规范**：史文统一按五种体例落盘，文件名由系统自动生成——**本纪**（`{国王名}本纪`，一国之君的生平与治国大事）、**世家**（`{国名}世家`，一国或大族兴衰史）、**列传**（`{人名}列传`，单个人物生平）、**编年史**（`{年份}编年史`，年度大事记）、**纪事**（`{事件名}纪事`，重大事件始末）。史官用专用工具 `write_chronicle`（体例/名称/正文）落盘，系统强制规范命名，杜绝"文件名自定"的乱象；体例判定由代码给出建议（统治者→本纪、贵族→列传、灭国→世家），史官可依实调整
+- 史文存储于 `NPCs/World/history/chronicles/`，以《资治通鉴》白话风格书写，年末附「史官曰」评论
+- 战役地图上按 **H 键**打开史书 UI（1100×700 大屏，左侧目录右侧正文），**目录按体例分组显示**（本纪 → 世家 → 列传 → 编年史 → 纪事 → 其他 → 政务文献，编年史按年份倒序），字体大小可调
 - NPC Agent 可通过 `read_file` 阅读编年史——历史成为 NPC 的共同知识
-- 史官提示词（`historian_rules.txt`、`yearly_chronicle_prompt.txt`、`biography_prompt.txt`）全部热重载
+- 史官提示词（`historian_rules.txt`、`yearly_chronicle_prompt.txt`、`biography_prompt.txt`、`special_chronicle_prompt.txt`）全部热重载
 - 史料记录类型：war_declared（含宣战宣言）/ peace_made / siege_started / siege_failed / siege_abandoned / settlement_captured / fief_granted（国王册封，含册封宣言）/ kingdom_destroyed / kingdom_created / hero_killed / clan_changed_kingdom / clan_leader_changed / marriage
 
 ### 天命意识形态
@@ -182,7 +183,7 @@
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous（conversation 亦激活） |
 | military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops, form_army, release_prisoner, execute_prisoner | autonomous（conversation 亦激活） |
 | diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal, gift_fief, change_kingdom, submit_edict, consult_king, reply_consult | diplomacy（conversation 亦激活） |
-| file | read_file, write_file, append_file, edit_file, delete_file, move_file, list_dir, glob, grep | letter, autonomous, conversation |
+| file | read_file, write_file, write_chronicle（仅史官）, append_file, edit_file, delete_file, move_file, list_dir, glob, grep | letter, autonomous, conversation |
 | communication | send_letter | letter（conversation 亦激活） |
 
 **玩家发起的聊天（conversation）是全功能通道**——所有分类默认激活。理由：AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全，对话里达成的承诺（议和/出兵/换国/写信/放人）就无法兑现。能力门控照旧：国王专属工具（宣战/议和/结盟/诏令/问询）仍只有国王拿到，部队工具仍只有带兵者拿到，`change_kingdom` 仅氏族领袖可用——所以对话里每个 NPC 的可用工具由身份决定。

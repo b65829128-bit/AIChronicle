@@ -23,6 +23,7 @@ namespace AIChronicle
             [EntityCapability.SendLetter] = new[] { "send_letter" },
             [EntityCapability.Diplomat] = new[] { "declare_war", "propose_peace", "propose_alliance", "propose_trade", "end_alliance", "end_trade_agreement", "respond_to_diplomacy_proposal", "gift_fief", "query_pending_proposals" },
             [EntityCapability.CreateClan] = new[] { "create_clan" },
+            [EntityCapability.Chronicler] = new[] { "write_chronicle" },
         };
 
         private static readonly Dictionary<string, string> CategoryNames = new()
@@ -493,7 +494,7 @@ namespace AIChronicle
                     + "1. 使用 read_file 读取原始史料文件。原始史料存放在 history/ 目录下，按年份命名（如 history/events_1084.txt）\n"
                     + "   每条史料是 JSON 格式，包含 year、season、day、type、summary 字段\n"
                     + "2. 如果原始史料中提到的人物、定居点需要补充背景信息，使用 query_character 或 query_settlement 查询\n"
-                    + "3. 使用 write_file 将编纂完成的编年史写入 history/chronicles/ 目录\n"
+                    + "3. 使用 write_chronicle 将编纂完成的史文落盘（体例=编年史/本纪/世家/列传/纪事，名称=主题名），系统自动按「名称+体例.txt」规范命名存入 history/chronicles/ 目录\n"
                     + "4. 如有重大事件（灭国、大规模战役、王朝更替等），可以额外写专题史\n\n"
                     + "## 编年史格式\n\n"
                     + "- 以「卡拉迪亚第X年编年史」为标题\n"
@@ -512,8 +513,8 @@ namespace AIChronicle
                     + "- marriage: 贵族婚嫁\n\n"
                     + "## 专题史\n\n"
                     + "如果某年发生了特别重大的事件（如王国灭亡、传奇战役），你可以额外写一篇专题史。\n"
-                    + "专题史文件名格式：history/chronicles/chronicle_{年份}_{事件名}.txt\n"
-                    + "专题史应更深入地分析事件的起因、经过和影响。";
+                    + "王国灭亡应以「世家」体例记录一国兴衰，其余重大事件以「纪事」体例叙述。\n"
+                    + "落盘用 write_chronicle，系统自动按「名称+体例.txt」规范命名。";
 
             var lastWrite = File.GetLastWriteTimeUtc(path);
             if (_cachedHistorianRules == "" || lastWrite > _lastHistorianRulesCheck)

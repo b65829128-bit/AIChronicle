@@ -68,8 +68,8 @@ namespace AIChronicle
                 var response = await AIChatClient.SendMessage(
                     charPrompt, hero: null, includeTools: true, intent: "historian");
 
-                // 修复：成功判定改为"出现新文件或文件被修改"——传记是自命名文件（不叫 chronicle_*），
-                // 原检查只找 chronicle_*.txt 会把已成功写入的传记误报为"未生成"。
+                // 修复：成功判定改为"出现新文件或文件被修改"——传记/世家/纪事是自命名体例文件，
+                // 原检查只找 chronicle_*.txt 会把已成功写入的内容误报为"未生成"。
                 var wroteFile = HasChronicleChanged(chronicleDir, beforeFiles, beforeTimes);
 
                 // 修复：finish_reason="length"（被 max_tokens 截断）且未落盘 → 重试一次。
@@ -78,8 +78,8 @@ namespace AIChronicle
                 {
                     var year = ExtractYearFromContent(evtContent);
                     var retryHint = year > 0
-                        ? $"你上一轮思考到一半被截断，未能写成编年史。现在请调用 write_file 将编年史写入 history/chronicles/chronicle_{year}.txt，尽快成文落盘。"
-                        : "你上一轮思考到一半被截断，未能写成内容。现在请调用 write_file 将内容写入 history/chronicles/ 目录（文件名自定），尽快成文落盘。";
+                        ? $"你上一轮思考到一半被截断，未能写成编年史。现在请调用 write_chronicle 落盘：体例=编年史，名称={year}，正文=编年史全文（系统自动存档为 {year}编年史.txt），尽快成文落盘。"
+                        : "你上一轮思考到一半被截断，未能写成内容。现在请调用 write_chronicle 将内容落盘到 history/chronicles/（体例=本纪/世家/列传/纪事，名称=人物/国族/事件名），尽快成文落盘。";
                     DebugLogger.Log($"史官因 token 截断重试 eventLabel={eventLabel} year={year}");
                     var retryPrompt = new CharacterPrompt
                     {

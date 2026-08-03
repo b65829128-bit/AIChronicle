@@ -79,6 +79,15 @@
 
 > 典型踩坑：`DoNotAcceptEvents="true"` 的含义是「本 Widget 不接事件，但透传给子级」——这个语义如果不先看 SPChatLog 源码，纯靠试错至少浪费两轮。
 
+### 4. 兼容性维护前，先询问用户是否需要兼容旧存档
+
+涉及**改变文件格式/命名、存档数据结构、配置项含义**的改动，如果要顺手做"兼容旧档"的逻辑，**先问用户**：「需要兼容旧存档吗？」——不要默认加上兼容代码，也不要默认不加。
+
+> 反例：史书命名规范化时，AI 主动加了 `chronicle_{year}.txt` 旧命名的兼容解析，用户明确要求"不用兼容，去掉兼容代码"。
+> 正例：改动会动到 `Campaigns/{战役}/` 下的旧文件或旧配置时，先问「旧档要不要兼容？」，等用户回复后再决定是否保留兼容逻辑。
+
+判断要不要问：改动**破坏性**（旧档读到会异常/乱显示/失效）时默认要问；改动**纯增量**（旧内容不受影响）时通常无需兼容。是否兼容由用户决定，AI 不自作主张。
+
 ---
 
 ## 架构概览（必读）
@@ -109,7 +118,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **书信模式** | 支持书信 intent，O 键唤起书信往来面板（统一线程列表 + 未读角标） |
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 65 个工具定义在 `tools.json`（50 个游戏工具）和 `agent_tools.json`（15 个文件/通信工具，含 `submit_advisory`/`submit_edict`/`consult_king`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
+| **工具定义文件化** | 66 个工具定义在 `tools.json`（50 个游戏工具）和 `agent_tools.json`（16 个文件/通信工具，含 `write_chronicle`/`submit_advisory`/`submit_edict`/`consult_king`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
 | **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁。**玩家发起的聊天（conversation）是全功能通道——全部分类默认激活**（AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全则对话里达成的承诺无法兑现；能力门控照旧，国王专属工具仍只有国王拿到） |
 | **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`persona_generation.txt`、`context_template.txt`、`chancery_rules.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环，模型调用工具 → 执行 → 追加结果 → 重请求，直到模型自然停止（无轮数限制，仅保留极高安全阀防死循环） |
@@ -819,17 +828,19 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 - **触发时机**：每年年终（年份推进时），`AgentScheduler.CheckYearAdvance()` 检测年份变化并队列 `YearlyChronicle` 事件
 - **专题触发**：灭国/新王国建立时，`HistoryRecorder` 调用 `AgentScheduler.QueueSpecialChronicle()` 即时队列 `SpecialChronicle` 事件
 - **专题合并（防杀人潮）**：`QueueSpecialChronicle` 会先写入合并缓冲——若已有一个待处理专题史事件，后续事件只追加不新开；处理时一次史官激活合并全部（如玩家连杀十几人 → 只生成一次传记专题，而非连环激活）
-- **传记质量**：`query_character` 现可查已故人物（枚举所有氏族成员含已故 + 在世英雄）并返回出生/卒年；传记提示词要求开头点明身份（统治者/族长/成员）与生卒年。成功判定改为"chronicles 目录出现新文件"（传记是自命名文件，原只查 `chronicle_*.txt` 会误报"未生成"）
+- **传记质量**：`query_character` 现可查已故人物（枚举所有氏族成员含已故 + 在世英雄）并返回出生/卒年；传记提示词要求开头点明身份（统治者/族长/成员）与生卒年。成功判定改为"chronicles 目录出现新文件"（传记/世家/纪事是自命名体例文件，原只查 `chronicle_*.txt` 会误报"未生成"）
 - **Entity**：史官是虚拟 Entity（ID: `__historian__`，`HeroRef = null`），不映射任何游戏 NPC
-- **工具**：`query` + `file` 分类的工具（`ActivatedCategories = {"universal", "query", "file"}`）
+- **工具**：`query` + `file` 分类的工具（`ActivatedCategories = {"universal", "query", "file"}`），含专属落盘工具 `write_chronicle`（`Chronicler` 能力门控，仅史官可用）
 - **权限**：可读 `World/history/` 目录，可写 `World/history/chronicles/` 目录
 - **提示词**：使用 `intent = "historian"` 的 `ContextBuilder.Build()`，规则来自 `historian_rules.txt`
-- **输出**：年度编年史 → `World/history/chronicles/chronicle_{year}.txt`；专题史 → 自命名文件
+- **体例规范（史书命名，代码强制）**：史文统一按五种体例落盘，文件名由系统自动生成（`AgentManager.ExecuteWriteChronicle` 校验体例白名单 + 清洗名称 + 拼 `{名称}{体例}.txt`）——**本纪**（`{国王名}本纪`，一国之君生平与在位大事）、**世家**（`{国名}世家`，一国/大族兴衰史）、**列传**（`{人名}列传`，单个人物生平）、**编年史**（`{年份}编年史`，年度大事记）、**纪事**（`{事件名}纪事`，重大事件始末）。史官不得再用 `write_file` 自行命名（提示词已改指 `write_chronicle`）
+- **体例建议（代码给建议，史官可调整）**：`ConsumeSpecialChronicleContent` 按事件性质注入体例建议——「重要人物之死」中死者为统治者→本纪、其余→列传；「王国灭亡：X」→世家；其他→纪事。判定标准同时写入 `historian_rules.txt` 的「史书体例」表
+- **输出**：年度编年史 → `World/history/chronicles/{year}编年史.txt`；传记/世家/纪事 → `{名称}{体例}.txt`
 
 #### NPC 查阅历史
 
 - `AgentManager.IsPathAllowed` 和 `ResolvePath` 新增了对 `history/` 和 `history/chronicles/` 路径的支持
-- NPC Agent 可用 `read_file("history/chronicles/chronicle_1084.txt")` 直接读取史官成文
+- NPC Agent 可用 `read_file("history/chronicles/{year}编年史.txt")` 直接读取史官成文
 - 原始史料（`events_*.txt`）对 NPC 只读
 - 写入历史目录的权限保留给 `__historian__` entity
 
@@ -837,7 +848,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 
 - `AgentScheduler` 用 `_lastChronicleYear` 追踪上次处理年份，初始值 = 游戏起始年份
 - 每帧 `Tick()` 中调用 `CheckYearAdvance()`，检测 `currentYear > _lastChronicleYear`
-- 对每个已跳过的年份，检查 `events_{year}.txt` 是否存在且 `chronicle_{year}.txt` 不存在，满足条件才队列事件
+- 对每个已跳过的年份，检查 `events_{year}.txt` 是否存在且 `{year}编年史.txt` 不存在，满足条件才队列事件
 - 防止重复生成：已存在编年史的年份跳过
 
 ## 调试方法
@@ -926,12 +937,13 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | `execute_prisoner` | 军事 | 处决自己部队中的贵族俘虏（仅限贵族；受 MCM「处决无惩罚」控制，默认开=无惩罚） |
 | `create_clan` | 通用 | 天意建族（家族补充系统）：建新贵族家族（成员 3-6 人程序生成、家族等级 2、族长带兵、入原始史料但不激活史官）。仅 `__fate__` 实体可用（能力门控）。**代码强制每次激活只建一族**（LLM 可能连建多族，曾致原生崩溃）；英雄创建对齐游戏叛乱建族模式（先建英雄→注册进族→置 Active） |
 
-### 文件工具（agent_tools.json，15 个）
+### 文件工具（agent_tools.json，16 个）
 
 | 工具 | 说明 |
 |------|------|
 | `read_file` | 读取文件内容（支持行号范围） |
 | `write_file` | 创建新文件或完整重写 |
+| `write_chronicle` | 史官成文落盘（体例/名称/正文，系统按「名称+体例.txt」规范命名，仅 `__historian__` 可用，Chronicler 能力门控） |
 | `append_file` | 追加内容到文件末尾 |
 | `edit_file` | 精确替换文件中的文本（必须唯一匹配） |
 | `delete_file` | 删除文件 |

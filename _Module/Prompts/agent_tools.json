@@ -100,6 +100,28 @@
     ]
   },
   {
+    "name": "write_chronicle",
+    "category": "file",
+    "description": "Save a completed chronicle entry to the history archives (court historian only). The system names the file automatically as {名称}{体例}.txt in history/chronicles/, so the archives stay consistent.\n\nUsage:\n- Call this function whenever you have finished writing a chronicle entry and want to save it.\n- The 体例 parameter must be exactly one of: 编年史 (annual record of the realm's events) / 本纪 (biography of a kingdom's ruler) / 世家 (the rise and fall of a kingdom or great house) / 列传 (biography of an individual) / 纪事 (monograph on a major event).\n- The 名称 parameter is the subject name WITHOUT the 体例 suffix: e.g. 拉盖娅, 南帝国, 芬·格鲁芬多克, 1084, 帝国分裂.\n- Do NOT include the 体例 word inside 名称 (pass 拉盖娅, not 拉盖娅本纪).",
+    "parameters": [
+      {
+        "name": "genre",
+        "type": "string",
+        "description": "体例：编年史 / 本纪 / 世家 / 列传 / 纪事（四选一）"
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "description": "史文主题名，不含体例字样，如 拉盖娅 / 南帝国 / 1084"
+      },
+      {
+        "name": "content",
+        "type": "string",
+        "description": "史文完整正文"
+      }
+    ]
+  },
+  {
     "name": "glob",
     "category": "file",
     "description": "Find files in your personal directory matching a pattern.\n\nUsage:\n- Use this to discover files by name pattern, e.g. \"knowledge/*.txt\" to list all knowledge files, or \"goals/*\" to find all goals.\n- The pattern supports * (match anything) and ? (match one character).\n- Returns matching file paths relative to your directory.\n- The pattern is relative to your personal directory. Use \"World/*.txt\" for world files.",

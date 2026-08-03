@@ -73,9 +73,16 @@
                                        HeightSizePolicy="CoverChildren"
                                        StackLayout.LayoutMethod="VerticalTopToBottom">
                               <ItemTemplate>
+                                <TextWidget WidthSizePolicy="StretchToParent"
+                                            HeightSizePolicy="Fixed" SuggestedHeight="30"
+                                            MarginTop="6" MarginBottom="2"
+                                            IsVisible="@IsHeader"
+                                            Text="@Name" FontSize="18"
+                                            Brush.FontColor="#8A7A66FF" />
                                 <ButtonWidget WidthSizePolicy="StretchToParent"
                                               HeightSizePolicy="Fixed" SuggestedHeight="52"
                                               MarginBottom="2"
+                                              IsVisible="@IsSelectable"
                                               Brush="ButtonBrush2"
                                               Command.Click="ExecuteSelect"
                                               UpdateChildrenStates="true"

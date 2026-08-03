@@ -415,6 +415,7 @@ namespace AIChronicle
                                     "submit_advisory" => "向国王进谏了",
                                     "submit_secret_advisory" => "向国王密陈了",
                                     "submit_edict" => "颁布了诏令",
+                                    "write_chronicle" => $"落盘了史文：{a["name"]?.ToString()}{a["genre"]?.ToString()}",
                                     "consult_king" => "遣使问询了",
                                     "reply_consult" => "回复了外交问询",
                                     "release_prisoner" => $"释放了俘虏 {a["prisoner_name"]?.ToString()}",

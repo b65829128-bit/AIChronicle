@@ -507,7 +507,7 @@ namespace AIChronicle
                 var yearFile = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "history", $"events_{y}.txt");
                 if (!File.Exists(yearFile)) continue;
 
-                var chronicleFile = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "history", "chronicles", $"chronicle_{y}.txt");
+                var chronicleFile = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "history", "chronicles", $"{y}编年史.txt");
                 if (File.Exists(chronicleFile)) continue;
 
                 QueueEvent(new ActivationEvent
@@ -564,7 +564,7 @@ namespace AIChronicle
             });
         }
 
-        /// <summary>取走并清空合并缓冲，构建史官提示词（传记 vs 专题史按首条判断）。</summary>
+        /// <summary>取走并清空合并缓冲，构建史官提示词（传记 vs 专题史按首条判断），并按事件性质注入体例建议。</summary>
         private static string ConsumeSpecialChronicleContent()
         {
             lock (_specialChronicleLock)
@@ -574,13 +574,32 @@ namespace AIChronicle
                 _pendingSpecialSummaries.Clear();
                 _specialQueued = false;
 
-                var isBiography = summaries[0].StartsWith("重要人物之死");
-                var prompt = isBiography
-                    ? PromptManager.LoadBiographyPrompt()
-                    : PromptManager.LoadSpecialChroniclePrompt();
+                var first = summaries[0];
                 var joined = string.Join("\n", summaries);
-                return prompt.Replace("{event_summary}", joined);
+
+                if (first.StartsWith("重要人物之死"))
+                {
+                    var prompt = PromptManager.LoadBiographyPrompt().Replace("{event_summary}", joined);
+                    return prompt + "\n\n体例建议：" + SuggestBiographyGenre(first);
+                }
+
+                if (first.StartsWith("王国灭亡"))
+                {
+                    var prompt = PromptManager.LoadSpecialChroniclePrompt().Replace("{event_summary}", joined);
+                    return prompt + "\n\n体例建议：此为王国灭亡，应以「世家」体例为该王国作兴衰史（如《南帝国世家》）。write_chronicle(体例=世家, 名称=该王国名)。";
+                }
+
+                var sprompt = PromptManager.LoadSpecialChroniclePrompt().Replace("{event_summary}", joined);
+                return sprompt + "\n\n体例建议：此系一般重大事件，应以「纪事」体例叙述（如《帝国分裂纪事》）。write_chronicle(体例=纪事, 名称=事件名)。";
             }
+        }
+
+        /// <summary>按死者身份建议立传体例：一国之君 → 本纪；其余（族长/成员/冒险者）→ 列传。史官可依实调整。</summary>
+        private static string SuggestBiographyGenre(string summary)
+        {
+            if (summary.Contains("统治者"))
+                return "该人物为一国之君，应以「本纪」体例立传（如《某某本纪》）。write_chronicle(体例=本纪, 名称=人物名)。";
+            return "该人物为贵族或冒险者，应以「列传」体例立传（如《某某列传》）。write_chronicle(体例=列传, 名称=人物名)。";
         }
 
         /// <summary>构建事件处理的对话上下文：信件处理带上双方此前聊天记录，保证对方记得你（跨信记忆连续性）。

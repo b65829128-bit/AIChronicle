@@ -273,6 +273,49 @@ namespace AIChronicle
             return "已写入。";
         }
 
+        /// <summary>史官体例白名单。write_chronicle 只接受这五种体例，防止史官自创体例导致命名混乱。</summary>
+        private static readonly string[] ChronicleGenres = { "编年史", "本纪", "世家", "列传", "纪事" };
+
+        /// <summary>
+        /// 史官专用成文落盘工具：按「{名称}{体例}.txt」规范自动命名，归档 history/chronicles/。
+        /// 史官只负责判断体例与内容，文件名由代码强制规范化——杜绝此前"文件名自定"造成的命名乱象。
+        /// </summary>
+        public static string ExecuteWriteChronicle(string genre, string name, string content)
+        {
+            if (_agentEntityId.Value != "__historian__")
+                return "[拒绝] write_chronicle 仅史官可用。";
+
+            if (string.IsNullOrWhiteSpace(genre) || !ChronicleGenres.Contains(genre))
+                return $"[错误] 体例必须为：{string.Join(" / ", ChronicleGenres)}。你传入的是：{genre}";
+            if (string.IsNullOrWhiteSpace(name))
+                return "[错误] 名称不能为空";
+            if (string.IsNullOrWhiteSpace(content))
+                return "[错误] 正文不能为空";
+
+            // 名称清洗：去 .txt 后缀、若名称已误含体例字样则剥除（防 "拉盖娅本纪" + 本纪 → "拉盖娅本纪本纪"）
+            var cleanName = name.Trim();
+            foreach (var g in ChronicleGenres)
+            {
+                if (cleanName.EndsWith(g) && cleanName.Length > g.Length)
+                    cleanName = cleanName.Substring(0, cleanName.Length - g.Length);
+            }
+            if (cleanName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
+                cleanName = cleanName.Substring(0, cleanName.Length - 4);
+            cleanName = SanitizeFile(cleanName.Trim());
+            if (cleanName.Length == 0)
+                return "[错误] 名称无效";
+
+            var fileName = $"{cleanName}{genre}.txt";
+            var relPath = $"history/chronicles/{fileName}";
+            if (!IsPathAllowed(relPath, read: true, write: true))
+                return "[拒绝] 没有写入权限：" + relPath;
+
+            var fullPath = Path.Combine(_baseDir, "World", "history", "chronicles", fileName);
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+            SafeFileIO.WriteAllText(fullPath, content.Trim());
+            return $"已写入史册：{fileName}";
+        }
+
         public static string ExecuteGlob(string pattern)
         {
             if (string.IsNullOrEmpty(pattern))
