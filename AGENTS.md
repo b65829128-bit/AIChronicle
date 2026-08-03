@@ -292,6 +292,7 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │       ├── persona_generation.txt ← NPC性格生成提示词（玩家可编辑，热重载）
 │       ├── advisory_rules.txt  ← 封臣谏言规则（热重载）
 │       ├── fief_review_rules.txt ← 封地审视规则（被夺方激活，热重载）
+│       ├── clan_replenishment_rules.txt ← 天意建族规则（家族补充，热重载）
 │       ├── consolidation_rules.txt ← 记忆巩固行为规则（热重载）
 │       ├── memory_consolidation.txt ← 记忆巩固激活指令（热重载）
 │       ├── Templates/         ← NPC 目录模板
