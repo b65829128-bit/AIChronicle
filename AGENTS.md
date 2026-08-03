@@ -410,8 +410,10 @@ git diff
 **提交：**
 ```powershell
 git add -A
-git commit -m "描述你的改动"
+git commit -m "简短一句话（建议英文、单行）"
 ```
+
+> **提交信息规范**：一条 commit 只写一句简短描述（如 `fix: secretary permissions`、`feat: packaging script`、`docs: structure diagram`）。不要多行长文——GitHub 文件列表会逐文件显示最后一次提交信息，长描述读起来很奇怪。
 
 **`.gitignore` 排除项：**
 | 目录/文件 | 原因 |

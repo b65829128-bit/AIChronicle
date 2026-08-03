@@ -29,7 +29,7 @@ dotnet clean -c Release && dotnet build -c Release
 
 ## Git 提交
 
-- 提交信息用中文，遵循 git log 中的风格（`v1.1.0 - 描述` 或 `feat:` / `fix:` 前缀）
+- 提交信息一句简短描述（建议英文、单行），如 `fix: secretary permissions`——不要多行长文
 - 提交前 `git status` / `git diff` 检查改动
 - 提交与推送只在用户要求时执行
 
