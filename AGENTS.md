@@ -132,7 +132,9 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 > **提示词同步规则（newer-wins）**：基础目录 `_Module/Prompts/` 是模板源，战役创建时复制到 `Campaigns/{战役}/`。每次进档（`OnSessionLaunched` → `PromptManager.StartCampaign`）会做同步——**只要基础目录文件比战役副本新，就覆盖战役副本**。玩家在战役副本上的手动编辑（时间戳更新）会被保留。
 >
-> **上下文模板结构（缓存优化）**：`context_template.txt` 以 `<!--VOLATILE-->` 标记分界。标记前为**稳定前缀**（身份/persona/世界背景/游戏规则/工具清单/行为守则）→ system 消息；标记后为**易变块**（当前时间/自身状态/对对方认知/目标/客观关系/内政报告）→ 单独作为【当前状况】user 消息插在最新消息前。目的：让 system+历史构成逐字节稳定的前缀，最大化 DeepSeek 前缀缓存命中（命中输入 0.02元/M vs 未命中 1元/M，价差 50 倍）。`ContextBuilder` 相应提供 `BuildStable`/`BuildVolatile`（合并 `Build` 保留兼容）。**史官 intent 例外**：不拆易变块，走合并 `Build()` 保持单一 system 消息——文笔是模组核心，结构与旧版一致。旧版模板（无标记）整体按稳定处理，行为不变。
+> **上下文模板结构（缓存优化）**：`context_template.txt` 以 `<!--VOLATILE-->` 标记分界。标记前为**稳定前缀**（身份/persona/世界背景/游戏规则/工具清单/行为守则）→ system 消息；标记后为**易变块**（当前时间/自身状态/对对方认知/目标/客观关系/内政报告）→ 单独作为【当前状况】**system 消息**插在历史之后、当前 user 消息之前。目的：让 system+历史构成逐字节稳定的前缀，最大化 DeepSeek 前缀缓存命中（命中输入 0.02元/M vs 未命中 1元/M，价差 50 倍）。`ContextBuilder` 相应提供 `BuildStable`/`BuildVolatile`（合并 `Build` 保留兼容）。**史官 intent 例外**：不拆易变块，走合并 `Build()` 保持单一 system 消息——文笔是模组核心，结构与旧版一致。旧版模板（无标记）整体按稳定处理，行为不变。
+>
+> **易变块必须用 system 角色，不得用 user**（v2.0.2 修复的回归）：v1.4.0 曾把【当前状况】作为 `user` 消息插在玩家消息前——模型会把这条系统情境当成"对方说的话"，导致回复引用对话中不存在的"请教/答复"等幻觉（如"我等着您的答复""您过谦了"）。改回 `system` 角色后模型明确这是系统注入的情境，缓存优化保留。`AIChatClient` 有 400 兜底：若端点拒绝"非开头位置的 system"（兼容性问题），自动回退为 user 角色并重建请求（`_volatileSystemSupported` 标志，会话内持久）。
 >
 > **已知边界情况（待解决）**：如果玩家在战役副本自定义了某文件（副本时间戳更新），之后基础目录又修改了（基础更晚）→ newer-wins 会覆盖副本，玩家自定义丢失。当前对开发期是期望行为；未来如需保护战役自定义，需引入"用户修改标记"机制（如哈希比对或 .custom 标记文件）。
 >
@@ -266,6 +268,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | 目标框架 | net472 (Windows) + net6 (Xbox/Store) |
 | 模组框架 | Harmony 2.3.3 (运行时补丁) |
 | 四前置 | Harmony, ButterLib, UIExtenderEx, MCM (MBOptionScreen) |
+| 语音合成 | NAudio 2.2.1（NuGet，播放 mp3）+ 免费 Edge TTS（手写 WebSocket 客户端，无第三方库） |
 
 ## 目录结构
 
@@ -279,7 +282,9 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │   ├── ConnectionResolver.cs   ← 场景连接解析器（intent → 生效 URL/模型/密钥，逐字段兜底到全局连接设置）
 │   ├── DebugLogger.cs          ← 调试日志（LLM 调用摘要/思维链摘录 → 战役 debug_logs/）
 │   ├── SafeFileIO.cs           ← 带重试的文件 IO（并发读写同一文件时避免"文件正被使用"异常）
-│   └── MainThreadExecutor.cs   ← 主线程分发器（后台线程的工具执行排队回主线程，防跨线程崩溃）
+│   ├── MainThreadExecutor.cs   ← 主线程分发器（后台线程的工具执行排队回主线程，防跨线程崩溃）
+│   ├── TtsService.cs           ← 语音合成门面（ITtsProvider 接口 + 合成/磁盘缓存/播放/打断）
+│   └── EdgeTtsProvider.cs      ← Edge TTS 免费引擎（手写 WebSocket 客户端 EdgeWsClient，可设浏览器 UA）
 ├── Agents/                     ← Agent 核心：上下文、调度、记忆
 │   ├── AgentManager.cs         ← Agent 管理器基类（NPC 文件系统、路径权限、persona 生成）
 │   ├── AgentManager.Files.cs   ← 文件工具执行（read/write/edit/delete/move/glob/grep/list）

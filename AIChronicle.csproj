@@ -76,6 +76,7 @@
     <PackageReference Include="Bannerlord.ButterLib" Version="2.11.1" IncludeAssets="compile" />
     <PackageReference Include="Bannerlord.UIExtenderEx" Version="2.13.3" IncludeAssets="compile" />
     <PackageReference Include="Bannerlord.MCM" Version="5.12.2" IncludeAssets="compile" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
   </ItemGroup>
 
 </Project>

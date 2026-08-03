@@ -265,6 +265,8 @@ namespace AIChronicle
             if (_isLoading || string.IsNullOrWhiteSpace(_inputText))
                 return;
 
+            TtsService.Stop(); // 玩家发言即打断旧语音
+
             var userMsg = _inputText.Trim();
             InputText = "";
             IsLoading = true;
@@ -456,6 +458,11 @@ namespace AIChronicle
                             MySettings.Instance?.SenderTopGap ?? 6,
                             MySettings.Instance?.ContentTopGap ?? 6));
                         MarkThreadReadIfPlayerThread(); // 回复已显示 → 该线程已读
+
+                        // TTS 朗读：仅现场聊天（conversation）播放——书信（letter）与秘书处（chancery）不朗读。
+                        // 书信与现场对话同源存储于 chat_logs 线程，此处的 assistant 回复只来自本次现场对话。
+                        if (_intent == "conversation")
+                            TtsService.Speak(_hero, displayText);
 
                         // agent 已用 let_go 放行（遭遇放行）：关闭聊天并结束底层对话，玩家获释，
                         // 避免玩家回到"投降/应战"的死角选项（对话中遭遇不会自动 tick 结束）。

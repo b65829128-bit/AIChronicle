@@ -59,6 +59,7 @@ namespace AIChronicle
 
             _vm.OnClose = () =>
             {
+                TtsService.Stop(); // 关窗停止朗读
                 _vm?.MarkThreadReadIfPlayerThread(); // 窗口关闭时同步已读水位（秘书处为 no-op）
                 if (_layer != null && _parentScreen != null)
                     _parentScreen.RemoveLayer(_layer);
@@ -104,6 +105,7 @@ namespace AIChronicle
 
             _vm.OnClose = () =>
             {
+                TtsService.Stop(); // 关窗停止朗读
                 _vm?.MarkThreadReadIfPlayerThread(); // 窗口关闭时同步已读水位
                 if (_layer != null && _parentScreen != null)
                 {

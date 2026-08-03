@@ -191,6 +191,7 @@ namespace AIChronicle
             PartyBehaviorManager.ResetForNewCampaign();
             AgentScheduler.ResetForNewCampaign();
             AIChatClient.ResetForNewCampaign();
+            TtsService.Stop(); // 切档/退出时停止朗读，防止跨档播放残留
             DebugLogger.Reset();
         }
 

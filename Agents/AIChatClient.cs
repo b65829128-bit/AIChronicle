@@ -48,6 +48,11 @@ namespace AIChronicle
         // 旧滑动窗口实现（保留最近 N 条）在超限后每轮整个历史右移一位 → 每轮缓存全 miss。
         private const int TrimAnchorCount = 3;
 
+        // 易变块【当前状况】的角色：system 优先。v1.4.0 曾把它作为 user 消息插在玩家消息前——
+        // 模型会把这条系统情境当成"对方说的话"，导致角色混淆（回复引用对话中不存在的"请教/答复"）。
+        // system 角色让模型明确知道这是系统注入的情境；若端点拒绝"非开头位置的 system"（400），回退为 user。
+        private static bool _volatileSystemSupported = true;
+
         internal static Hero? CurrentHero
         {
             get => _currentHero.Value;
@@ -343,85 +348,96 @@ namespace AIChronicle
                     + (vTargetId ?? "对方") + ".txt 查看完整记录，自然地表现得你记得或想起了即可。）";
             }
 
-            var messageList = new List<object> { new { role = "system", content = systemPrompt } };
-            var lastHistoryRole = "";
+            var volatileRole = _volatileSystemSupported ? "system" : "user";
 
-            foreach (var entry in trimmedHistory)
+            // 构建消息序列：system(稳定前缀) + 历史 + volatile(易变块) + 当前 user 消息。
+            // volatile 优先作为 system 角色（明确"系统情境"而非对方话语）；400 时回退 user 并重建。
+            List<object> BuildMessageList()
             {
-                if (entry.Role == "tool")
+                var list = new List<object> { new { role = "system", content = systemPrompt } };
+                var lastHistoryRole = "";
+
+                foreach (var entry in trimmedHistory)
                 {
-                    if (includeTools)
+                    if (entry.Role == "tool")
                     {
-                        messageList.Add(new
+                        if (includeTools)
                         {
-                            role = "tool",
-                            tool_call_id = entry.ToolCallId ?? "",
-                            content = entry.Content
-                        });
-                    }
-                }
-                else if (entry.ToolCalls != null && entry.ToolCalls.Count > 0)
-                {
-                    if (includeTools)
-                    {
-                        if (!string.IsNullOrEmpty(entry.ReasoningContent))
-                        {
-                            messageList.Add(new JObject
+                            list.Add(new
                             {
-                                ["role"] = entry.Role,
-                                ["content"] = entry.Content,
-                                ["tool_calls"] = new JArray(entry.ToolCalls.Select(tc => new JObject
-                                {
-                                    ["id"] = tc.Id,
-                                    ["type"] = "function",
-                                    ["function"] = new JObject
-                                    {
-                                        ["name"] = tc.Name,
-                                        ["arguments"] = tc.Arguments
-                                    }
-                                })),
-                                ["reasoning_content"] = entry.ReasoningContent
+                                role = "tool",
+                                tool_call_id = entry.ToolCallId ?? "",
+                                content = entry.Content
                             });
+                        }
+                    }
+                    else if (entry.ToolCalls != null && entry.ToolCalls.Count > 0)
+                    {
+                        if (includeTools)
+                        {
+                            if (!string.IsNullOrEmpty(entry.ReasoningContent))
+                            {
+                                list.Add(new JObject
+                                {
+                                    ["role"] = entry.Role,
+                                    ["content"] = entry.Content,
+                                    ["tool_calls"] = new JArray(entry.ToolCalls.Select(tc => new JObject
+                                    {
+                                        ["id"] = tc.Id,
+                                        ["type"] = "function",
+                                        ["function"] = new JObject
+                                        {
+                                            ["name"] = tc.Name,
+                                            ["arguments"] = tc.Arguments
+                                        }
+                                    })),
+                                    ["reasoning_content"] = entry.ReasoningContent
+                                });
+                            }
+                            else
+                            {
+                                list.Add(new
+                                {
+                                    role = entry.Role,
+                                    content = entry.Content,
+                                    tool_calls = entry.ToolCalls.Select(tc => new
+                                    {
+                                        id = tc.Id,
+                                        type = "function",
+                                        function = new
+                                        {
+                                            name = tc.Name,
+                                            arguments = tc.Arguments
+                                        }
+                                    })
+                                });
+                            }
                         }
                         else
                         {
-                            messageList.Add(new
-                            {
-                                role = entry.Role,
-                                content = entry.Content,
-                                tool_calls = entry.ToolCalls.Select(tc => new
-                                {
-                                    id = tc.Id,
-                                    type = "function",
-                                    function = new
-                                    {
-                                        name = tc.Name,
-                                        arguments = tc.Arguments
-                                    }
-                                })
-                            });
+                            list.Add(new { role = entry.Role, content = entry.Content });
                         }
                     }
                     else
                     {
-                        messageList.Add(new { role = entry.Role, content = entry.Content });
+                        list.Add(new { role = entry.Role, content = entry.Content });
                     }
+                    lastHistoryRole = entry.Role;
                 }
-                else
+
+                if (!string.IsNullOrEmpty(volatileBlock))
                 {
-                    messageList.Add(new { role = entry.Role, content = entry.Content });
+                    var ctxMsg = new { role = volatileRole, content = volatileBlock };
+                    if (lastHistoryRole == "user" && list.Count >= 2)
+                        list.Insert(list.Count - 1, ctxMsg);
+                    else
+                        list.Add(ctxMsg);
                 }
-                lastHistoryRole = entry.Role;
+
+                return list;
             }
 
-            if (!string.IsNullOrEmpty(volatileBlock))
-            {
-                var ctxMsg = new { role = "user", content = volatileBlock };
-                if (lastHistoryRole == "user" && messageList.Count >= 2)
-                    messageList.Insert(messageList.Count - 1, ctxMsg);
-                else
-                    messageList.Add(ctxMsg);
-            }
+            var messageList = BuildMessageList();
 
             string? learnedKnowledge = null;
             var allToolCalls = new List<ToolCallData>();
@@ -483,9 +499,18 @@ namespace AIChronicle
                     HttpCompletionOption.ResponseHeadersRead,
                     cts.Token);
 
-                // 安全网：端点若拒绝 stream_options 或 reasoning_effort（400），回退为最兼容请求（两者都不带）重试一次
-                if (httpResponse.StatusCode == System.Net.HttpStatusCode.BadRequest && (withUsage || withEffort))
+                // 安全网：端点若拒绝 stream_options / reasoning_effort / 非开头位置的 system（400），
+                // 逐项回退重试一次：先回退易变块角色为 user（重建消息序列），再回退为无 usage/无 effort 请求。
+                if (httpResponse.StatusCode == System.Net.HttpStatusCode.BadRequest
+                    && (withUsage || withEffort || _volatileSystemSupported))
                 {
+                    if (_volatileSystemSupported)
+                    {
+                        _volatileSystemSupported = false;
+                        volatileRole = "user";
+                        messageList = BuildMessageList();
+                        DebugLogger.Log($"端点拒绝中间 system（400），本会话易变块回退为 user 角色 intent={intent}");
+                    }
                     _streamUsageSupported = false;
                     _reasoningEffortSupported = false;
                     DebugLogger.Log($"端点拒绝 400，本会话回退为无 usage/无 reasoning_effort 请求 intent={intent}");

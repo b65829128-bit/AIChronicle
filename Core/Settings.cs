@@ -3,6 +3,7 @@ using MCM.Abstractions;
 using MCM.Abstractions.Attributes;
 using MCM.Abstractions.Attributes.v2;
 using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
 
 namespace AIChronicle
@@ -750,6 +751,83 @@ namespace AIChronicle
         public Action ForceAdvisory { get; set; } = () =>
         {
             AgentScheduler.ForceAdvisory();
+        };
+
+        // ============ 语音（TTS） ============
+
+        private bool _ttsEnabled = false;
+
+        [SettingPropertyBool("启用语音朗读（TTS）", Order = 0, RequireRestart = false,
+            HintText = "AI 聊天（【AI 聊天】入口）收到回复时用语音朗读。默认关闭。\n使用免费 Edge TTS（微软神经语音，需联网，无需 API Key）。\n书信与秘书处不朗读；女角色用女声、男角色用男声。")]
+        [SettingPropertyGroup("语音（TTS）")]
+        public bool TtsEnabled
+        {
+            get => _ttsEnabled;
+            set
+            {
+                if (_ttsEnabled != value)
+                {
+                    _ttsEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _ttsSpeed = 0;
+
+        [SettingPropertyInteger("语速（%）", -50, 50, Order = 1, RequireRestart = false,
+            HintText = "朗读语速偏移。-50 慢一半，+50 快一半，0 为正常。")]
+        [SettingPropertyGroup("语音（TTS）")]
+        public int TtsSpeed
+        {
+            get => _ttsSpeed;
+            set
+            {
+                if (_ttsSpeed != value)
+                {
+                    _ttsSpeed = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _ttsVolume = 80;
+
+        [SettingPropertyInteger("音量（%）", 0, 100, Order = 2, RequireRestart = false,
+            HintText = "朗读音量，0 静音，100 最大。")]
+        [SettingPropertyGroup("语音（TTS）")]
+        public int TtsVolume
+        {
+            get => _ttsVolume;
+            set
+            {
+                if (_ttsVolume != value)
+                {
+                    _ttsVolume = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试语音", Content = "试听", Order = 3,
+            RequireRestart = false, HintText = "用当前设置合成并播放一句测试语音，验证网络与设备可用。\n主菜单也可测试（用默认男声）；进入战役后按主角性别选音色。")]
+        [SettingPropertyGroup("语音（TTS）")]
+        public Action TestTts { get; set; } = () =>
+        {
+            // 修复：Hero.MainHero 的实现是 CharacterObject.PlayerCharacter.HeroObject——
+            // 主菜单时 PlayerCharacter 为空，直接访问会抛 NullReferenceException 导致崩溃。
+            // 这里安全获取：主菜单取不到就用 null（TtsService 回退默认男声，仍可测试网络/设备）。
+            Hero hero = null;
+            try
+            {
+                if (Campaign.Current != null)
+                    hero = Hero.MainHero;
+            }
+            catch
+            {
+                hero = null;
+            }
+            TtsService.Speak(hero, "你好，欢迎来到卡拉迪亚。愿天命护佑你。");
         };
     }
 }
