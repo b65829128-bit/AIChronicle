@@ -2,7 +2,7 @@
 <Module xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
         xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/BUTR/Bannerlord.XmlSchemas/master/SubModule.xsd" >
   <Id value="AIChronicle" />
-  <Name value="AI编年史·言出法随" />
+  <Name value="AI Chronicle: Words Become Deeds" />
   <Version value="v2.0.0" />
   <DefaultModule value="false" />
   <ModuleCategory value="Singleplayer"/>
@@ -32,7 +32,7 @@
   </DependedModuleMetadatas>
   <SubModules>
     <SubModule>
-      <Name value="AI编年史·言出法随" />
+      <Name value="AI Chronicle: Words Become Deeds" />
       <DLLName value="AIChronicle.dll" />
       <SubModuleClassType value="AIChronicle.SubModule" />
       <Tags />

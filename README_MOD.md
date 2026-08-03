@@ -426,7 +426,7 @@ _Module/Prompts/
 
 ## 使用方法
 
-1. 启动游戏，在启动器中勾选 **AI编年史·言出法随** 及四个前置模组
+1. 启动游戏，在启动器中勾选 **AI Chronicle: Words Become Deeds** 及四个前置模组
 2. 进入主菜单后，在 **Mod Options → AI编年史·言出法随** 中填入 API Key
 3. 开新档或读档 → 模组自动在 `Prompts/Campaigns/` 下创建本战役的提示词目录
 4. （可选）编辑 `system_prompt.txt`、`world_info.txt` 或角色 JSON 文件来定制 AI 行为

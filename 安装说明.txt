@@ -1,0 +1,24 @@
+AI编年史·言出法随（AIChronicle）v2.0.0
+说做合一的 AI 活世模组 —— AI 领主说的话会真实兑现为游戏世界的行为。
+
+【安装】
+1. 需要《骑马与砍杀2：霸主》(Bannerlord) 及以下四个前置模组（与游戏版本匹配）：
+   - Harmony（Bannerlord.Harmony）
+   - ButterLib（Bannerlord.ButterLib）
+   - UIExtenderEx（Bannerlord.UIExtenderEx）
+   - MCM / MBOptionScreen（Mod Configuration Menu）
+   前置可在 Nexus Mods 或游戏启动器的模组管理器中获取。
+2. 把 zip 里的 AIChronicle 文件夹整个解压到：游戏目录\Modules\ 下
+   最终路径应为：
+   ...\Mount & Blade II Bannerlord\Modules\AIChronicle\SubModule.xml
+3. 启动游戏，在启动器中勾选「AI Chronicle: Words Become Deeds」和四个前置。
+
+【首次使用】
+1. 主菜单 → Options → Mod Options → AI编年史·言出法随
+2. 填入你的 API 密钥（默认 DeepSeek：https://api.deepseek.com/v1/chat/completions，模型 deepseek-v4-flash）
+3. 点「测试连接」确认可用，然后新开档进入游戏。
+
+【说明】
+- 各场景（对话/史官/外交/书信等）可在 MCM 中独立配置 URL/模型/密钥，留空即用全局兜底。
+- 游戏内快捷键：O 书信往来 | H 史书 | M 秘书处。
+- 详细功能见随附 README_MOD.md。
