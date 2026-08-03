@@ -43,6 +43,11 @@ namespace AIChronicle
         // reasoning_effort 支持探测：部分模型/端点不接受该参数，遇 400 自动回退
         private static bool _reasoningEffortSupported = true;
 
+        // 历史截断的头部锚点条数：超限时保留"最早 AnchorCount 条 + 最近 (limit-AnchorCount) 条"，
+        // 头部锚点固定 → 超限后跨轮次的 system+历史前缀仍字节级稳定，DeepSeek 前缀缓存持续命中。
+        // 旧滑动窗口实现（保留最近 N 条）在超限后每轮整个历史右移一位 → 每轮缓存全 miss。
+        private const int TrimAnchorCount = 3;
+
         internal static Hero? CurrentHero
         {
             get => _currentHero.Value;
@@ -310,11 +315,24 @@ namespace AIChronicle
             if (trimmedHistory.Count > historyLimit)
             {
                 historyWasTrimmed = true;
-                trimmedHistory = trimmedHistory.Skip(trimmedHistory.Count - historyLimit).ToList();
+                // 固定锚点截断（缓存友好）：保留最早 AnchorCount 条 + 最近 (historyLimit - AnchorCount) 条。
+                // 头部锚点固定 → 超限后每轮 system+历史前缀保持字节级稳定，DeepSeek 前缀缓存持续命中；
+                // 中间被省略的旧往来 agent 仍可用 grep / read_file 检索 chat_logs/ 补齐（见下方 historyWasTrimmed 提示）。
+                var anchorCount = Math.Min(TrimAnchorCount, historyLimit / 3);
+                var tailCount = historyLimit - anchorCount;
+                trimmedHistory = trimmedHistory
+                    .Take(anchorCount)
+                    .Concat(trimmedHistory.Skip(trimmedHistory.Count - tailCount))
+                    .ToList();
                 // 修复：去掉开头被截断成孤儿的 tool 消息（其对应的 assistant(tool_calls) 已被裁掉），
                 // 否则发送给 API 的消息序列不合法（tool 必须引用前置 tool_call_id）→ 400。
                 while (trimmedHistory.Count > 0 && trimmedHistory[0].Role == "tool")
                     trimmedHistory.RemoveAt(0);
+                // 尾部对齐：若截断后末尾是带 tool_calls 的 assistant 且缺对应 tool 结果（原 assistant 已被裁掉），
+                // 移除该条，避免孤儿 tool_calls 引发 400 或误导模型。
+                while (trimmedHistory.Count > 0
+                       && trimmedHistory[trimmedHistory.Count - 1].ToolCalls is { Count: > 0 })
+                    trimmedHistory.RemoveAt(trimmedHistory.Count - 1);
             }
 
             // 对话较长被截断时，告知 agent 完整记录所在并禁止向对方提及（防止沉浸感破裂）。
