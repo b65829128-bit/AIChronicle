@@ -11,6 +11,8 @@ BLSource/
 # IDE / editor
 .idea/
 .vscode/
+*.DotSettings.user
+*.DotSettings
 
 # OS
 Thumbs.db

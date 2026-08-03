@@ -1,4 +1,4 @@
-# AI编年史·言出法随 — Bannerlord 模组开发文档
+﻿# AI编年史·言出法随 — Bannerlord 模组开发文档
 
 ## 文档维护规则（AI 必读）
 
@@ -6,7 +6,7 @@
 
 你有权修改本文档（AGENTS.md），但必须遵循以下条件：
 
-1. **修改前，必须向用户（yangui）明确说明**：
+1. **修改前，必须向用户（项目作者）明确说明**：
    - 你要改哪一章节
    - 为什么需要改（例如：新增了项目依赖、发现更好的模式、目录结构变了）
    - 具体的改动内容（用 diff 形式或文字描述）
@@ -252,7 +252,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | 游戏 | Mount & Blade II: Bannerlord v1.4.7 |
 | 游戏路径 | `D:\steam\steamapps\common\Mount & Blade II Bannerlord` |
 | IDE | JetBrains Rider 2026.2 |
-| 开发目录 | `C:\Users\yangui\BLMods\AIChronicle` |
+| 开发目录 | `C:\Users\<用户名>\BLMods\AIChronicle` |
 | .NET SDK | 9.0+ |
 | 目标框架 | net472 (Windows) + net6 (Xbox/Store) |
 | 模组框架 | Harmony 2.3.3 (运行时补丁) |
@@ -261,7 +261,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 ## 目录结构
 
 ```
-C:\Users\yangui\BLMods\AIChronicle\
+C:\Users\<用户名>\BLMods\AIChronicle\
 ├── SubModule.cs              ← 模组入口，生命周期回调
 ├── AIChronicle.csproj          ← 项目配置（引用、框架、部署）
 ├── Settings.cs                ← MCM 设置（连接设置/场景配置组/双倍声望开关）
@@ -349,7 +349,7 @@ C:\Users\yangui\BLMods\AIChronicle\
 # 1. 编译 + 自动部署（必须设置环境变量）
 $env:BANNERLORD_GAME_DIR = "D:\steam\steamapps\common\Mount & Blade II Bannerlord"
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-cd C:\Users\yangui\BLMods\AIChronicle
+cd C:\Users\<用户名>\BLMods\AIChronicle
 dotnet build -c Release
 
 # 2. 启动游戏测试
@@ -362,7 +362,7 @@ Start-Process "D:\steam\steamapps\common\Mount & Blade II Bannerlord\bin\Win64_S
 
 ### 版本管理（Git）
 
-项目使用 Git 进行版本管理。仓库已初始化在 `C:\Users\yangui\BLMods\AIChronicle\`。
+项目使用 Git 进行版本管理。仓库已初始化在 `C:\Users\<用户名>\BLMods\AIChronicle\`。
 
 **提交前检查：**
 ```powershell
@@ -814,7 +814,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
    InformationManager.DisplayMessage(new InformationMessage($"Debug: {value}", Colors.Red));
    ```
 
-3. **dnSpy 调试**：打开 `C:\Users\yangui\Tools\dnSpy\dnSpy-net-win64\dnSpy.exe`，附加到 Bannerlord 进程，可在任意游戏方法上设断点
+3. **dnSpy 调试**：打开 `C:\Users\<用户名>\Tools\dnSpy\dnSpy-net-win64\dnSpy.exe`，附加到 Bannerlord 进程，可在任意游戏方法上设断点
 
 4. **DebugLogger 调试日志**（推荐优先）：战役目录 `debug_logs/debug_*.log` 记录每次 LLM 调用的轮次/推理长度/工具名；**最终轮无文本时记录思维链摘录**（600 字）；请求结束时记录**缓存命中统计**（`LLM 完成 ... 缓存命中=X 未命中=Y 命中率=Z%`，来自 `stream_options.include_usage` 的 `usage.prompt_cache_hit_tokens`/`prompt_cache_miss_tokens`）。排查"Agent 为什么这么干/没干"首选此日志，排查"缓存是否生效"也看它。受 MCM「调试日志」开关控制（默认开）。注意：`SendMessage` 返回的 `Content` 若回退到"（已通过工具处理完毕）"表示 Agent 调了工具但没输出结语（如国王评估后决定不行动）；若端点拒绝 `stream_options` 会回退为无 usage 请求并记日志（功能不受影响）
 
@@ -832,8 +832,8 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 
 | 工具 | 路径 | 用途 |
 |------|------|------|
-| dnSpy GUI | `C:\Users\yangui\Tools\dnSpy\dnSpy-net-win64\dnSpy.exe` | 反编译、调试、查看游戏源码 |
-| dnSpy CLI | `C:\Users\yangui\Tools\dnSpy\dnSpy-net-win64\dnSpy.Console.exe` | 批量反编译（命令行） |
+| dnSpy GUI | `C:\Users\<用户名>\Tools\dnSpy\dnSpy-net-win64\dnSpy.exe` | 反编译、调试、查看游戏源码 |
+| dnSpy CLI | `C:\Users\<用户名>\Tools\dnSpy\dnSpy-net-win64\dnSpy.Console.exe` | 批量反编译（命令行） |
 | dotnet CLI | `dotnet` | 编译、创建新项目 |
 | Rider | `C:\Program Files\JetBrains\JetBrains Rider 2026.2\bin\rider64.exe` | IDE |
 
@@ -976,6 +976,6 @@ Bannerlord 的模组加载有严格的初始化顺序。**在错误的阶段调�
 ## 创建新模组
 
 ```powershell
-cd C:\Users\yangui\BLMods
+cd C:\Users\<用户名>\BLMods
 dotnet new blmodfx --name "新模组名"
 ```
