@@ -5,13 +5,13 @@ using MCM.Abstractions.Attributes.v2;
 using MCM.Abstractions.Base.Global;
 using TaleWorlds.Library;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     internal sealed class MySettings : AttributeGlobalSettings<MySettings>
     {
-        public override string Id => "MyFirstMod_v1";
-        public override string DisplayName => "MyFirstMod — AI 聊天";
-        public override string FolderName => "MyFirstMod";
+        public override string Id => "AIChronicle_v1";
+        public override string DisplayName => "AI编年史·言出法随";
+        public override string FolderName => "AIChronicle";
         public override string FormatType => "json";
 
         private string _apiUrl = "https://api.deepseek.com/v1/chat/completions";

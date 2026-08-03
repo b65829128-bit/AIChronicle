@@ -8,7 +8,7 @@ using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Library;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public static class DiplomacyService
     {

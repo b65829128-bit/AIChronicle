@@ -4,7 +4,7 @@ using TaleWorlds.Engine.GauntletUI;
 using TaleWorlds.Library;
 using TaleWorlds.ScreenSystem;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public static class AIChatScreen
     {
@@ -79,7 +79,7 @@ namespace MyFirstMod
             catch (Exception ex)
             {
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] 打开秘书处失败：{ex.Message}",
+                    $"[AI编年史] 打开秘书处失败：{ex.Message}",
                     Colors.Red));
                 _layer = null;
             }
@@ -94,7 +94,7 @@ namespace MyFirstMod
             if (topScreen == null)
             {
                 InformationManager.DisplayMessage(new InformationMessage(
-                    "[MyFirstMod] 错误：TopScreen 为 null",
+                    "[AI编年史] 错误：TopScreen 为 null",
                     Colors.Red));
                 return;
             }
@@ -126,7 +126,7 @@ namespace MyFirstMod
             catch (Exception ex)
             {
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] 打开聊天窗口失败：{ex.Message}",
+                    $"[AI编年史] 打开聊天窗口失败：{ex.Message}",
                     Colors.Red));
                 _layer = null;
             }

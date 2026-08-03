@@ -11,7 +11,7 @@ using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.Library;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public static class AgentManager
     {
@@ -28,13 +28,12 @@ namespace MyFirstMod
         private static readonly HashSet<string> _readableDirs = new()
         {
             "", "knowledge", "relationships", "goals", "chat_logs", "decisions",
-            "mailbox", "mailbox/inbox", "mailbox/sent", "diplomacy"
+            "diplomacy"
         };
 
         private static readonly HashSet<string> _writableDirs = new()
         {
-            "knowledge", "relationships", "goals", "chat_logs", "decisions",
-            "mailbox", "mailbox/inbox", "mailbox/sent"
+            "knowledge", "relationships", "goals", "chat_logs", "decisions"
         };
 
         private static readonly HashSet<string> _readableWorldFiles = new()
@@ -70,22 +69,10 @@ namespace MyFirstMod
             _targetEntityId.Value = SanitizeDir(targetEntityId);
         }
 
-        [Obsolete("Use Activate(agentEntityId, targetEntityId) instead.")]
-        public static void SetCurrentNpc(string npcId)
-        {
-            Activate(npcId, npcId);
-        }
-
         public static string? GetAgentDir()
         {
             if (string.IsNullOrEmpty(_agentEntityId.Value)) return null;
             return _agentDir;
-        }
-
-        [Obsolete("Use GetAgentDir() instead.")]
-        public static string? GetCurrentNpcDir()
-        {
-            return GetAgentDir();
         }
 
         public static string? GetChatLogPath()
@@ -104,12 +91,6 @@ namespace MyFirstMod
         {
             if (string.IsNullOrEmpty(_agentDir)) return null;
             return Path.Combine(_agentDir, "knowledge", SanitizeFile(_targetEntityId.Value ?? "") + ".txt");
-        }
-
-        [Obsolete("Use GetTargetKnowledgePath() instead.")]
-        public static string? GetPlayerKnowledgePath()
-        {
-            return GetTargetKnowledgePath();
         }
 
         public static string? GetRelationshipPath(string targetEntityId)
@@ -135,8 +116,6 @@ namespace MyFirstMod
             Directory.CreateDirectory(Path.Combine(dir, "goals"));
             Directory.CreateDirectory(Path.Combine(dir, "chat_logs"));
             Directory.CreateDirectory(Path.Combine(dir, "decisions"));
-            Directory.CreateDirectory(Path.Combine(dir, "mailbox", "inbox"));
-            Directory.CreateDirectory(Path.Combine(dir, "mailbox", "sent"));
         }
 
         private static string GetPersonaMetaPath()
@@ -151,7 +130,7 @@ namespace MyFirstMod
             public int RiskTolerance { get; set; }
             public int MandateBelief { get; set; }
             public int WarLiking { get; set; }
-            /// <summary>维度版本标记：战争倾向 v2 分布（好战 50/30/20）由本版本引入，旧档缺此字段 → 触发重掷。</summary>
+            /// <summary>维度版本标记：当前为 v2（战争倾向好战 50/30/20 分布）。新文件写入当前版本，供未来分布调整参考。</summary>
             public int MetaVersion { get; set; }
         }
 
@@ -178,22 +157,7 @@ namespace MyFirstMod
                     var json = File.ReadAllText(path, Encoding.UTF8);
                     var meta = JsonConvert.DeserializeObject<PersonaMeta>(json);
                     if (meta != null)
-                    {
-                        // 旧存档迁移：persona_meta 缺失天命信仰字段时补掷一次并持久化，避免每次加载都变
-                        if (!json.Contains("\"MandateBelief\""))
-                        {
-                            meta.MandateBelief = RollMandateBelief();
-                            File.WriteAllText(path, JsonConvert.SerializeObject(meta, Formatting.Indented), Encoding.UTF8);
-                        }
-                        // 旧存档迁移：战争倾向缺失或为旧版分布（MetaVersion<2）→ 按新分布（好战 50/30/20）重掷并持久化
-                        if (!json.Contains("\"WarLiking\"") || meta.MetaVersion < 2)
-                        {
-                            meta.WarLiking = RollWarLiking();
-                            meta.MetaVersion = 2;
-                            File.WriteAllText(path, JsonConvert.SerializeObject(meta, Formatting.Indented), Encoding.UTF8);
-                        }
                         return meta;
-                    }
                 }
                 catch { }
             }
@@ -350,34 +314,10 @@ namespace MyFirstMod
                 && text.Contains("[SPEECH_STYLE]");
         }
 
-        /// <summary>有形的大手——战争倾向 v2 迁移：旧档 persona_meta 的 WarLiking 为旧版（过于和平）分布。
-        /// 加载时发现 MetaVersion&lt;2 则按新分布（好战 50/30/20）重掷，并删除 persona.txt 强制重新生成——
-        /// 否则旧人格文本（多为和平倾向）与新 WarLiking 不一致，重掷白做。</summary>
-        private static void EnsureWarTendencyV2(string agentDir, Hero hero)
-        {
-            if (hero == Hero.MainHero) return;
-            var metaPath = Path.Combine(agentDir, "persona_meta.json");
-            if (!File.Exists(metaPath)) return;
-            try
-            {
-                var json = File.ReadAllText(metaPath, Encoding.UTF8);
-                var meta = JsonConvert.DeserializeObject<PersonaMeta>(json);
-                if (meta == null || meta.MetaVersion >= 2) return;
-                meta.WarLiking = RollWarLiking();
-                meta.MetaVersion = 2;
-                File.WriteAllText(metaPath, JsonConvert.SerializeObject(meta, Formatting.Indented), Encoding.UTF8);
-                var personaPath = Path.Combine(agentDir, "persona.txt");
-                if (File.Exists(personaPath)) File.Delete(personaPath);
-            }
-            catch { }
-        }
-
         public static string LoadPersona(Hero hero)
         {
             if (string.IsNullOrEmpty(_agentDir))
                 return "名字：" + (hero.Name?.ToString() ?? "未知") + "\n性别：" + (hero.IsFemale ? "女" : "男") + "\n文化：" + (hero.Culture?.Name?.ToString() ?? "未知") + "\n说话风格：使用中世纪贵族的正式口吻。";
-
-            EnsureWarTendencyV2(_agentDir, hero);
 
             var path = Path.Combine(_agentDir, "persona.txt");
             if (File.Exists(path))
@@ -937,8 +877,6 @@ namespace MyFirstMod
             if (string.IsNullOrEmpty(_baseDir))
                 return "名字：" + (hero.Name?.ToString() ?? "未知") + "\n性别：" + (hero.IsFemale ? "女" : "男") + "\n文化：" + (hero.Culture?.Name?.ToString() ?? "未知") + "\n说话风格：使用中世纪贵族的正式口吻。";
 
-            EnsureWarTendencyV2(agentDir, hero);
-
             var path = Path.Combine(agentDir, "persona.txt");
             if (File.Exists(path))
             {
@@ -1140,98 +1078,6 @@ namespace MyFirstMod
                 state[npcId] = total;
                 SaveThreadReadState(playerId, state);
             }
-        }
-
-        // ============ 旧档迁移：mailbox → 线程 ============
-
-        /// <summary>
-        /// 把玩家遗留的 mailbox（inbox + sent）合并进书信往来线程。幂等：完成后写 .inbox_migrated 标记文件。
-        /// 保留原时间戳；收件箱来源的信按 NPC 的声音（assistant）入线程，发件箱来源按玩家（user）入线程。
-        /// </summary>
-        public static void MigrateLegacyPlayerInbox(string playerId)
-        {
-            var playerDir = Path.Combine(_baseDir, SanitizeDir(playerId));
-            var marker = Path.Combine(playerDir, ".inbox_migrated");
-            if (File.Exists(marker)) return;
-
-            try
-            {
-                var inboxDir = Path.Combine(playerDir, "mailbox", "inbox");
-                if (Directory.Exists(inboxDir))
-                {
-                    foreach (var file in Directory.GetFiles(inboxDir, "*.txt"))
-                    {
-                        var senderId = Path.GetFileNameWithoutExtension(file);
-                        if (string.IsNullOrEmpty(senderId)) continue;
-                        foreach (var (ts, body) in ParseLegacyMailboxFile(file))
-                            PromptManager.AppendChatLogFor(senderId, playerId, "assistant", body, isLetter: true, timestamp: ts);
-                        SubModule.MarkNpcKnown(senderId);                 // 旧联系人进 O 面板
-                        MarkThreadRead(senderId, playerId);               // 旧信在旧 UI 已读，不刷未读角标
-                        try { File.Delete(file); } catch { }
-                    }
-                }
-
-                var sentDir = Path.Combine(playerDir, "mailbox", "sent");
-                if (Directory.Exists(sentDir))
-                {
-                    foreach (var file in Directory.GetFiles(sentDir, "*.txt"))
-                    {
-                        var recipientId = Path.GetFileNameWithoutExtension(file);
-                        if (string.IsNullOrEmpty(recipientId)) continue;
-                        foreach (var (ts, body) in ParseLegacyMailboxFile(file))
-                            PromptManager.AppendChatLogFor(recipientId, playerId, "user", body, isLetter: true, timestamp: ts);
-                        try { File.Delete(file); } catch { }
-                    }
-                }
-
-                SafeFileIO.WriteAllText(marker, "migrated");
-            }
-            catch (Exception ex)
-            {
-                MainThreadExecutor.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] 旧信箱迁移失败：{ex.Message}", Colors.Red));
-            }
-        }
-
-        /// <summary>解析旧 mailbox 文件（[{时间戳}]\n{正文，可能多行}\n 重复追加）。返回 (时间戳, 正文) 列表。</summary>
-        private static List<(string, string)> ParseLegacyMailboxFile(string path)
-        {
-            var result = new List<(string, string)>();
-            try
-            {
-                var lines = SafeFileIO.ReadAllLines(path);
-                string? currentTs = null;
-                var body = new StringBuilder();
-                foreach (var raw in lines)
-                {
-                    var line = raw.TrimEnd('\r');
-                    if (IsMailboxTimestampLine(line))
-                    {
-                        if (currentTs != null)
-                            result.Add((currentTs, body.ToString().Trim()));
-                        currentTs = line.Trim('[', ']');
-                        body.Clear();
-                    }
-                    else if (currentTs != null)
-                    {
-                        if (body.Length > 0) body.Append('\n');
-                        body.Append(line);
-                    }
-                }
-                if (currentTs != null)
-                    result.Add((currentTs, body.ToString().Trim()));
-            }
-            catch { }
-            return result;
-        }
-
-        /// <summary>旧格式时间戳行：整行 [第XXXX年，春季第N日，上午] 之类（游戏时间戳必含"年"）。</summary>
-        private static bool IsMailboxTimestampLine(string line)
-        {
-            var trimmed = line.Trim();
-            return trimmed.Length > 2
-                && trimmed.StartsWith("[") && trimmed.EndsWith("]")
-                && trimmed.Contains("年");
         }
 
         public static string GetDiplomacyDir()

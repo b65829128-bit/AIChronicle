@@ -7,7 +7,7 @@ using TaleWorlds.Engine.GauntletUI;
 using TaleWorlds.Library;
 using TaleWorlds.ScreenSystem;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public class ChronicleEntryVM : ViewModel
     {
@@ -325,7 +325,7 @@ namespace MyFirstMod
             if (topScreen == null)
             {
                 InformationManager.DisplayMessage(new InformationMessage(
-                    "[MyFirstMod] 无法打开史书：当前无活动画面", Colors.Red));
+                    "[AI编年史] 无法打开史书：当前无活动画面", Colors.Red));
                 return;
             }
 
@@ -353,7 +353,7 @@ namespace MyFirstMod
             catch (Exception ex)
             {
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] 打开史书失败：{ex.Message}", Colors.Red));
+                    $"[AI编年史] 打开史书失败：{ex.Message}", Colors.Red));
                 _layer = null;
             }
         }

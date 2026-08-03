@@ -9,7 +9,7 @@ using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     internal sealed class PendingAction
     {
@@ -149,7 +149,7 @@ namespace MyFirstMod
                             if (action.TargetSettlement != null)
                             {
                                 InformationManager.DisplayMessage(new InformationMessage(
-                                    $"[MyFirstMod] {hero.Name} 结束了在{action.TargetSettlement.Name}的停留。",
+                                    $"[AI编年史] {hero.Name} 结束了在{action.TargetSettlement.Name}的停留。",
                                     Colors.Cyan));
                             }
                             QueuePlanCheckIn(action);

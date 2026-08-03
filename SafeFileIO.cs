@@ -3,7 +3,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     /// <summary>
     /// 带重试的文件 IO。并发读写同一文件（如史官后台读史料 vs 主线程写史料、封臣写谏言 vs 国王读谏言）

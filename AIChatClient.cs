@@ -11,7 +11,7 @@ using Newtonsoft.Json.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public class ChatResponse
     {
@@ -734,13 +734,13 @@ namespace MyFirstMod
             if (string.IsNullOrWhiteSpace(conn.ApiKey))
             {
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] [{name}] API 密钥为空（本场景与兜底均未配置），请先填写。",
+                    $"[AI编年史] [{name}] API 密钥为空（本场景与兜底均未配置），请先填写。",
                     Colors.Red));
                 return;
             }
 
             InformationManager.DisplayMessage(new InformationMessage(
-                $"[MyFirstMod] 正在测试 [{name}] 连接...",
+                $"[AI编年史] 正在测试 [{name}] 连接...",
                 Colors.Cyan));
 
             try
@@ -772,22 +772,22 @@ namespace MyFirstMod
                 var reply = JObject.Parse(body)["choices"]?[0]?["message"]?["content"]?.ToString() ?? "";
 
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] [{name}] 连接成功！回复：{reply}",
+                    $"[AI编年史] [{name}] 连接成功！回复：{reply}",
                     Colors.Green));
 
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] [{name}] 正在检测 function calling 支持...",
+                    $"[AI编年史] [{name}] 正在检测 function calling 支持...",
                     Colors.Cyan));
 
                 var fcResult = await TestFunctionCalling(conn);
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] [{name}] {fcResult}",
+                    $"[AI编年史] [{name}] {fcResult}",
                     Colors.Green));
             }
             catch (Exception ex)
             {
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] [{name}] 连接失败：{ex.Message}",
+                    $"[AI编年史] [{name}] 连接失败：{ex.Message}",
                     Colors.Red));
             }
         }

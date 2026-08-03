@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     /// <summary>
     /// 调试日志：记录 LLM 调用摘要、推理（思维链）摘录、流程决策，便于复盘 agent 行为。

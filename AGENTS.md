@@ -1,4 +1,4 @@
-# MyFirstMod — Bannerlord 模组开发文档
+# AI编年史·言出法随 — Bannerlord 模组开发文档
 
 ## 文档维护规则（AI 必读）
 
@@ -136,6 +136,16 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | Agent 模型 | 思考、读写文件、调工具、决定回什么 | `context_template.txt` → ContextBuilder 动态组装 |
 | 前台模型 | 把 Agent 给的上下文变成自然对话 | 极简，不带工具，只做角色扮演 |
 
+### 场景连接配置（每场景独立 URL/模型/密钥）
+
+每个 intent（场景）可以配置独立的 API URL / 模型 / API 密钥，**逐字段兜底**到全局「连接设置（兜底）」——场景字段留空就用兜底的对应字段，懒得配置时只需填兜底三件套。
+
+- **`ConnectionResolver.cs`**：`Resolve(intent)` 返回生效的 `ConnectionInfo(Url, Model, ApiKey)`。场景映射见 `ConnectionResolver.Resolve` 的 switch（对话与书信合并一个场景，因为两者同属 chat_logs 单一线程）
+- **消费点**：`AIChatClient.SendMessage` 按 `intent` 解析连接；`AgentManager` persona 生成走「对话与书信」场景；`AgentScheduler` 天意建族/史官门控与 `LordChatBehavior` 聊天入口判断均用对应场景的生效密钥
+- **测试**：`AIChatClient.TestConnection(scenario)` 按场景生效配置测试（原始请求，不依赖战役上下文，主菜单可用）；每个场景组在 MCM 有「测试此场景」按钮
+- **统一 max_tokens**：全模组最大 Token 数只由 MCM「最大 Token 数」控制（`settings.MaxTokens`），含 persona 生成与连接测试，禁止各处硬编码
+- **v2.0.0 初版**：设置 Id/FolderName 已改为 `AIChronicle_v1`/`AIChronicle`，旧的 MCM 配置会重置一次（需重填 API Key）
+
 ### 信息隔离规则（硬约束）
 
 | 当前 NPC 可访问 | 权限 |
@@ -147,7 +157,6 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | `NPCs/{自己}/goals/*.txt` | 读 + 写 + 追加 + 编辑 + 删除 |
 | `NPCs/{自己}/chat_logs/*.txt` | 只读（不可修改） |
 | `NPCs/{自己}/decisions/*.txt` | 读 + 写 + 追加 + 编辑 + 删除 |
-| `NPCs/{自己}/mailbox/**` | 已废弃（仅旧档遗留，不再写入） |
 | `World/factions.txt` | 只读 |
 | `World/settlements.txt` | 只读 |
 | `World/history/**`（原始史料/编年史） | 只读 |
@@ -221,7 +230,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 **为什么是日记而不是注入**：日记是拉取式（agent 自觉读写，见克制原则），不占上下文；注入任何记忆内容都会膨胀上下文、稀释提示。检索工具（grep 的 context_lines/max_results）为此设计。
 
-### 日记权威化与记忆巩固（diary-as-authority，v1.7）
+### 日记权威化与记忆巩固（diary-as-authority）
 
 **记忆优先级（解决"看到日记、战略、知识就茫然"）**：查询工具实时数据（query_character/query_world_state，系统权威）> 日记（`decisions/diary.txt`，自我记忆权威）> 认知（`knowledge/{对方}.txt`，对第三方的了解）。长期战略不再单列文件，以日记「战略」类型条目形式存在（strategy.txt 已并入日记）。
 
@@ -243,7 +252,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | 游戏 | Mount & Blade II: Bannerlord v1.4.7 |
 | 游戏路径 | `D:\steam\steamapps\common\Mount & Blade II Bannerlord` |
 | IDE | JetBrains Rider 2026.2 |
-| 开发目录 | `C:\Users\yangui\BLMods\MyFirstMod` |
+| 开发目录 | `C:\Users\yangui\BLMods\AIChronicle` |
 | .NET SDK | 9.0+ |
 | 目标框架 | net472 (Windows) + net6 (Xbox/Store) |
 | 模组框架 | Harmony 2.3.3 (运行时补丁) |
@@ -252,10 +261,11 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 ## 目录结构
 
 ```
-C:\Users\yangui\BLMods\MyFirstMod\
+C:\Users\yangui\BLMods\AIChronicle\
 ├── SubModule.cs              ← 模组入口，生命周期回调
-├── MyFirstMod.csproj          ← 项目配置（引用、框架、部署）
-├── Settings.cs                ← MCM 设置（API URL、Model、Key、双倍声望开关）
+├── AIChronicle.csproj          ← 项目配置（引用、框架、部署）
+├── Settings.cs                ← MCM 设置（连接设置/场景配置组/双倍声望开关）
+├── ConnectionResolver.cs      ← 场景连接解析器（intent → 生效 URL/模型/密钥，逐字段兜底到全局连接设置）
 ├── AIChatClient.cs            ← LLM API 客户端（HTTP 流式请求、SSE 解析、多轮循环），工具调用委托给 ToolExecutor
 ├── ToolExecutor.cs            ← 工具执行器（30+ 个游戏工具的具体实现 + browse_tools 元工具）
 ├── DiplomacyService.cs        ← 外交服务（宣战/议和/结盟/贸易协定/回复提案 + FindKingdom + 盟约/贸易到期记录与清除）
@@ -311,9 +321,6 @@ C:\Users\yangui\BLMods\MyFirstMod\
 │                       ├── persona_meta.json ← 自定义人格维度（权力欲/归属重心/冒险倾向/天命信仰/战争倾向）
 │                       ├── knowledge/
 │                       ├── chat_logs/
-│                       ├── mailbox/          ← 已废弃（仅旧档首次迁移，不再写入）
-│                       │   ├── inbox/
-│                       │   └── sent/         ← 实际目录名（此前文档误写 outbox）
 │                       ├── relationships/
 │                       ├── goals/
 │                       └── decisions/
@@ -330,7 +337,7 @@ C:\Users\yangui\BLMods\MyFirstMod\
 └── bin/Release/net472/       ← 编译产物
 ```
 
-部署后自动复制到：`D:\...\Modules\MyFirstMod\bin\Win64_Shipping_Client\MyFirstMod.dll`
+部署后自动复制到：`D:\...\Modules\AIChronicle\bin\Win64_Shipping_Client\AIChronicle.dll`
 
 > ⚠️ **`_Module/` 目录（含 `Prompts/`、`GUI/`、`SubModule.xml`）也在 build 时由 Bannerlord.BuildResources 拷到游戏 Modules。纯提示词改动也必须 build 才生效**——只改项目里的 `.txt`/`.json` 不 build，游戏里一直是旧版。战役副本（`Campaigns/{战役}/`）在下次进档时按 newer-wins 同步覆盖。
 
@@ -342,20 +349,20 @@ C:\Users\yangui\BLMods\MyFirstMod\
 # 1. 编译 + 自动部署（必须设置环境变量）
 $env:BANNERLORD_GAME_DIR = "D:\steam\steamapps\common\Mount & Blade II Bannerlord"
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-cd C:\Users\yangui\BLMods\MyFirstMod
+cd C:\Users\yangui\BLMods\AIChronicle
 dotnet build -c Release
 
 # 2. 启动游戏测试
 Start-Process "D:\steam\steamapps\common\Mount & Blade II Bannerlord\bin\Win64_Shipping_Client\Bannerlord.exe"
 
-# 3. 在启动器中勾选 MyFirstMod → Play
+# 3. 在启动器中勾选 AIChronicle → Play
 ```
 
 > ⚠️ 定期执行 `dotnet clean -c Release && dotnet build -c Release` 做全量编译。增量编译可能掩盖文件损坏（如 IDE 后台索引/保存过程中的异常写入），clean build 才能暴露真实编译错误。
 
 ### 版本管理（Git）
 
-项目使用 Git 进行版本管理。仓库已初始化在 `C:\Users\yangui\BLMods\MyFirstMod\`。
+项目使用 Git 进行版本管理。仓库已初始化在 `C:\Users\yangui\BLMods\AIChronicle\`。
 
 **提交前检查：**
 ```powershell
@@ -385,7 +392,7 @@ git commit -m "描述你的改动"
 ```csharp
 using HarmonyLib;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     // Prefix: 在原方法执行前拦截，可修改参数或跳过原方法
     [HarmonyPatch(typeof(TargetGameClass), "TargetMethodName")]
@@ -924,7 +931,7 @@ Get-ChildItem "C:\ProgramData\Mount and Blade II Bannerlord\logs\rgl_log_*.txt" 
 Get-ChildItem "$env:USERPROFILE\Documents\Mount and Blade II Bannerlord\Configs\ModLogs\butterlib*.txt" | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | ForEach-Object { Get-Content $_.FullName }
 
 # 搜索所有日志中的错误关键词
-Get-ChildItem "C:\ProgramData\Mount and Blade II Bannerlord\logs\rgl_log_*.txt" | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | ForEach-Object { Get-Content $_.FullName | Select-String "Error|Exception|crash|Null|MyFirstMod" }
+Get-ChildItem "C:\ProgramData\Mount and Blade II Bannerlord\logs\rgl_log_*.txt" | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | ForEach-Object { Get-Content $_.FullName | Select-String "Error|Exception|crash|Null|AIChronicle" }
 ```
 
 ### 生命周期与崩溃陷阱

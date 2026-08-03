@@ -1,6 +1,6 @@
 using System;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     /// <summary>场景生效连接信息（URL / Model / APIKey）。</summary>
     public readonly record struct ConnectionInfo(string Url, string Model, string ApiKey);

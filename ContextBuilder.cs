@@ -8,7 +8,7 @@ using TaleWorlds.Library;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public static class ContextBuilder
     {
@@ -198,7 +198,7 @@ namespace MyFirstMod
 
             // 配套制度：国王外交审视升级为内外政务——内政审视报告（封地账本/治理/战功），
             // 让国王基于真实数据自行判断是否调整封地（包括夺封，需师出有名）。
-            // 新模板：走 {court_report} 占位符（易变→尾部易变块）；旧模板（无 VOLATILE 标记）：保持追加到规则（兼容旧档）。
+            // 内政报告走 {court_report} 占位符，渲染进模板易变块（保持前缀缓存稳定）。
             var courtReport = "";
             if (intent == "diplomacy" && agent.HeroRef != null
                 && agent.HeroRef.MapFaction is Kingdom rulerKingdom
@@ -208,9 +208,6 @@ namespace MyFirstMod
             }
 
             var template = LoadContextTemplate();
-            var hasMarker = template.IndexOf(VolatileMarker, StringComparison.Ordinal) >= 0;
-            if (!hasMarker && !string.IsNullOrEmpty(courtReport))
-                intentRules += "\n\n" + courtReport;
 
             var rendered = template
                 .Replace("{intent_rules}", intentRules)

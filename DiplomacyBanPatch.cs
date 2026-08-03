@@ -4,7 +4,7 @@ using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Election;
 using TaleWorlds.Library;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     [HarmonyPatch(typeof(KingdomDecisionProposalBehavior), "GetRandomWarDecision")]
     public static class BanWarDecisionPatch
@@ -52,7 +52,7 @@ namespace MyFirstMod
         public static void Postfix()
         {
             InformationManager.DisplayMessage(new InformationMessage(
-                "[MyFirstMod] DiplomacyBanPatch: KingdomDecisionProposalBehavior.RegisterEvents patched successfully, BanVanillaDiplomacy="
+                "[AI编年史] DiplomacyBanPatch: KingdomDecisionProposalBehavior.RegisterEvents patched successfully, BanVanillaDiplomacy="
                 + (MySettings.Instance?.BanVanillaDiplomacy == true),
                 Colors.Green));
         }
@@ -68,7 +68,7 @@ namespace MyFirstMod
             if (_once) return;
             _once = true;
             InformationManager.DisplayMessage(new InformationMessage(
-                "[MyFirstMod] DiplomacyBanPatch: first DailyTickClan fired",
+                "[AI编年史] DiplomacyBanPatch: first DailyTickClan fired",
                 Colors.Green));
         }
     }

@@ -19,7 +19,7 @@ using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.Localization;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public static class ToolExecutor
     {

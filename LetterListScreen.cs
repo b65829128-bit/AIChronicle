@@ -7,7 +7,7 @@ using TaleWorlds.Engine.GauntletUI;
 using TaleWorlds.Library;
 using TaleWorlds.ScreenSystem;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public class LetterListEntryVM : ViewModel
     {
@@ -80,14 +80,6 @@ namespace MyFirstMod
             if (Hero.MainHero != null)
                 playerId = EntityManager.GetOrCreateEntity(Hero.MainHero).Id;
 
-            // 旧档迁移（幂等）：把遗留 mailbox 合并进书信往来线程
-            try { AgentManager.MigrateLegacyPlayerInbox(playerId); }
-            catch (Exception ex)
-            {
-                InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] 旧信箱迁移异常：{ex.Message}", Colors.Red));
-            }
-
             // 统一联系人列表：KnownNpcIds（面对面聊过 + 来信过的 NPC），每行附未读角标
             var rows = new List<(string label, Hero? hero, int unread, DateTime lastWrite)>();
             foreach (var entityId in SubModule.GetKnownNpcIds())
@@ -127,7 +119,7 @@ namespace MyFirstMod
             if (_vm.Messages.Count == 0)
             {
                 InformationManager.DisplayMessage(new InformationMessage(
-                    "[MyFirstMod] 你还没有往来过任何领主。", Colors.Yellow));
+                    "[AI编年史] 你还没有往来过任何领主。", Colors.Yellow));
                 _parentScreen = null;
                 _vm = null;
                 return;
@@ -164,7 +156,7 @@ namespace MyFirstMod
             catch (Exception ex)
             {
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] 打开书信列表失败：{ex.Message}", Colors.Red));
+                    $"[AI编年史] 打开书信列表失败：{ex.Message}", Colors.Red));
                 _layer = null;
             }
         }

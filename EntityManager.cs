@@ -7,7 +7,7 @@ using System.Threading;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public static class EntityManager
     {
@@ -284,8 +284,6 @@ namespace MyFirstMod
             Directory.CreateDirectory(Path.Combine(dir, "goals"));
             Directory.CreateDirectory(Path.Combine(dir, "chat_logs"));
             Directory.CreateDirectory(Path.Combine(dir, "decisions"));
-            Directory.CreateDirectory(Path.Combine(dir, "mailbox", "inbox"));
-            Directory.CreateDirectory(Path.Combine(dir, "mailbox", "sent"));
         }
 
         private static string SanitizeDir(string name)

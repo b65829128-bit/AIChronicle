@@ -11,7 +11,7 @@ using TaleWorlds.CampaignSystem.Siege;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public class HistoryRecorder : CampaignBehaviorBase
     {

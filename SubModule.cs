@@ -10,7 +10,7 @@ using TaleWorlds.Localization;
 using TaleWorlds.ModuleManager;
 using TaleWorlds.MountAndBlade;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public class SubModule : MBSubModuleBase
     {
@@ -37,13 +37,13 @@ namespace MyFirstMod
         {
             base.OnSubModuleLoad();
 
-            var modulePath = ModuleHelper.GetModuleFullPath("MyFirstMod");
+            var modulePath = ModuleHelper.GetModuleFullPath("AIChronicle");
             PromptManager.Initialize(modulePath);
 
             // OnSubModuleLoad 在游戏主线程执行——绑定主线程 ID，供工具主线程分发判断。
             MainThreadExecutor.Initialize();
 
-            var harmony = new Harmony("MyFirstMod");
+            var harmony = new Harmony("AIChronicle");
             harmony.PatchAll();
         }
 
@@ -52,7 +52,7 @@ namespace MyFirstMod
             base.OnBeforeInitialModuleScreenSetAsRoot();
 
             InformationManager.DisplayMessage(new InformationMessage(
-                "[MyFirstMod] AI 聊天模组已加载！",
+                "[AI编年史] AI 聊天模组已加载！",
                 Colors.Green));
         }
 
@@ -61,7 +61,7 @@ namespace MyFirstMod
             base.OnGameStart(game, gameStarter);
 
             InformationManager.DisplayMessage(new InformationMessage(
-                "[MyFirstMod] O键=书信往来 | H键=史书 | M键=秘书处",
+                "[AI编年史] O键=书信往来 | H键=史书 | M键=秘书处",
                 Colors.Green));
 
             if (game.GameType is Campaign && gameStarter is CampaignGameStarter starter)
@@ -73,11 +73,11 @@ namespace MyFirstMod
 
                 var kdpbType = Type.GetType("TaleWorlds.CampaignSystem.CampaignBehaviors.KingdomDecisionProposalBehavior, TaleWorlds.CampaignSystem");
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] KDPB type: {(kdpbType != null ? kdpbType.FullName : "NOT FOUND")}", kdpbType != null ? Colors.Green : Colors.Red));
+                    $"[AI编年史] KDPB type: {(kdpbType != null ? kdpbType.FullName : "NOT FOUND")}", kdpbType != null ? Colors.Green : Colors.Red));
 
                 if (kdpbType != null)
                 {
-                    var harmony = new Harmony("MyFirstMod.Diplomacy");
+                    var harmony = new Harmony("AIChronicle.Diplomacy");
                     var regMethod = kdpbType.GetMethod("RegisterEvents", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                     if (regMethod != null)
                         harmony.Patch(regMethod,
@@ -113,7 +113,7 @@ namespace MyFirstMod
                     if (callToWarType == null) continue;
                     var isAllowedM = callToWarType.GetMethod("IsAllowed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                     if (isAllowedM == null) continue;
-                    var ctHarmony = new Harmony("MyFirstMod.CallToWar");
+                    var ctHarmony = new Harmony("AIChronicle.CallToWar");
                     ctHarmony.Patch(isAllowedM,
                         prefix: new HarmonyMethod(typeof(SubModule).GetMethod(nameof(BlockCallToWarVote), BindingFlags.Static | BindingFlags.NonPublic)));
                 }
@@ -127,7 +127,7 @@ namespace MyFirstMod
                     var callToWarDialogM = lordConversationsType.GetMethod("conversation_player_wants_to_sponsor_call_to_war_on_condition", BindingFlags.Instance | BindingFlags.NonPublic);
                     if (callToWarDialogM != null)
                     {
-                        var dialogHarmony = new Harmony("MyFirstMod.CallToWarDialog");
+                        var dialogHarmony = new Harmony("AIChronicle.CallToWarDialog");
                         dialogHarmony.Patch(callToWarDialogM,
                             prefix: new HarmonyMethod(typeof(SubModule).GetMethod(nameof(BlockCallToWarDialog), BindingFlags.Static | BindingFlags.NonPublic)));
                     }
@@ -138,7 +138,7 @@ namespace MyFirstMod
                 var scbType = Type.GetType("TaleWorlds.CampaignSystem.CampaignBehaviors.SettlementClaimantCampaignBehavior, TaleWorlds.CampaignSystem");
                 if (scbType != null)
                 {
-                    var fiefHarmony = new Harmony("MyFirstMod.FiefAssignment");
+                    var fiefHarmony = new Harmony("AIChronicle.FiefAssignment");
                     var dailyTickM = scbType.GetMethod("DailyTickSettlement", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
                     if (dailyTickM != null)
                         fiefHarmony.Patch(dailyTickM,
@@ -156,14 +156,14 @@ namespace MyFirstMod
                     var uiMethod = diplomVmType.GetMethod("GetAreProposalActionsEnabledWithReason", BindingFlags.Instance | BindingFlags.NonPublic);
                     if (uiMethod != null)
                     {
-                        var harmony = new Harmony("MyFirstMod.DiplomacyUI");
+                        var harmony = new Harmony("AIChronicle.DiplomacyUI");
                         harmony.Patch(uiMethod,
                             prefix: new HarmonyMethod(typeof(SubModule).GetMethod(nameof(BlockDiplomacyUI), BindingFlags.Static | BindingFlags.NonPublic)));
                     }
                 }
 
                 // 处决无惩罚（MCM「处决无惩罚」默认开）：禁用处决的荣誉与好感代价。手动注册防 PatchAll 静默跳过。
-                var execHarmony = new Harmony("MyFirstMod.ExecutionNoPenalty");
+                var execHarmony = new Harmony("AIChronicle.ExecutionNoPenalty");
                 var traitType = Type.GetType("TaleWorlds.CampaignSystem.CharacterDevelopment.TraitLevelingHelper, TaleWorlds.CampaignSystem");
                 if (traitType != null)
                 {
@@ -243,7 +243,7 @@ namespace MyFirstMod
                 catch (Exception ex)
                 {
                     InformationManager.DisplayMessage(new InformationMessage(
-                        $"[MyFirstMod] 打开聊天窗口异常：{ex.Message}",
+                        $"[AI编年史] 打开聊天窗口异常：{ex.Message}",
                         Colors.Red));
                 }
             }
@@ -259,7 +259,7 @@ namespace MyFirstMod
                 catch (Exception ex)
                 {
                     InformationManager.DisplayMessage(new InformationMessage(
-                        $"[MyFirstMod] 打开写信窗口异常：{ex.Message}",
+                        $"[AI编年史] 打开写信窗口异常：{ex.Message}",
                         Colors.Red));
                 }
             }
@@ -278,7 +278,7 @@ namespace MyFirstMod
         private static void KdpbRegisterPatched()
         {
             InformationManager.DisplayMessage(new InformationMessage(
-                "[MyFirstMod] KDPB.RegisterEvents was called (manual patch works!)",
+                "[AI编年史] KDPB.RegisterEvents was called (manual patch works!)",
                 Colors.Green));
         }
 
@@ -309,7 +309,7 @@ namespace MyFirstMod
                     {
                         _blockLogCounter[name]++;
                         InformationManager.DisplayMessage(new InformationMessage(
-                            $"[MyFirstMod] 拦截原版外交：{name}（第{_blockLogCounter[name]}次）",
+                            $"[AI编年史] 拦截原版外交：{name}（第{_blockLogCounter[name]}次）",
                             Colors.Cyan));
                     }
                     break;

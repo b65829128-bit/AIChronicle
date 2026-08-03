@@ -1,4 +1,4 @@
-# CLAUDE.md — MyFirstMod 开发入口
+# CLAUDE.md — AI编年史·言出法随 开发入口
 
 > 本文件是 Claude Code 的入口文档。**权威文档是 AGENTS.md**，实现任何功能前必须先读它。
 
@@ -11,21 +11,21 @@ AGENTS.md 告诉你「怎么做」，README_MOD.md 告诉你「能做什么」�
 
 ## Claude Code 特有规则（强制）
 
-- **文件路径**：所有文件操作必须使用完整 Windows 绝对路径（`C:\Users\yangui\BLMods\MyFirstMod\...`），禁止相对路径和 `/c/...` 形式。这是本环境的硬性要求。
+- **文件路径**：所有文件操作必须使用完整 Windows 绝对路径（`C:\Users\yangui\BLMods\AIChronicle\...`），禁止相对路径和 `/c/...` 形式。这是本环境的硬性要求。
 - **改代码必须更新文档**：完成任何代码变更后，对照 AGENTS.md 的「代码修改后文档自检清单」逐项检查 README_MOD.md / AGENTS.md 是否需要更新，未更新视为未完成。**修改 AGENTS.md 或 README_MOD.md 前必须先向用户说明改动并征得同意。**
 
 ## 构建与部署
 
 ```bash
 # 编译 + 自动部署（BANNERLORD_GAME_DIR 已设置）
-cd "C:\Users\yangui\BLMods\MyFirstMod"
+cd "C:\Users\yangui\BLMods\AIChronicle"
 dotnet build -c Release
 
 # 全量编译（增量编译可能掩盖文件损坏，定期执行）
 dotnet clean -c Release && dotnet build -c Release
 ```
 
-部署后 DLL 自动复制到 `D:\steam\steamapps\common\Mount & Blade II Bannerlord\Modules\MyFirstMod\bin\Win64_Shipping_Client\MyFirstMod.dll`。
+部署后 DLL 自动复制到 `D:\steam\steamapps\common\Mount & Blade II Bannerlord\Modules\AIChronicle\bin\Win64_Shipping_Client\AIChronicle.dll`。
 
 ## Git 提交
 

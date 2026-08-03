@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using TaleWorlds.CampaignSystem;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public enum EntityController
     {

@@ -1,4 +1,4 @@
-namespace MyFirstMod
+namespace AIChronicle
 {
     /// <summary>
     /// 处决无惩罚（MCM「处决无惩罚」控制，默认开）：

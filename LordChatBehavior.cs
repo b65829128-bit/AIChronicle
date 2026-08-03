@@ -6,7 +6,7 @@ using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.Localization;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public class LordChatBehavior : CampaignBehaviorBase
     {
@@ -38,8 +38,8 @@ namespace MyFirstMod
 
         public override void SyncData(IDataStore dataStore)
         {
-            dataStore.SyncData("myfirstmod_campaign_id", ref _campaignId);
-            dataStore.SyncData("myfirstmod_known_npcs", ref _knownNpcIds);
+            dataStore.SyncData("aichronicle_campaign_id", ref _campaignId);
+            dataStore.SyncData("aichronicle_known_npcs", ref _knownNpcIds);
         }
 
         public string GetOrCreateCampaignId()
@@ -56,9 +56,9 @@ namespace MyFirstMod
             PromptManager.StartCampaign(GetOrCreateCampaignId());
 
             starter.AddPlayerLine(
-                "myfirstmod_ai_chat_dialog",
+                "aichronicle_ai_chat_dialog",
                 "hero_main_options",
-                "myfirstmod_ai_chat_dialog_output",
+                "aichronicle_ai_chat_dialog_output",
                 "{=MFM_chat_option}【AI 聊天】",
                 new ConversationSentence.OnConditionDelegate(ChatDialogCondition),
                 new ConversationSentence.OnConsequenceDelegate(ChatDialogConsequence),
@@ -67,8 +67,8 @@ namespace MyFirstMod
                 null);
 
             starter.AddDialogLine(
-                "myfirstmod_ai_chat_dialog_done",
-                "myfirstmod_ai_chat_dialog_output",
+                "aichronicle_ai_chat_dialog_done",
+                "aichronicle_ai_chat_dialog_output",
                 "hero_main_options",
                 "{=MFM_chat_done}（领主等待你开口……）",
                 null,
@@ -77,9 +77,9 @@ namespace MyFirstMod
             // 被强敌擒获（投降/应战）场景也提供 AI 聊天：玩家可谈判，agent 可用 let_go 放行。
             // 节点 player_responds_to_surrender_demand 是投降/应战/买路的选择节点——原版此处无对话入口。
             starter.AddPlayerLine(
-                "myfirstmod_ai_chat_dialog_surrender",
+                "aichronicle_ai_chat_dialog_surrender",
                 "player_responds_to_surrender_demand",
-                "myfirstmod_ai_chat_dialog_surrender_output",
+                "aichronicle_ai_chat_dialog_surrender_output",
                 "{=MFM_chat_option_surrender}【AI 聊天】",
                 new ConversationSentence.OnConditionDelegate(ChatDialogCondition),
                 new ConversationSentence.OnConsequenceDelegate(ChatDialogConsequence),
@@ -88,8 +88,8 @@ namespace MyFirstMod
                 null);
 
             starter.AddDialogLine(
-                "myfirstmod_ai_chat_dialog_surrender_done",
-                "myfirstmod_ai_chat_dialog_surrender_output",
+                "aichronicle_ai_chat_dialog_surrender_done",
+                "aichronicle_ai_chat_dialog_surrender_output",
                 "player_responds_to_surrender_demand",
                 "{=MFM_chat_done_surrender}（领主等待你开口……）",
                 null,

@@ -1,7 +1,7 @@
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Settlements;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     /// <summary>
     /// 册封由 Agent 主导：拦截原版攻城后的封地影响力投票（SettlementClaimantDecision），

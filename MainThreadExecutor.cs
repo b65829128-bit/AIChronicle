@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Threading;
 using TaleWorlds.Library;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     /// <summary>
     /// 将需要在游戏主线程执行的操作排队分发。
@@ -39,7 +39,7 @@ namespace MyFirstMod
                     try
                     {
                         InformationManager.DisplayMessage(new InformationMessage(
-                            $"[MyFirstMod] 主线程执行异常：{e.Message}", Colors.Red));
+                            $"[AI编年史] 主线程执行异常：{e.Message}", Colors.Red));
                     }
                     catch { }
                 }
@@ -69,10 +69,10 @@ namespace MyFirstMod
             });
 
             if (!mre.Wait(TimeSpan.FromSeconds(30)))
-                throw new InvalidOperationException("[MyFirstMod] 主线程分发超时（主线程可能未在运行）。");
+                throw new InvalidOperationException("[AI编年史] 主线程分发超时（主线程可能未在运行）。");
 
             if (error != null)
-                throw new InvalidOperationException("[MyFirstMod] 主线程工具执行失败：" + error.Message, error);
+                throw new InvalidOperationException("[AI编年史] 主线程工具执行失败：" + error.Message, error);
             return result;
         }
 

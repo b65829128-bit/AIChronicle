@@ -5,7 +5,7 @@ using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Encounters;
 using TaleWorlds.Library;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public class ChatMessageVM : ViewModel
     {
@@ -429,7 +429,7 @@ namespace MyFirstMod
                             }
 
                             MainThreadExecutor.DisplayMessage(new InformationMessage(
-                                $"[MyFirstMod] {_charPrompt.HeroName} {toolDesc}", Colors.Cyan));
+                                $"[AI编年史] {_charPrompt.HeroName} {toolDesc}", Colors.Cyan));
                         }
                     }
 
@@ -437,7 +437,7 @@ namespace MyFirstMod
                     {
                         PromptManager.UpdateTargetKnowledge(chatResponse.LearnedKnowledge);
                         MainThreadExecutor.DisplayMessage(new InformationMessage(
-                            $"[MyFirstMod] {_charPrompt.HeroName} 更新了对你的认知",
+                            $"[AI编年史] {_charPrompt.HeroName} 更新了对你的认知",
                             Colors.Cyan));
                     }
 

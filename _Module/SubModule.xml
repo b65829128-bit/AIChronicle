@@ -1,9 +1,9 @@
 ﻿<?xml version="1.0" encoding="UTF-8"?>
 <Module xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
         xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/BUTR/Bannerlord.XmlSchemas/master/SubModule.xsd" >
-  <Id value="MyFirstMod" />
-  <Name value="MyFirstMod" />
-  <Version value="v1.7.0" />
+  <Id value="AIChronicle" />
+  <Name value="AI编年史·言出法随" />
+  <Version value="v2.0.0" />
   <DefaultModule value="false" />
   <ModuleCategory value="Singleplayer"/>
   <ModuleType value="Community" />
@@ -32,9 +32,9 @@
   </DependedModuleMetadatas>
   <SubModules>
     <SubModule>
-      <Name value="MyFirstMod" />
-      <DLLName value="MyFirstMod.dll" />
-      <SubModuleClassType value="MyFirstMod.SubModule" />
+      <Name value="AI编年史·言出法随" />
+      <DLLName value="AIChronicle.dll" />
+      <SubModuleClassType value="AIChronicle.SubModule" />
       <Tags />
     </SubModule>
   </SubModules>

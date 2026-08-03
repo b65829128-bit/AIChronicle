@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using TaleWorlds.Library;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     /// <summary>
     /// 记忆巩固——diary 权威化的保底机制。
@@ -157,7 +157,7 @@ namespace MyFirstMod
             catch (Exception ex)
             {
                 MainThreadExecutor.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] 记忆巩固失败：{ex.Message}", Colors.Red));
+                    $"[AI编年史] 记忆巩固失败：{ex.Message}", Colors.Red));
             }
         }
     }

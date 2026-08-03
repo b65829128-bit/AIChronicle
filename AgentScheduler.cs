@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
 
-namespace MyFirstMod
+namespace AIChronicle
 {
     public enum ActivationEventType
     {
@@ -140,7 +140,7 @@ namespace MyFirstMod
                     _lastKingActivation[k] = CampaignTime.Zero;
             }
             MainThreadExecutor.DisplayMessage(new InformationMessage(
-                "[MyFirstMod] 外交计时器已重置，所有国王将在接下来的游戏日中依次被激活。",
+                "[AI编年史] 外交计时器已重置，所有国王将在接下来的游戏日中依次被激活。",
                 Colors.Cyan));
         }
 
@@ -149,7 +149,7 @@ namespace MyFirstMod
             _lastAdvisoryCheck.Clear();
             _lastAdvisorySpeaker.Clear();
             MainThreadExecutor.DisplayMessage(new InformationMessage(
-                "[MyFirstMod] 封臣谏言计时器已重置，封臣们将在接下来的游戏日中陆续进谏。",
+                "[AI编年史] 封臣谏言计时器已重置，封臣们将在接下来的游戏日中陆续进谏。",
                 Colors.Cyan));
         }
 
@@ -374,7 +374,7 @@ namespace MyFirstMod
             if (evt.Depth > maxDepth)
             {
                 MainThreadExecutor.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] 信件级联已达上限({maxDepth}+)，剩余信件已存档不再处理。",
+                    $"[AI编年史] 信件级联已达上限({maxDepth}+)，剩余信件已存档不再处理。",
                     Colors.Yellow));
                 return;
             }
@@ -782,7 +782,7 @@ namespace MyFirstMod
             catch (Exception ex)
             {
                 MainThreadExecutor.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] 信件处理异常：{ex.Message}", Colors.Red));
+                    $"[AI编年史] 信件处理异常：{ex.Message}", Colors.Red));
             }
             finally
             {
@@ -940,7 +940,7 @@ namespace MyFirstMod
                 if (string.IsNullOrEmpty(evt.Content))
                 {
                     MainThreadExecutor.DisplayMessage(new InformationMessage(
-                        "[MyFirstMod] 家族补充事件内容为空，跳过。", Colors.Yellow));
+                        "[AI编年史] 家族补充事件内容为空，跳过。", Colors.Yellow));
                     return;
                 }
 
@@ -990,7 +990,7 @@ namespace MyFirstMod
                 if (string.IsNullOrEmpty(evtContent))
                 {
                     MainThreadExecutor.DisplayMessage(new InformationMessage(
-                        "[MyFirstMod] 史官专题史缓冲为空，跳过。", Colors.Yellow));
+                        "[AI编年史] 史官专题史缓冲为空，跳过。", Colors.Yellow));
                     return;
                 }
 
@@ -1070,7 +1070,7 @@ namespace MyFirstMod
             catch (Exception ex)
             {
                 MainThreadExecutor.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] 史官处理异常：{ex.Message}",
+                    $"[AI编年史] 史官处理异常：{ex.Message}",
                     Colors.Red));
             }
         }
@@ -1360,7 +1360,7 @@ namespace MyFirstMod
             catch (Exception ex)
             {
                 MainThreadExecutor.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] 封臣谏言处理异常：{ex.Message}",
+                    $"[AI编年史] 封臣谏言处理异常：{ex.Message}",
                     Colors.Red));
             }
         }
