@@ -306,7 +306,7 @@ namespace AIChronicle
                 sb.AppendLine($"【{catName}】{string.Join(", ", names)}");
             }
 
-            if (inactiveCategories.Count > 0)
+            if (intent != "chancery" && inactiveCategories.Count > 0)
             {
                 sb.AppendLine();
                 sb.AppendLine("【其他可用工具分类 — 需要时先调 browse_tools 查看并解锁】");

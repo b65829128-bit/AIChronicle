@@ -3203,6 +3203,9 @@ namespace AIChronicle
                     {
                         if (clan.Kingdom == target) return "[错误] 你已经属于该王国";
                         if (clan.Kingdom != null) return "[错误] 你必须先脱离当前王国才能加入新王国。先用 change_kingdom(action=\"leave_kingdom\")";
+                        var vassalTier = Campaign.Current.Models.ClanTierModel.VassalEligibleTier;
+                        if (clan.Tier < vassalTier)
+                            return $"[错误] 家族等级不足：成为封臣需要家族等级达到 {vassalTier} 级（当前 {clan.Tier} 级）。低等级家族只能作为雇佣兵加入，请用 change_kingdom(action=\"join_as_mercenary\")";
                         ChangeKingdomAction.ApplyByJoinToKingdom(clan, target);
                         return $"已加入{target.Name}，成为其封臣。";
                     }
@@ -3211,6 +3214,9 @@ namespace AIChronicle
                     {
                         if (clan.Kingdom == null) return "[错误] 你当前不属于任何王国，请用 join_kingdom";
                         if (clan.Kingdom == target) return "[错误] 你已经属于该王国";
+                        var vassalTier = Campaign.Current.Models.ClanTierModel.VassalEligibleTier;
+                        if (clan.Tier < vassalTier)
+                            return $"[错误] 家族等级不足：叛逃成为对方封臣需要家族等级达到 {vassalTier} 级（当前 {clan.Tier} 级）。";
                         ChangeKingdomAction.ApplyByJoinToKingdomByDefection(clan, clan.Kingdom, target);
                         return $"已叛逃至{target.Name}。";
                     }
@@ -3219,6 +3225,9 @@ namespace AIChronicle
                     {
                         if (clan.Kingdom == target) return "[错误] 你已经属于该王国";
                         if (clan.Kingdom != null) return "[错误] 你必须先脱离当前王国才能成为雇佣兵。先用 change_kingdom(action=\"leave_kingdom\")";
+                        var mercTier = Campaign.Current.Models.ClanTierModel.MercenaryEligibleTier;
+                        if (clan.Tier < mercTier)
+                            return $"[错误] 家族等级不足：成为雇佣兵需要家族等级达到 {mercTier} 级（当前 {clan.Tier} 级）。";
                         ChangeKingdomAction.ApplyByJoinFactionAsMercenary(clan, target);
                         return $"已成为{target.Name}的雇佣兵。";
                     }

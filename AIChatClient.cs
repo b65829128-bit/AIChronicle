@@ -96,6 +96,9 @@ namespace AIChronicle
             "fief_review" => new[] { "universal", "query", "file", "communication", "diplomacy" },
             "consolidation" => new[] { "universal", "file" },
             "chat" => new[] { "universal", "query", "file", "social", "communication" },
+            // 秘书处是玩家的行政助手，不是战斗/财务代理：只保留查询、通信（谏言/密陈）、外交（换国/诏令/问询回复）。
+            // 行军/军事/社交（给钱拿钱/送物/改好感）全部移除——玩家在这些方面有替代路径（游戏 UI、部队命令、O 键书信）。
+            "chancery" => new[] { "universal", "query", "communication", "diplomacy" },
             _ => new[] { "universal", "query", "social", "military", "movement", "diplomacy", "file", "communication" },
         };
 
@@ -164,7 +167,9 @@ namespace AIChronicle
             // 严格单向防环：被问询方（king_consult 会话）拿不到 consult_king，不能发起新问询，只能 reply_consult 回复
             if (CurrentIntent == "king_consult")
                 toolDefs.RemoveAll(t => t.Name == "consult_king");
-            toolDefs.Add(BrowseToolsDef);
+            // 秘书处不提供 browse_tools：防止它解锁被限制的分类（行军/军事/社交）绕过权限收窄
+            if (CurrentIntent != "chancery")
+                toolDefs.Add(BrowseToolsDef);
             return BuildTools(toolDefs);
         }
 

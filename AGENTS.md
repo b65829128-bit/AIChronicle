@@ -115,7 +115,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环，模型调用工具 → 执行 → 追加结果 → 重请求，直到模型自然停止（无轮数限制，仅保留极高安全阀防死循环） |
 | **主线程分发** | LLM 工具循环跑在后台线程，但**所有修改游戏状态的工具**经 `MainThreadExecutor` 排队到主线程 `OnApplicationTick` 执行（后台线程阻塞等待结果）；仅 `request_gold`/`request_items`/`browse_tools` 留在后台线程（前两者需主线程弹窗等待玩家，后者改本流程上下文）。背景：Bannerlord 游戏对象（MobileParty/Hero/Kingdom）是主线程独占的 |
 | **上下文隔离（AsyncLocal）** | `CurrentHero`/`CurrentIntent`/`ActivatedCategories`（AIChatClient）、`_agentEntityId`/`_targetEntityId`（AgentManager）、`_activeAgentId`/`_activeTargetId`（EntityManager）均为 `AsyncLocal`——聊天与后台信件/谏言/外交多个流程并发时上下文互不覆盖；实体缓存用 `ConcurrentDictionary`（线程安全） |
-| **秘书处** | M 键打开，玩家的个人行政助手。固定 persona（无条件服从），不读玩家 persona。国王/封臣/平民均可使用，可用工具取决于玩家当前身份。玩家可经秘书处调 `submit_advisory` 提交公开谏言（雇佣兵除外） |
+| **秘书处** | M 键打开，玩家的个人行政助手。固定 persona（无条件服从），不读玩家 persona。国王/封臣/平民均可使用。**工具范围严格受限**：仅查询、谏言（`submit_advisory`/`submit_secret_advisory`）、诏令与问询回复（`submit_edict`/`reply_consult`，国王）、快速加入/脱离王国（`change_kingdom`，受家族等级限制）——行军/军事/金钱物品/好感/写信一律不可用（有替代路径），且不提供 `browse_tools`（防止解锁受限分类绕过权限）。玩家可经秘书处调 `submit_advisory` 提交公开谏言（雇佣兵除外） |
 | **天意** | 虚拟实体（ID: `__fate__`，HeroRef=null，与史官并列）。家族补充系统：封臣/雇佣兵家族低于下限时被激活，决定新家族名称/文化/投效势力（`create_clan`，能力门控仅天意可用），成员程序生成、等级 2、族长带兵，入原始史料但不激活史官 |
 | **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
 

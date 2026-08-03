@@ -1176,10 +1176,10 @@ namespace AIChronicle
             }
         }
 
-        private bool _clanReplenishmentEnabled = true;
+        private bool _clanReplenishmentEnabled = false;
 
         [SettingPropertyBool("启用家族补充", Order = 17, RequireRestart = false,
-            HintText = "开启：封臣家族或雇佣兵家族数量低于下限时，激活「天意」agent 补充新的贵族家族，防止大屠杀导致世家凋零、世界崩解。")]
+            HintText = "【实验性功能，默认关闭】开启：封臣家族或雇佣兵家族数量低于下限时，激活「天意」agent 补充新的贵族家族，防止大屠杀导致世家凋零、世界崩解。该功能仍不完善，建议先保持关闭。")]
         [SettingPropertyGroup("游戏设置")]
         public bool ClanReplenishmentEnabled
         {
