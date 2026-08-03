@@ -289,7 +289,8 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 ├── README.md                  ← 开源主入口（英文简介，指向 README_MOD.md / AGENTS.md）
 ├── CONTRIBUTING.md            ← 贡献指南（构建方法、文档维护规则、PR 流程）
 ├── scripts/
-│   └── ci-health.mjs          ← 仓库健康检查（JSON 解析、JSON↔switch 同步、密钥/个人路径扫描，CI 与本地共用）
+│   ├── ci-health.mjs          ← 仓库健康检查（JSON 解析、JSON↔switch 同步、密钥/个人路径扫描，CI 与本地共用）
+│   └── package.ps1            ← 编译+部署+打包纯净发布版（dist/AIChronicle_v<版本>.zip，给其他玩家用）
 ├── .github/workflows/
 │   ├── health.yml             ← 轻量 CI（无需游戏 DLL，push/PR 自动跑，绿标）
 │   └── build.yml              ← 手动编译工作流（workflow_dispatch，需 BANNERLORD_GAME_DIR 或 GAME_DLLS_URL 密钥）
@@ -363,6 +364,9 @@ dotnet build -c Release
 Start-Process "D:\steam\steamapps\common\Mount & Blade II Bannerlord\bin\Win64_Shipping_Client\Bannerlord.exe"
 
 # 3. 在启动器中勾选 AIChronicle → Play
+
+# 4. 打包发布版（编译+部署+打包一步完成，产物 dist/AIChronicle_v<版本>.zip）
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1
 ```
 
 > ⚠️ 定期执行 `dotnet clean -c Release && dotnet build -c Release` 做全量编译。增量编译可能掩盖文件损坏（如 IDE 后台索引/保存过程中的异常写入），clean build 才能暴露真实编译错误。

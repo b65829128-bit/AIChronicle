@@ -2,6 +2,9 @@
 bin/
 obj/
 
+# Release packages
+dist/
+
 # Runtime-generated campaign data
 _Module/Prompts/Campaigns/
 
