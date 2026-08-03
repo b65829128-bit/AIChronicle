@@ -1,0 +1,62 @@
+name: Build (needs game DLLs)
+
+# Full C# compilation. Requires the Bannerlord game assemblies, so it is
+# MANUAL-ONLY (workflow_dispatch) — it will not run on push/PR and will not
+# color your repo badges red.
+#
+# To use it you must provide a game-DLL source. Either:
+#
+#   A) Self-hosted runner with the game installed, then set the repository
+#      secret `BANNERLORD_GAME_DIR` to the game's install path (e.g.
+#      `D:\steam\steamapps\common\Mount & Blade II Bannerlord`), or
+#
+#   B) A Windows runner and a URL to a ZIP of the game's Win64_Shipping_Client
+#      DLLs in repository secret `GAME_DLLS_URL`. The ZIP must reproduce the
+#      layout the csproj expects:
+#        bin/Win64_Shipping_Client/*.dll
+#        Modules/Native/bin/Win64_Shipping_Client/*.dll
+#        Modules/SandBox/bin/Win64_Shipping_Client/*.dll
+#        Modules/SandBoxCore/bin/Win64_Shipping_Client/*.dll
+#        Modules/StoryMode/bin/Win64_Shipping_Client/*.dll
+#        Modules/CustomBattle/bin/Win64_Shipping_Client/*.dll
+#        Modules/BirthAndDeath/bin/Win64_Shipping_Client/*.dll
+#      (only the files referenced by AIChronicle.csproj are needed).
+#
+# Until one of these is configured, run the build locally instead:
+#   $env:BANNERLORD_GAME_DIR = "D:\steam\steamapps\common\Mount & Blade II Bannerlord"
+#   dotnet build -c Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Resolve game DLLs from GAME_DLLS_URL (option B)
+        if: env.BANNERLORD_GAME_DIR == ''
+        env:
+          GAME_DLLS_URL: ${{ secrets.GAME_DLLS_URL }}
+          BANNERLORD_GAME_DIR: ${{ secrets.BANNERLORD_GAME_DIR }}
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrEmpty($env:GAME_DLLS_URL)) {
+            throw "No game-DLL source configured. Set the BANNERLORD_GAME_DIR secret (self-hosted runner) or the GAME_DLLS_URL secret (hosted runner). See workflow comments."
+          }
+          $dst = Join-Path $env:RUNNER_TEMP 'game'
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Invoke-WebRequest -Uri $env:GAME_DLLS_URL -OutFile (Join-Path $env:RUNNER_TEMP 'game.zip')
+          Expand-Archive -Path (Join-Path $env:RUNNER_TEMP 'game.zip') -DestinationPath $dst
+          echo "BANNERLORD_GAME_DIR=$dst" >> $env:GITHUB_ENV
+
+      - name: Build
+        shell: pwsh
+        run: dotnet build -c Release

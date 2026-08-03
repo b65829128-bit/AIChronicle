@@ -1,0 +1,25 @@
+name: Repo Health
+
+# Lightweight CI that needs no game installation:
+# validates tool-definition JSON, checks JSON/ToolExecutor switch sync,
+# and scans for leaked secrets / personal paths.
+# Run locally with: node scripts/ci-health.mjs
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run repo health check
+        run: node scripts/ci-health.mjs

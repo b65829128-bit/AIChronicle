@@ -286,6 +286,13 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 ├── DebugLogger.cs             ← 调试日志（LLM 调用摘要/思维链摘录 → 战役 debug_logs/）
 ├── SafeFileIO.cs              ← 带重试的文件 IO（并发读写同一文件时避免"文件正被使用"异常）
 ├── CLAUDE.md                  ← Claude Code 入口文档（指向本文件与 README_MOD.md）
+├── README.md                  ← 开源主入口（英文简介，指向 README_MOD.md / AGENTS.md）
+├── CONTRIBUTING.md            ← 贡献指南（构建方法、文档维护规则、PR 流程）
+├── scripts/
+│   └── ci-health.mjs          ← 仓库健康检查（JSON 解析、JSON↔switch 同步、密钥/个人路径扫描，CI 与本地共用）
+├── .github/workflows/
+│   ├── health.yml             ← 轻量 CI（无需游戏 DLL，push/PR 自动跑，绿标）
+│   └── build.yml              ← 手动编译工作流（workflow_dispatch，需 BANNERLORD_GAME_DIR 或 GAME_DLLS_URL 密钥）
 ├── _Module/
 │   ├── SubModule.xml         ← 模组元数据（ID、依赖、DLL路径）
 │   ├── GUI/
