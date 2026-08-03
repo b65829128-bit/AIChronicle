@@ -21,7 +21,9 @@ namespace AIChronicle
         private static readonly AsyncLocal<string> _targetEntityId = new();
         private static string _agentDir => Path.Combine(_baseDir, _agentEntityId.Value ?? "");
         private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
-        private static readonly Random _rng = new();
+        // 线程安全：persona 生成在后台线程并发执行（多个 Agent 任务同时掷性格维度），
+        // System.Random 非线程安全，必须按线程隔离。
+        private static readonly ThreadLocal<Random> _rng = new(() => new Random(Guid.NewGuid().GetHashCode()));
 
         private static string _cachedPersonaPrompt = "";
         private static DateTime _lastPersonaPromptCheck;  
@@ -75,11 +77,6 @@ namespace AIChronicle
             return _agentDir;
         }
 
-        public static string? GetChatLogPath()
-        {
-            return GetChatLogPathFor(_agentEntityId.Value ?? "", _targetEntityId.Value ?? "");
-        }
-
         public static string? GetChatLogPathFor(string agentEntityId, string targetEntityId)
         {
             if (string.IsNullOrEmpty(_baseDir) || string.IsNullOrEmpty(agentEntityId) || string.IsNullOrEmpty(targetEntityId))
@@ -91,18 +88,6 @@ namespace AIChronicle
         {
             if (string.IsNullOrEmpty(_agentDir)) return null;
             return Path.Combine(_agentDir, "knowledge", SanitizeFile(_targetEntityId.Value ?? "") + ".txt");
-        }
-
-        public static string? GetRelationshipPath(string targetEntityId)
-        {
-            if (string.IsNullOrEmpty(_agentDir)) return null;
-            return Path.Combine(_agentDir, "relationships", SanitizeFile(targetEntityId) + ".txt");
-        }
-
-        public static string? GetGoalsPath()
-        {
-            if (string.IsNullOrEmpty(_agentDir)) return null;
-            return Path.Combine(_agentDir, "goals", "current.txt");
         }
 
         private static void InitAgentDirectory()
@@ -134,20 +119,6 @@ namespace AIChronicle
             public int MetaVersion { get; set; }
         }
 
-        private static PersonaMeta LoadOrCreatePersonaMeta(Hero hero)
-        {
-            var path = GetPersonaMetaPath();
-            return LoadOrCreatePersonaMetaFromPath(path, new PersonaMeta
-            {
-                Ambition = RollWeightedTrait(skewPositive: true),
-                LoyaltyType = RollLoyaltyType(),
-                RiskTolerance = RollWeightedTrait(skewPositive: false),
-                MandateBelief = RollMandateBelief(),
-                WarLiking = RollWarLiking(),
-                MetaVersion = 2
-            });
-        }
-
         private static PersonaMeta LoadOrCreatePersonaMetaFromPath(string path, PersonaMeta fallback)
         {
             if (File.Exists(path))
@@ -170,7 +141,7 @@ namespace AIChronicle
 
         private static int RollWeightedTrait(bool skewPositive)
         {
-            var roll = _rng.Next(100);
+            var roll = _rng.Value!.Next(100);
             if (skewPositive)
             {
                 if (roll < 5) return -2;
@@ -191,7 +162,7 @@ namespace AIChronicle
 
         private static int RollLoyaltyType()
         {
-            var roll = _rng.Next(100);
+            var roll = _rng.Value!.Next(100);
             if (roll < 10) return 0;
             if (roll < 50) return 1;
             if (roll < 85) return 2;
@@ -204,7 +175,7 @@ namespace AIChronicle
         /// </summary>
         private static int RollMandateBelief()
         {
-            var roll = _rng.Next(100);
+            var roll = _rng.Value!.Next(100);
             if (roll < 6) return -2;
             if (roll < 26) return -1;
             if (roll < 64) return 0;
@@ -216,7 +187,7 @@ namespace AIChronicle
         /// 默认分布过于和平导致 AI 不开战，故意大幅拉高好战比例以激活战争循环——80% 的人好战。</summary>
         private static int RollWarLiking()
         {
-            var roll = _rng.Next(100);
+            var roll = _rng.Value!.Next(100);
             if (roll < 50) return 2;
             if (roll < 80) return 1;
             if (roll < 90) return 0;
@@ -312,67 +283,6 @@ namespace AIChronicle
             return text.Contains("[MOTIVATION]")
                 && text.Contains("[TRAITS]")
                 && text.Contains("[SPEECH_STYLE]");
-        }
-
-        public static string LoadPersona(Hero hero)
-        {
-            if (string.IsNullOrEmpty(_agentDir))
-                return "名字：" + (hero.Name?.ToString() ?? "未知") + "\n性别：" + (hero.IsFemale ? "女" : "男") + "\n文化：" + (hero.Culture?.Name?.ToString() ?? "未知") + "\n说话风格：使用中世纪贵族的正式口吻。";
-
-            var path = Path.Combine(_agentDir, "persona.txt");
-            if (File.Exists(path))
-            {
-                var existing = File.ReadAllText(path, Encoding.UTF8);
-                if (hero != Hero.MainHero && !IsCompletePersona(existing))
-                    return GeneratePersona(hero);
-                return existing;
-            }
-
-            if (hero == Hero.MainHero)
-                return "[MOTIVATION]\n你是一位在卡拉迪亚大陆闯荡的冒险者。\n\n[TRAITS]\n- 待探索\n\n[SPEECH_STYLE]\n自由发挥。";
-
-            return GeneratePersona(hero);
-        }
-
-        private static string GeneratePersona(Hero hero)
-        {
-            var name = hero.Name?.ToString() ?? "未知领主";
-            var culture = hero.Culture?.Name?.ToString() ?? "未知";
-            var clan = hero.Clan?.Name?.ToString() ?? "";
-            var kingdom = hero.Clan?.Kingdom?.Name?.ToString() ?? "";
-            var isFemale = hero.IsFemale ? "女" : "男";
-            var encyclopedia = hero.EncyclopediaText?.ToString() ?? "";
-
-            var basicInfo = new StringBuilder();
-            basicInfo.AppendLine($"姓名：{name}");
-            basicInfo.AppendLine($"性别：{isFemale}");
-            basicInfo.AppendLine($"文化：{culture}");
-            basicInfo.AppendLine($"家族：{clan}");
-            if (!string.IsNullOrEmpty(kingdom))
-                basicInfo.AppendLine($"所属王国：{kingdom}");
-            if (!string.IsNullOrEmpty(encyclopedia))
-                basicInfo.AppendLine($"百科描述：{encyclopedia}");
-
-            var meta = LoadOrCreatePersonaMeta(hero);
-            var nativeTraits = BuildNativeTraitsText(hero);
-            var customTraits = BuildCustomTraitsText(meta);
-
-            try
-            {
-                var persona = GeneratePersonaViaLLM(basicInfo.ToString(), name, nativeTraits, customTraits).Result;
-                if (!string.IsNullOrEmpty(persona))
-                {
-                    var p = Path.Combine(_agentDir, "persona.txt");
-                    File.WriteAllText(p, persona, Encoding.UTF8);
-                    return persona;
-                }
-            }
-            catch { }
-
-            var fallback = $"[MOTIVATION]\n{basicInfo}\n[TRAITS]\n- 未知\n\n[SPEECH_STYLE]\n使用中世纪贵族的正式口吻。";
-            var fallbackPath = Path.Combine(_agentDir, "persona.txt");
-            File.WriteAllText(fallbackPath, fallback, Encoding.UTF8);
-            return fallback;
         }
 
         private static async System.Threading.Tasks.Task<string> GeneratePersonaViaLLM(string info, string name, string nativeTraits, string customTraits)
@@ -832,40 +742,6 @@ namespace AIChronicle
             return ids;
         }
 
-        public static string? ReadRelationship(string targetEntityId)
-        {
-            var path = GetRelationshipPath(targetEntityId);
-            if (path == null || !File.Exists(path)) return null;
-            return File.ReadAllText(path, Encoding.UTF8).Trim();
-        }
-
-        public static string? ReadKnowledge(string targetEntityId)
-        {
-            if (string.IsNullOrEmpty(_agentDir)) return null;
-
-            var path = Path.Combine(_agentDir, "knowledge", SanitizeFile(targetEntityId) + ".txt");
-            if (File.Exists(path))
-                return File.ReadAllText(path, Encoding.UTF8).Trim();
-
-            var entity = EntityManager.GetEntityById(targetEntityId);
-            if (entity != null)
-            {
-                var namePath = Path.Combine(_agentDir, "knowledge", SanitizeFile(entity.Name) + ".txt");
-                if (File.Exists(namePath))
-                    return File.ReadAllText(namePath, Encoding.UTF8).Trim();
-            }
-
-            return null;
-        }
-
-        public static string? ReadGoals()
-        {
-            if (string.IsNullOrEmpty(_agentDir)) return null;
-            var path = Path.Combine(_agentDir, "goals", "current.txt");
-            if (!File.Exists(path)) return null;
-            return File.ReadAllText(path, Encoding.UTF8).Trim();
-        }
-
         private static string GetAgentDirPath(string agentId)
         {
             return Path.Combine(_baseDir, SanitizeDir(agentId));
@@ -1150,9 +1026,7 @@ namespace AIChronicle
                 var score = 0;
 
                 var typeProposer = ParseProposalMeta(pContent);
-                var typeName = FuzzyTypeName(typeProposer.Type);
 
-                if (lowerFuzzy.Contains(typeName)) score += 10;
                 if (lowerFuzzy.Contains(typeProposer.Type)) score += 10;
 
                 var proposerParts = typeProposer.ProposerId.ToLowerInvariant().Split('_');
@@ -1189,14 +1063,6 @@ namespace AIChronicle
             }
             return (proposerId, targetId, type);
         }
-
-        private static string FuzzyTypeName(string type) => type switch
-        {
-            "peace" => "peace",
-            "alliance" => "alliance",
-            "trade" => "trade",
-            _ => type
-        };
 
         public static List<(string Id, string Type)> GetProposalsBetween(string entityA, string entityB)
         {

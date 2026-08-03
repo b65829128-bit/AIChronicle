@@ -129,7 +129,7 @@ namespace AIChronicle
         [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("对话与书信场景", GroupOrder = 1)]
-        public Action ChatTestConnection { get; set; } = () => AIChatClient.TestConnection("conversation");
+        public Action ChatTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("conversation"); };
 
         private string _diplomacyApiUrl = "";
 
@@ -188,7 +188,7 @@ namespace AIChronicle
         [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("政务外交场景", GroupOrder = 2)]
-        public Action DiplomacyTestConnection { get; set; } = () => AIChatClient.TestConnection("diplomacy");
+        public Action DiplomacyTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("diplomacy"); };
 
         private string _kingConsultApiUrl = "";
 
@@ -247,7 +247,7 @@ namespace AIChronicle
         [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("外交问询场景", GroupOrder = 3)]
-        public Action KingConsultTestConnection { get; set; } = () => AIChatClient.TestConnection("king_consult");
+        public Action KingConsultTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("king_consult"); };
 
         private string _fiefReviewApiUrl = "";
 
@@ -306,7 +306,7 @@ namespace AIChronicle
         [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("封地审视场景", GroupOrder = 4)]
-        public Action FiefReviewTestConnection { get; set; } = () => AIChatClient.TestConnection("fief_review");
+        public Action FiefReviewTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("fief_review"); };
 
         private string _advisoryApiUrl = "";
 
@@ -365,7 +365,7 @@ namespace AIChronicle
         [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("封臣谏言场景", GroupOrder = 5)]
-        public Action AdvisoryTestConnection { get; set; } = () => AIChatClient.TestConnection("advisory");
+        public Action AdvisoryTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("advisory"); };
 
         private string _clanReplenishmentApiUrl = "";
 
@@ -424,7 +424,7 @@ namespace AIChronicle
         [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("天意建族场景", GroupOrder = 6)]
-        public Action ClanReplenishmentTestConnection { get; set; } = () => AIChatClient.TestConnection("clan_replenishment");
+        public Action ClanReplenishmentTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("clan_replenishment"); };
 
         private string _historianApiUrl = "";
 
@@ -483,7 +483,7 @@ namespace AIChronicle
         [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("史官场景", GroupOrder = 7)]
-        public Action HistorianTestConnection { get; set; } = () => AIChatClient.TestConnection("historian");
+        public Action HistorianTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("historian"); };
 
         private string _consolidationApiUrl = "";
 
@@ -542,7 +542,7 @@ namespace AIChronicle
         [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("记忆巩固场景", GroupOrder = 8)]
-        public Action ConsolidationTestConnection { get; set; } = () => AIChatClient.TestConnection("consolidation");
+        public Action ConsolidationTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("consolidation"); };
 
         private string _checkInApiUrl = "";
 
@@ -601,7 +601,7 @@ namespace AIChronicle
         [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("签到场景", GroupOrder = 9)]
-        public Action CheckInTestConnection { get; set; } = () => AIChatClient.TestConnection("chat");
+        public Action CheckInTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("chat"); };
 
         private string _chanceryApiUrl = "";
 
@@ -660,7 +660,7 @@ namespace AIChronicle
         [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("秘书处场景", GroupOrder = 10)]
-        public Action ChanceryTestConnection { get; set; } = () => AIChatClient.TestConnection("chancery");
+        public Action ChanceryTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("chancery"); };
 
         private int _chatFontSize = 24;
         private int _chatSenderFontSize = 22;
@@ -1323,7 +1323,7 @@ namespace AIChronicle
         [SettingPropertyButton("测试连接", Content = "点击测试", Order = 8,
             RequireRestart = false, HintText = "点击按钮测试兜底连接设置（含 function calling 支持检测）。")]
         [SettingPropertyGroup("连接设置（兜底）")]
-        public Action TestConnection { get; set; } = () => AIChatClient.TestConnection("default");
+        public Action TestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("default"); };
 
         [SettingPropertyButton("强制开始外交", Content = "立即触发", Order = 12,
             RequireRestart = false, HintText = "立即激活所有国王 Agent 进行一轮外交审视，并重置计时器。")]

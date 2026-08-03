@@ -378,15 +378,6 @@ namespace AIChronicle
             AgentScheduler.QueueSpecialChronicle(name);
         }
 
-        private void OnKingdomCreated(Kingdom kingdom)
-        {
-            var name = kingdom.Name?.ToString() ?? "未知王国";
-            var founder = kingdom.RulingClan?.Leader?.Name?.ToString() ?? "未知";
-            RecordEvent("kingdom_created", $"{name}建立，创始人为{founder}");
-
-            AgentScheduler.QueueSpecialChronicle(name);
-        }
-
         private void OnHeroKilled(Hero victim, Hero killer, KillCharacterAction.KillCharacterActionDetail detail, bool showNotifications = true)
         {
             if (victim == null) return;

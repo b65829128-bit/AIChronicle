@@ -12,8 +12,6 @@ namespace AIChronicle
 {
     public static class DiplomacyService
     {
-        public static bool IsInProgress = false;
-
         private static readonly Dictionary<string, string> _kingdomNameMap = new()
         {
             ["battania"] = "巴旦尼亚", ["battanian"] = "巴旦尼亚",
@@ -89,12 +87,10 @@ namespace AIChronicle
             if (myKingdom.IsAtWarWith(target)) return $"已经与{target.Name}处于交战状态。";
             // 宣战宣言：供 HistoryRecorder 记 war_declared 史料（历史与现实对照），用完清空
             HistoryRecorder.PendingWarDeclaration = string.IsNullOrWhiteSpace(message) ? null : message;
-            IsInProgress = true;
             try { DeclareWarAction.ApplyByDefault(myKingdom, target); }
             finally
             {
                 HistoryRecorder.PendingWarDeclaration = null;
-                IsInProgress = false;
             }
             var msgSuffix = !string.IsNullOrEmpty(message) ? $"\n宣战声明：{message}" : "";
             InformationManager.DisplayMessage(new InformationMessage(
@@ -115,10 +111,6 @@ namespace AIChronicle
                     $"{actingHero.Name} 提议议和失败：未找到王国「{targetKingdomName}」", Colors.Red));
                 return $"[错误] 未找到王国：{targetKingdomName}";
             }
-
-            InformationManager.DisplayMessage(new InformationMessage(
-                $"[诊断] {actingHero.Name}（{myKingdom.Name}）→ propose_peace → {target.Name}，IsAtWar={myKingdom.IsAtWarWith(target)}，myKingdom实例={myKingdom.GetHashCode()}，target实例={target.GetHashCode()}",
-                Colors.Cyan));
 
             if (!myKingdom.IsAtWarWith(target))
             {
@@ -289,7 +281,6 @@ namespace AIChronicle
             HistoryRecorder.PendingFiefGrantText = string.IsNullOrWhiteSpace(reason)
                 ? $"{actingHero.Name}册封"
                 : $"{actingHero.Name}以「{reason}」册封";
-            IsInProgress = true;
             try
             {
                 ChangeOwnerOfSettlementAction.ApplyByKingDecision(targetHero, settlement);
@@ -297,7 +288,6 @@ namespace AIChronicle
             finally
             {
                 HistoryRecorder.PendingFiefGrantText = null;
-                IsInProgress = false;
             }
 
             var notice = string.IsNullOrWhiteSpace(reason)
@@ -410,17 +400,12 @@ namespace AIChronicle
                     var tributeParts = tribute.Split('_');
                     var tributeAmount = int.TryParse(tributeParts[0], out var a) ? a : 0;
                     var tributeDays = int.TryParse(tributeParts[1], out var d) ? d : 0;
-                    IsInProgress = true;
-                    try
-                    {
-                        var detailType = typeof(MakePeaceAction).GetNestedType("MakePeaceDetail",
-                            BindingFlags.Public | BindingFlags.NonPublic);
-                        var defaultDetail = Enum.ToObject(detailType!, 0);
-                        var applyInternal = typeof(MakePeaceAction).GetMethod("ApplyInternal",
-                            BindingFlags.NonPublic | BindingFlags.Static);
-                        applyInternal!.Invoke(null, new object[] { proposerKingdom, myKingdom, tributeAmount, tributeDays, defaultDetail });
-                    }
-                    finally { IsInProgress = false; }
+                    var detailType = typeof(MakePeaceAction).GetNestedType("MakePeaceDetail",
+                        BindingFlags.Public | BindingFlags.NonPublic);
+                    var defaultDetail = Enum.ToObject(detailType!, 0);
+                    var applyInternal = typeof(MakePeaceAction).GetMethod("ApplyInternal",
+                        BindingFlags.NonPublic | BindingFlags.Static);
+                    applyInternal!.Invoke(null, new object[] { proposerKingdom, myKingdom, tributeAmount, tributeDays, defaultDetail });
                     AgentManager.DeleteDiplomacyProposal(matchedId);
                     RecordDecision(myEntity.Id, proposerId, type, "接受", matchedId);
                     InformationManager.DisplayMessage(new InformationMessage(
@@ -429,14 +414,9 @@ namespace AIChronicle
                 }
                 case "alliance":
                 {
-                    IsInProgress = true;
-                    try
-                    {
-                        var ab = Campaign.Current.GetCampaignBehavior<IAllianceCampaignBehavior>();
-                        if (ab == null) return "[错误] 联盟系统未初始化";
-                        ab.StartAlliance(proposerKingdom, myKingdom);
-                    }
-                    finally { IsInProgress = false; }
+                    var ab = Campaign.Current.GetCampaignBehavior<IAllianceCampaignBehavior>();
+                    if (ab == null) return "[错误] 联盟系统未初始化";
+                    ab.StartAlliance(proposerKingdom, myKingdom);
                     ClearExpiryRecord("盟约", proposerKingdom, myKingdom); // 重新结盟生效 → 立即清旧到期记录
                     AgentManager.DeleteDiplomacyProposal(matchedId);
                     RecordDecision(myEntity.Id, proposerId, type, "接受", matchedId);
@@ -446,14 +426,9 @@ namespace AIChronicle
                 }
                 case "trade":
                 {
-                    IsInProgress = true;
-                    try
-                    {
-                        var tb = Campaign.Current.GetCampaignBehavior<ITradeAgreementsCampaignBehavior>();
-                        if (tb == null) return "[错误] 贸易系统未初始化";
-                        tb.MakeTradeAgreement(proposerKingdom, myKingdom, CampaignTime.Years(1f));
-                    }
-                    finally { IsInProgress = false; }
+                    var tb = Campaign.Current.GetCampaignBehavior<ITradeAgreementsCampaignBehavior>();
+                    if (tb == null) return "[错误] 贸易系统未初始化";
+                    tb.MakeTradeAgreement(proposerKingdom, myKingdom, CampaignTime.Years(1f));
                     ClearExpiryRecord("贸易协定", proposerKingdom, myKingdom); // 重签生效 → 立即清旧到期记录
                     AgentManager.DeleteDiplomacyProposal(matchedId);
                     RecordDecision(myEntity.Id, proposerId, type, "接受", matchedId);

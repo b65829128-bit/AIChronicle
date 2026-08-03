@@ -727,7 +727,7 @@ namespace AIChronicle
         }
 
         /// <summary>测试指定场景（或全局兜底）的连接配置。走原始请求，不依赖战役上下文，主菜单即可用。</summary>
-        public static async void TestConnection(string scenario = "default")
+        public static async Task TestConnection(string scenario = "default")
         {
             var conn = ConnectionResolver.Resolve(scenario);
             var name = ConnectionResolver.DisplayName(scenario);
