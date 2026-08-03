@@ -438,7 +438,11 @@ namespace MyFirstMod
         private static async System.Threading.Tasks.Task<string> GeneratePersonaViaLLM(string info, string name, string nativeTraits, string customTraits)
         {
             var settings = MySettings.Instance;
-            if (settings == null || string.IsNullOrEmpty(settings.ApiKey))
+            if (settings == null)
+                return "";
+            // persona 生成发生在首次对话流程，归「对话与书信」场景；未配置（本场景与兜底均空）则跳过
+            var conn = ConnectionResolver.Resolve("conversation");
+            if (string.IsNullOrWhiteSpace(conn.ApiKey))
                 return "";
 
             var prompt = LoadPersonaGenerationPrompt()
@@ -449,24 +453,24 @@ namespace MyFirstMod
 
             // 修复：原 max_tokens=1200 且不发 reasoning_effort——DeepSeek 默认思考强度为 high，
             // 思考 token 计入 max_tokens，思考一多正文就会被截断（persona 生成出过半句）。
-            // 人格生成是模板跟随的机械任务：low 思考即可，4096 上限留足余量。
+            // 人格生成是模板跟随的机械任务：low 思考即可；max_tokens 用 MCM「最大 Token 数」统一控制。
             var payload = new JObject
             {
-                ["model"] = settings.Model,
+                ["model"] = conn.Model,
                 ["messages"] = new JArray(new JObject { ["role"] = "user", ["content"] = prompt }),
-                ["max_tokens"] = 4096,
+                ["max_tokens"] = settings.MaxTokens,
                 ["temperature"] = 0.7f,
                 ["reasoning_effort"] = "low"
             };
 
             var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
-            var response = await _http.SendAsync(BuildPersonaRequest(payload), cts.Token);
+            var response = await _http.SendAsync(BuildPersonaRequest(payload, conn), cts.Token);
 
             // 端点若不接受 reasoning_effort（400）→ 去掉该参数重试一次
             if ((int)response.StatusCode == 400)
             {
                 payload.Remove("reasoning_effort");
-                response = await _http.SendAsync(BuildPersonaRequest(payload), cts.Token);
+                response = await _http.SendAsync(BuildPersonaRequest(payload, conn), cts.Token);
             }
             response.EnsureSuccessStatusCode();
 
@@ -475,14 +479,13 @@ namespace MyFirstMod
             return result["choices"]?[0]?["message"]?["content"]?.ToString()?.Trim() ?? "";
         }
 
-        private static HttpRequestMessage BuildPersonaRequest(JObject payload)
+        private static HttpRequestMessage BuildPersonaRequest(JObject payload, ConnectionInfo conn)
         {
-            var settings = MySettings.Instance!;
-            var request = new HttpRequestMessage(HttpMethod.Post, settings.ApiUrl)
+            var request = new HttpRequestMessage(HttpMethod.Post, conn.Url)
             {
                 Content = new StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
             };
-            request.Headers.Add("Authorization", "Bearer " + settings.ApiKey);
+            request.Headers.Add("Authorization", "Bearer " + conn.ApiKey);
             return request;
         }
 

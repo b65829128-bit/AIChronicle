@@ -922,7 +922,8 @@ namespace MyFirstMod
         private static async Task ProcessClanReplenishmentEvent(ActivationEvent evt)
         {
             var settings = MySettings.Instance;
-            if (settings == null || string.IsNullOrEmpty(settings.ApiKey))
+            // 用「天意建族」场景的生效密钥判断是否可跑（未配置则本场景与兜底均空）
+            if (settings == null || string.IsNullOrWhiteSpace(ConnectionResolver.Resolve("clan_replenishment").ApiKey))
                 return;
 
             try
@@ -969,7 +970,8 @@ namespace MyFirstMod
         private static async Task ProcessHistorianEvent(ActivationEvent evt)
         {
             var settings = MySettings.Instance;
-            if (settings == null || string.IsNullOrEmpty(settings.ApiKey))
+            // 用「史官」场景的生效密钥判断是否可跑（未配置则本场景与兜底均空）
+            if (settings == null || string.IsNullOrWhiteSpace(ConnectionResolver.Resolve("historian").ApiKey))
                 return;
 
             try

@@ -16,9 +16,9 @@ namespace MyFirstMod
 
         private string _apiUrl = "https://api.deepseek.com/v1/chat/completions";
 
-        [SettingPropertyText("API 地址", Order = 1, RequireRestart = false,
-            HintText = "LLM API 端点地址。默认使用 DeepSeek。")]
-        [SettingPropertyGroup("连接设置")]
+        [SettingPropertyText("API 地址（兜底）", Order = 1, RequireRestart = false,
+            HintText = "LLM API 端点地址。默认使用 DeepSeek。这是全局兜底——各场景留空的字段会回退到这里。")]
+        [SettingPropertyGroup("连接设置（兜底）")]
         public string ApiUrl
         {
             get => _apiUrl;
@@ -32,11 +32,11 @@ namespace MyFirstMod
             }
         }
 
-        private string _model = "deepseek-chat";
+        private string _model = "deepseek-v4-flash";
 
-        [SettingPropertyText("模型名称", Order = 2, RequireRestart = false,
-            HintText = "模型名称，例如 deepseek-chat、gpt-4o。")]
-        [SettingPropertyGroup("连接设置")]
+        [SettingPropertyText("模型名称（兜底）", Order = 2, RequireRestart = false,
+            HintText = "兜底模型名称，例如 deepseek-v4-flash、gpt-4o。各场景留空的字段会回退到这里。")]
+        [SettingPropertyGroup("连接设置（兜底）")]
         public string Model
         {
             get => _model;
@@ -52,9 +52,9 @@ namespace MyFirstMod
 
         private string _apiKey = "";
 
-        [SettingPropertyText("API 密钥", Order = 3, RequireRestart = false,
-            HintText = "LLM 服务的 API 密钥。")]
-        [SettingPropertyGroup("连接设置")]
+        [SettingPropertyText("API 密钥（兜底）", Order = 3, RequireRestart = false,
+            HintText = "LLM 服务的 API 密钥。这是全局兜底——各场景留空的字段会回退到这里。")]
+        [SettingPropertyGroup("连接设置（兜底）")]
         public string ApiKey
         {
             get => _apiKey;
@@ -67,6 +67,600 @@ namespace MyFirstMod
                 }
             }
         }
+
+        // ============ 场景专属连接配置 ============
+        // 每个场景一组 URL/Model/APIKey（留空=逐字段回退到「连接设置（兜底）」）+ 测试按钮。
+        // 懒得配置时只需填全局兜底三件套即可。
+
+        private string _chatApiUrl = "";
+
+        [SettingPropertyText("URL", Order = 1, RequireRestart = false,
+            HintText = "本场景专属 API 地址。留空则使用「连接设置（兜底）」中的地址。")]
+        [SettingPropertyGroup("对话与书信场景", GroupOrder = 1)]
+        public string ChatApiUrl
+        {
+            get => _chatApiUrl;
+            set
+            {
+                if (_chatApiUrl != value)
+                {
+                    _chatApiUrl = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _chatModel = "";
+
+        [SettingPropertyText("模型", Order = 2, RequireRestart = false,
+            HintText = "本场景专属模型名称。留空则使用「连接设置（兜底）」中的模型。")]
+        [SettingPropertyGroup("对话与书信场景", GroupOrder = 1)]
+        public string ChatModel
+        {
+            get => _chatModel;
+            set
+            {
+                if (_chatModel != value)
+                {
+                    _chatModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _chatApiKey = "";
+
+        [SettingPropertyText("API 密钥", Order = 3, RequireRestart = false,
+            HintText = "本场景专属 API 密钥。留空则使用「连接设置（兜底）」中的密钥。")]
+        [SettingPropertyGroup("对话与书信场景", GroupOrder = 1)]
+        public string ChatApiKey
+        {
+            get => _chatApiKey;
+            set
+            {
+                if (_chatApiKey != value)
+                {
+                    _chatApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+            RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
+        [SettingPropertyGroup("对话与书信场景", GroupOrder = 1)]
+        public Action ChatTestConnection { get; set; } = () => AIChatClient.TestConnection("conversation");
+
+        private string _diplomacyApiUrl = "";
+
+        [SettingPropertyText("URL", Order = 1, RequireRestart = false,
+            HintText = "本场景专属 API 地址。留空则使用「连接设置（兜底）」中的地址。")]
+        [SettingPropertyGroup("政务外交场景", GroupOrder = 2)]
+        public string DiplomacyApiUrl
+        {
+            get => _diplomacyApiUrl;
+            set
+            {
+                if (_diplomacyApiUrl != value)
+                {
+                    _diplomacyApiUrl = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _diplomacyModel = "";
+
+        [SettingPropertyText("模型", Order = 2, RequireRestart = false,
+            HintText = "本场景专属模型名称。留空则使用「连接设置（兜底）」中的模型。")]
+        [SettingPropertyGroup("政务外交场景", GroupOrder = 2)]
+        public string DiplomacyModel
+        {
+            get => _diplomacyModel;
+            set
+            {
+                if (_diplomacyModel != value)
+                {
+                    _diplomacyModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _diplomacyApiKey = "";
+
+        [SettingPropertyText("API 密钥", Order = 3, RequireRestart = false,
+            HintText = "本场景专属 API 密钥。留空则使用「连接设置（兜底）」中的密钥。")]
+        [SettingPropertyGroup("政务外交场景", GroupOrder = 2)]
+        public string DiplomacyApiKey
+        {
+            get => _diplomacyApiKey;
+            set
+            {
+                if (_diplomacyApiKey != value)
+                {
+                    _diplomacyApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+            RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
+        [SettingPropertyGroup("政务外交场景", GroupOrder = 2)]
+        public Action DiplomacyTestConnection { get; set; } = () => AIChatClient.TestConnection("diplomacy");
+
+        private string _kingConsultApiUrl = "";
+
+        [SettingPropertyText("URL", Order = 1, RequireRestart = false,
+            HintText = "本场景专属 API 地址。留空则使用「连接设置（兜底）」中的地址。")]
+        [SettingPropertyGroup("外交问询场景", GroupOrder = 3)]
+        public string KingConsultApiUrl
+        {
+            get => _kingConsultApiUrl;
+            set
+            {
+                if (_kingConsultApiUrl != value)
+                {
+                    _kingConsultApiUrl = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _kingConsultModel = "";
+
+        [SettingPropertyText("模型", Order = 2, RequireRestart = false,
+            HintText = "本场景专属模型名称。留空则使用「连接设置（兜底）」中的模型。")]
+        [SettingPropertyGroup("外交问询场景", GroupOrder = 3)]
+        public string KingConsultModel
+        {
+            get => _kingConsultModel;
+            set
+            {
+                if (_kingConsultModel != value)
+                {
+                    _kingConsultModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _kingConsultApiKey = "";
+
+        [SettingPropertyText("API 密钥", Order = 3, RequireRestart = false,
+            HintText = "本场景专属 API 密钥。留空则使用「连接设置（兜底）」中的密钥。")]
+        [SettingPropertyGroup("外交问询场景", GroupOrder = 3)]
+        public string KingConsultApiKey
+        {
+            get => _kingConsultApiKey;
+            set
+            {
+                if (_kingConsultApiKey != value)
+                {
+                    _kingConsultApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+            RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
+        [SettingPropertyGroup("外交问询场景", GroupOrder = 3)]
+        public Action KingConsultTestConnection { get; set; } = () => AIChatClient.TestConnection("king_consult");
+
+        private string _fiefReviewApiUrl = "";
+
+        [SettingPropertyText("URL", Order = 1, RequireRestart = false,
+            HintText = "本场景专属 API 地址。留空则使用「连接设置（兜底）」中的地址。")]
+        [SettingPropertyGroup("封地审视场景", GroupOrder = 4)]
+        public string FiefReviewApiUrl
+        {
+            get => _fiefReviewApiUrl;
+            set
+            {
+                if (_fiefReviewApiUrl != value)
+                {
+                    _fiefReviewApiUrl = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _fiefReviewModel = "";
+
+        [SettingPropertyText("模型", Order = 2, RequireRestart = false,
+            HintText = "本场景专属模型名称。留空则使用「连接设置（兜底）」中的模型。")]
+        [SettingPropertyGroup("封地审视场景", GroupOrder = 4)]
+        public string FiefReviewModel
+        {
+            get => _fiefReviewModel;
+            set
+            {
+                if (_fiefReviewModel != value)
+                {
+                    _fiefReviewModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _fiefReviewApiKey = "";
+
+        [SettingPropertyText("API 密钥", Order = 3, RequireRestart = false,
+            HintText = "本场景专属 API 密钥。留空则使用「连接设置（兜底）」中的密钥。")]
+        [SettingPropertyGroup("封地审视场景", GroupOrder = 4)]
+        public string FiefReviewApiKey
+        {
+            get => _fiefReviewApiKey;
+            set
+            {
+                if (_fiefReviewApiKey != value)
+                {
+                    _fiefReviewApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+            RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
+        [SettingPropertyGroup("封地审视场景", GroupOrder = 4)]
+        public Action FiefReviewTestConnection { get; set; } = () => AIChatClient.TestConnection("fief_review");
+
+        private string _advisoryApiUrl = "";
+
+        [SettingPropertyText("URL", Order = 1, RequireRestart = false,
+            HintText = "本场景专属 API 地址。留空则使用「连接设置（兜底）」中的地址。")]
+        [SettingPropertyGroup("封臣谏言场景", GroupOrder = 5)]
+        public string AdvisoryApiUrl
+        {
+            get => _advisoryApiUrl;
+            set
+            {
+                if (_advisoryApiUrl != value)
+                {
+                    _advisoryApiUrl = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _advisoryModel = "";
+
+        [SettingPropertyText("模型", Order = 2, RequireRestart = false,
+            HintText = "本场景专属模型名称。留空则使用「连接设置（兜底）」中的模型。")]
+        [SettingPropertyGroup("封臣谏言场景", GroupOrder = 5)]
+        public string AdvisoryModel
+        {
+            get => _advisoryModel;
+            set
+            {
+                if (_advisoryModel != value)
+                {
+                    _advisoryModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _advisoryApiKey = "";
+
+        [SettingPropertyText("API 密钥", Order = 3, RequireRestart = false,
+            HintText = "本场景专属 API 密钥。留空则使用「连接设置（兜底）」中的密钥。")]
+        [SettingPropertyGroup("封臣谏言场景", GroupOrder = 5)]
+        public string AdvisoryApiKey
+        {
+            get => _advisoryApiKey;
+            set
+            {
+                if (_advisoryApiKey != value)
+                {
+                    _advisoryApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+            RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
+        [SettingPropertyGroup("封臣谏言场景", GroupOrder = 5)]
+        public Action AdvisoryTestConnection { get; set; } = () => AIChatClient.TestConnection("advisory");
+
+        private string _clanReplenishmentApiUrl = "";
+
+        [SettingPropertyText("URL", Order = 1, RequireRestart = false,
+            HintText = "本场景专属 API 地址。留空则使用「连接设置（兜底）」中的地址。")]
+        [SettingPropertyGroup("天意建族场景", GroupOrder = 6)]
+        public string ClanReplenishmentApiUrl
+        {
+            get => _clanReplenishmentApiUrl;
+            set
+            {
+                if (_clanReplenishmentApiUrl != value)
+                {
+                    _clanReplenishmentApiUrl = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _clanReplenishmentModel = "";
+
+        [SettingPropertyText("模型", Order = 2, RequireRestart = false,
+            HintText = "本场景专属模型名称。留空则使用「连接设置（兜底）」中的模型。")]
+        [SettingPropertyGroup("天意建族场景", GroupOrder = 6)]
+        public string ClanReplenishmentModel
+        {
+            get => _clanReplenishmentModel;
+            set
+            {
+                if (_clanReplenishmentModel != value)
+                {
+                    _clanReplenishmentModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _clanReplenishmentApiKey = "";
+
+        [SettingPropertyText("API 密钥", Order = 3, RequireRestart = false,
+            HintText = "本场景专属 API 密钥。留空则使用「连接设置（兜底）」中的密钥。")]
+        [SettingPropertyGroup("天意建族场景", GroupOrder = 6)]
+        public string ClanReplenishmentApiKey
+        {
+            get => _clanReplenishmentApiKey;
+            set
+            {
+                if (_clanReplenishmentApiKey != value)
+                {
+                    _clanReplenishmentApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+            RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
+        [SettingPropertyGroup("天意建族场景", GroupOrder = 6)]
+        public Action ClanReplenishmentTestConnection { get; set; } = () => AIChatClient.TestConnection("clan_replenishment");
+
+        private string _historianApiUrl = "";
+
+        [SettingPropertyText("URL", Order = 1, RequireRestart = false,
+            HintText = "本场景专属 API 地址。留空则使用「连接设置（兜底）」中的地址。")]
+        [SettingPropertyGroup("史官场景", GroupOrder = 7)]
+        public string HistorianApiUrl
+        {
+            get => _historianApiUrl;
+            set
+            {
+                if (_historianApiUrl != value)
+                {
+                    _historianApiUrl = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _historianModel = "";
+
+        [SettingPropertyText("模型", Order = 2, RequireRestart = false,
+            HintText = "本场景专属模型名称。留空则使用「连接设置（兜底）」中的模型。")]
+        [SettingPropertyGroup("史官场景", GroupOrder = 7)]
+        public string HistorianModel
+        {
+            get => _historianModel;
+            set
+            {
+                if (_historianModel != value)
+                {
+                    _historianModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _historianApiKey = "";
+
+        [SettingPropertyText("API 密钥", Order = 3, RequireRestart = false,
+            HintText = "本场景专属 API 密钥。留空则使用「连接设置（兜底）」中的密钥。")]
+        [SettingPropertyGroup("史官场景", GroupOrder = 7)]
+        public string HistorianApiKey
+        {
+            get => _historianApiKey;
+            set
+            {
+                if (_historianApiKey != value)
+                {
+                    _historianApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+            RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
+        [SettingPropertyGroup("史官场景", GroupOrder = 7)]
+        public Action HistorianTestConnection { get; set; } = () => AIChatClient.TestConnection("historian");
+
+        private string _consolidationApiUrl = "";
+
+        [SettingPropertyText("URL", Order = 1, RequireRestart = false,
+            HintText = "本场景专属 API 地址。留空则使用「连接设置（兜底）」中的地址。")]
+        [SettingPropertyGroup("记忆巩固场景", GroupOrder = 8)]
+        public string ConsolidationApiUrl
+        {
+            get => _consolidationApiUrl;
+            set
+            {
+                if (_consolidationApiUrl != value)
+                {
+                    _consolidationApiUrl = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _consolidationModel = "";
+
+        [SettingPropertyText("模型", Order = 2, RequireRestart = false,
+            HintText = "本场景专属模型名称。留空则使用「连接设置（兜底）」中的模型。")]
+        [SettingPropertyGroup("记忆巩固场景", GroupOrder = 8)]
+        public string ConsolidationModel
+        {
+            get => _consolidationModel;
+            set
+            {
+                if (_consolidationModel != value)
+                {
+                    _consolidationModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _consolidationApiKey = "";
+
+        [SettingPropertyText("API 密钥", Order = 3, RequireRestart = false,
+            HintText = "本场景专属 API 密钥。留空则使用「连接设置（兜底）」中的密钥。")]
+        [SettingPropertyGroup("记忆巩固场景", GroupOrder = 8)]
+        public string ConsolidationApiKey
+        {
+            get => _consolidationApiKey;
+            set
+            {
+                if (_consolidationApiKey != value)
+                {
+                    _consolidationApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+            RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
+        [SettingPropertyGroup("记忆巩固场景", GroupOrder = 8)]
+        public Action ConsolidationTestConnection { get; set; } = () => AIChatClient.TestConnection("consolidation");
+
+        private string _checkInApiUrl = "";
+
+        [SettingPropertyText("URL", Order = 1, RequireRestart = false,
+            HintText = "本场景专属 API 地址。留空则使用「连接设置（兜底）」中的地址。")]
+        [SettingPropertyGroup("签到场景", GroupOrder = 9)]
+        public string CheckInApiUrl
+        {
+            get => _checkInApiUrl;
+            set
+            {
+                if (_checkInApiUrl != value)
+                {
+                    _checkInApiUrl = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _checkInModel = "";
+
+        [SettingPropertyText("模型", Order = 2, RequireRestart = false,
+            HintText = "本场景专属模型名称。留空则使用「连接设置（兜底）」中的模型。")]
+        [SettingPropertyGroup("签到场景", GroupOrder = 9)]
+        public string CheckInModel
+        {
+            get => _checkInModel;
+            set
+            {
+                if (_checkInModel != value)
+                {
+                    _checkInModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _checkInApiKey = "";
+
+        [SettingPropertyText("API 密钥", Order = 3, RequireRestart = false,
+            HintText = "本场景专属 API 密钥。留空则使用「连接设置（兜底）」中的密钥。")]
+        [SettingPropertyGroup("签到场景", GroupOrder = 9)]
+        public string CheckInApiKey
+        {
+            get => _checkInApiKey;
+            set
+            {
+                if (_checkInApiKey != value)
+                {
+                    _checkInApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+            RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
+        [SettingPropertyGroup("签到场景", GroupOrder = 9)]
+        public Action CheckInTestConnection { get; set; } = () => AIChatClient.TestConnection("chat");
+
+        private string _chanceryApiUrl = "";
+
+        [SettingPropertyText("URL", Order = 1, RequireRestart = false,
+            HintText = "本场景专属 API 地址。留空则使用「连接设置（兜底）」中的地址。")]
+        [SettingPropertyGroup("秘书处场景", GroupOrder = 10)]
+        public string ChanceryApiUrl
+        {
+            get => _chanceryApiUrl;
+            set
+            {
+                if (_chanceryApiUrl != value)
+                {
+                    _chanceryApiUrl = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _chanceryModel = "";
+
+        [SettingPropertyText("模型", Order = 2, RequireRestart = false,
+            HintText = "本场景专属模型名称。留空则使用「连接设置（兜底）」中的模型。")]
+        [SettingPropertyGroup("秘书处场景", GroupOrder = 10)]
+        public string ChanceryModel
+        {
+            get => _chanceryModel;
+            set
+            {
+                if (_chanceryModel != value)
+                {
+                    _chanceryModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _chanceryApiKey = "";
+
+        [SettingPropertyText("API 密钥", Order = 3, RequireRestart = false,
+            HintText = "本场景专属 API 密钥。留空则使用「连接设置（兜底）」中的密钥。")]
+        [SettingPropertyGroup("秘书处场景", GroupOrder = 10)]
+        public string ChanceryApiKey
+        {
+            get => _chanceryApiKey;
+            set
+            {
+                if (_chanceryApiKey != value)
+                {
+                    _chanceryApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+            RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
+        [SettingPropertyGroup("秘书处场景", GroupOrder = 10)]
+        public Action ChanceryTestConnection { get; set; } = () => AIChatClient.TestConnection("chancery");
 
         private int _chatFontSize = 24;
         private int _chatSenderFontSize = 22;
@@ -658,7 +1252,7 @@ namespace MyFirstMod
 
         [SettingPropertyInteger("最大 Token 数", 50, 65536, Order = 5, RequireRestart = false,
             HintText = "AI 单次回复的最大 token 数。DeepSeek V4 最高支持 384K 输出；默认 32768 对长编年史/长思考都足够，特殊场景可上调至 65536。")]
-        [SettingPropertyGroup("连接设置")]
+        [SettingPropertyGroup("连接设置（兜底）")]
         public int MaxTokens
         {
             get => _maxTokens;
@@ -676,7 +1270,7 @@ namespace MyFirstMod
 
         [SettingPropertyFloatingInteger("回复创造性 (Temperature)", 0.1f, 2.0f, Order = 6, RequireRestart = false,
             HintText = "AI 回复的随机性。越低越稳定保守，越高越有创造性。")]
-        [SettingPropertyGroup("连接设置")]
+        [SettingPropertyGroup("连接设置（兜底）")]
         public float Temperature
         {
             get => _temperature;
@@ -694,7 +1288,7 @@ namespace MyFirstMod
 
         [SettingPropertyDropdown("思考强度 (reasoning_effort)", Order = 9, RequireRestart = false,
             HintText = "AI 思考强度（DeepSeek reasoning_effort）。这是成本大头：思考按输出价计费（flash 2元/M），默认 high 时每次决策都会产生大量思维链。\nlow=最省 token、决策更直接；high=更周全但更贵；max=最强推理。\n史官固定为 high（文笔核心），不受此设置影响。\n部分模型（非思考模式或不支持该参数的端点）此设置不生效。")]
-        [SettingPropertyGroup("连接设置")]
+        [SettingPropertyGroup("连接设置（兜底）")]
         public MCM.Common.Dropdown<string> ReasoningEffort
         {
             get => _reasoningEffort;
@@ -712,7 +1306,7 @@ namespace MyFirstMod
 
         [SettingPropertyInteger("API 超时（秒）", 10, 120, Order = 7, RequireRestart = false,
             HintText = "API 请求超时时间，网络慢时可调大。")]
-        [SettingPropertyGroup("连接设置")]
+        [SettingPropertyGroup("连接设置（兜底）")]
         public int TimeoutSeconds
         {
             get => _timeout;
@@ -727,21 +1321,9 @@ namespace MyFirstMod
         }
 
         [SettingPropertyButton("测试连接", Content = "点击测试", Order = 8,
-            RequireRestart = false, HintText = "点击按钮测试 API 是否能连通，包括 function calling 支持检测。")]
-        [SettingPropertyGroup("连接设置")]
-        public Action TestConnection { get; set; } = () =>
-        {
-            var settings = MySettings.Instance!;
-            if (string.IsNullOrWhiteSpace(settings.ApiKey))
-            {
-                InformationManager.DisplayMessage(new InformationMessage(
-                    "[MyFirstMod] API 密钥为空，请先填写。",
-                    Colors.Red));
-                return;
-            }
-
-            AIChatClient.TestConnection();
-        };
+            RequireRestart = false, HintText = "点击按钮测试兜底连接设置（含 function calling 支持检测）。")]
+        [SettingPropertyGroup("连接设置（兜底）")]
+        public Action TestConnection { get; set; } = () => AIChatClient.TestConnection("default");
 
         [SettingPropertyButton("强制开始外交", Content = "立即触发", Order = 12,
             RequireRestart = false, HintText = "立即激活所有国王 Agent 进行一轮外交审视，并重置计时器。")]

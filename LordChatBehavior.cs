@@ -98,7 +98,8 @@ namespace MyFirstMod
 
         private bool ChatDialogCondition()
         {
-            if (string.IsNullOrWhiteSpace(MySettings.Instance!.ApiKey))
+            // 用「对话与书信」场景的生效密钥判断是否显示聊天入口（未配置则本场景与兜底均空）
+            if (string.IsNullOrWhiteSpace(ConnectionResolver.Resolve("conversation").ApiKey))
                 return false;
             return Hero.OneToOneConversationHero != null;
         }

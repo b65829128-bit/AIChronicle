@@ -267,6 +267,8 @@ namespace MyFirstMod
             }
 
             var settings = MySettings.Instance!;
+            // 场景专属连接：本 intent 的 URL/Model/APIKey（留空字段回退到全局兜底）
+            var conn = ConnectionResolver.Resolve(intent);
 
             // 史官系统：文笔是模组核心，保持"单一 system 消息"结构与旧版一致（情境内容在 system 尾部），
             // 不拆易变块——绝对保真。史官内容几乎静态（仅时间变化，位于尾部），缓存收益仍远高于改前。
@@ -424,7 +426,7 @@ namespace MyFirstMod
                 {
                     var p = new JObject
                     {
-                        ["model"] = settings.Model,
+                        ["model"] = conn.Model,
                         ["messages"] = JToken.FromObject(messageList),
                         ["max_tokens"] = settings.MaxTokens,
                         ["temperature"] = settings.Temperature,
@@ -446,11 +448,11 @@ namespace MyFirstMod
                 var withEffort = _reasoningEffortSupported && reasoningEffort != null;
                 var payload = BuildPayload(withUsage, withEffort);
                 var json = JsonConvert.SerializeObject(payload);
-                var request = new HttpRequestMessage(HttpMethod.Post, settings.ApiUrl)
+                var request = new HttpRequestMessage(HttpMethod.Post, conn.Url)
                 {
                     Content = new StringContent(json, Encoding.UTF8, "application/json")
                 };
-                request.Headers.Add("Authorization", $"Bearer {settings.ApiKey}");
+                request.Headers.Add("Authorization", $"Bearer {conn.ApiKey}");
 
                 var cts = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
                 var httpResponse = await _client.SendAsync(
@@ -466,11 +468,11 @@ namespace MyFirstMod
                     DebugLogger.Log($"端点拒绝 400，本会话回退为无 usage/无 reasoning_effort 请求 intent={intent}");
                     var fallbackPayload = BuildPayload(false, false);
                     var fallbackJson = JsonConvert.SerializeObject(fallbackPayload);
-                    var fallbackRequest = new HttpRequestMessage(HttpMethod.Post, settings.ApiUrl)
+                    var fallbackRequest = new HttpRequestMessage(HttpMethod.Post, conn.Url)
                     {
                         Content = new StringContent(fallbackJson, Encoding.UTF8, "application/json")
                     };
-                    fallbackRequest.Headers.Add("Authorization", $"Bearer {settings.ApiKey}");
+                    fallbackRequest.Headers.Add("Authorization", $"Bearer {conn.ApiKey}");
                     httpResponse = await _client.SendAsync(
                         fallbackRequest,
                         HttpCompletionOption.ResponseHeadersRead,
@@ -682,27 +684,27 @@ namespace MyFirstMod
             };
         }
 
-        public static async Task<string> TestFunctionCalling()
+        public static async Task<string> TestFunctionCalling(ConnectionInfo conn)
         {
             var settings = MySettings.Instance!;
             var payload = new
             {
-                model = settings.Model,
+                model = conn.Model,
                 messages = new[]
                 {
                     new { role = "user", content = "我叫炎瑰。现在请用一句话跟我打招呼并介绍你自己，同时调用 update_knowledge 函数记录你对我的认知。" }
                 },
                 tools = BuildTools(),
                 temperature = 0.7f,
-                max_tokens = 300
+                max_tokens = settings.MaxTokens
             };
 
             var json = JsonConvert.SerializeObject(payload);
-            var request = new HttpRequestMessage(HttpMethod.Post, settings.ApiUrl)
+            var request = new HttpRequestMessage(HttpMethod.Post, conn.Url)
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
-            request.Headers.Add("Authorization", $"Bearer {settings.ApiKey}");
+            request.Headers.Add("Authorization", $"Bearer {conn.ApiKey}");
 
             var cts = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
             var response = await _client.SendAsync(request, cts.Token);
@@ -724,41 +726,68 @@ namespace MyFirstMod
             return $"支持 function calling。\n函数名: {name}\n参数: knowledge={parsed["knowledge"]}";
         }
 
-        public static async void TestConnection()
+        /// <summary>测试指定场景（或全局兜底）的连接配置。走原始请求，不依赖战役上下文，主菜单即可用。</summary>
+        public static async void TestConnection(string scenario = "default")
         {
-            var settings = MySettings.Instance!;
+            var conn = ConnectionResolver.Resolve(scenario);
+            var name = ConnectionResolver.DisplayName(scenario);
+            if (string.IsNullOrWhiteSpace(conn.ApiKey))
+            {
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"[MyFirstMod] [{name}] API 密钥为空（本场景与兜底均未配置），请先填写。",
+                    Colors.Red));
+                return;
+            }
+
             InformationManager.DisplayMessage(new InformationMessage(
-                "[MyFirstMod] 正在测试 API 连接...",
+                $"[MyFirstMod] 正在测试 [{name}] 连接...",
                 Colors.Cyan));
 
             try
             {
-                var normalTest = await SendMessage(new CharacterPrompt
+                var settings = MySettings.Instance!;
+                var payload = new JObject
                 {
-                    HeroName = "测试领主",
-                    ChatHistory = new List<ChatHistoryEntry>
+                    ["model"] = conn.Model,
+                    ["messages"] = new JArray(new JObject
                     {
-                        new() { Role = "user", Content = "你好，请用一句话介绍卡拉迪亚大陆。" }
-                    }
-                });
+                        ["role"] = "user",
+                        ["content"] = "你好，请用一句话介绍卡拉迪亚大陆。"
+                    }),
+                    ["max_tokens"] = settings.MaxTokens,
+                    ["temperature"] = 0.7f
+                };
+
+                var json = JsonConvert.SerializeObject(payload);
+                var request = new HttpRequestMessage(HttpMethod.Post, conn.Url)
+                {
+                    Content = new StringContent(json, Encoding.UTF8, "application/json")
+                };
+                request.Headers.Add("Authorization", $"Bearer {conn.ApiKey}");
+
+                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
+                var response = await _client.SendAsync(request, cts.Token);
+                response.EnsureSuccessStatusCode();
+                var body = await response.Content.ReadAsStringAsync();
+                var reply = JObject.Parse(body)["choices"]?[0]?["message"]?["content"]?.ToString() ?? "";
 
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] 连接成功！回复：{normalTest.Content}",
+                    $"[MyFirstMod] [{name}] 连接成功！回复：{reply}",
                     Colors.Green));
 
                 InformationManager.DisplayMessage(new InformationMessage(
-                    "[MyFirstMod] 正在检测 function calling 支持...",
+                    $"[MyFirstMod] [{name}] 正在检测 function calling 支持...",
                     Colors.Cyan));
 
-                var fcResult = await TestFunctionCalling();
+                var fcResult = await TestFunctionCalling(conn);
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] {fcResult}",
+                    $"[MyFirstMod] [{name}] {fcResult}",
                     Colors.Green));
             }
             catch (Exception ex)
             {
                 InformationManager.DisplayMessage(new InformationMessage(
-                    $"[MyFirstMod] 连接失败：{ex.Message}",
+                    $"[MyFirstMod] [{name}] 连接失败：{ex.Message}",
                     Colors.Red));
             }
         }
