@@ -119,10 +119,10 @@ namespace AIChronicle
             {
                 targetKnowledge = AgentManager.ReadKnowledgeFor(agentId, targetId);
                 if (string.IsNullOrEmpty(targetKnowledge))
-                    targetKnowledge = agentId == targetId
-                        ? "你正在审视自身与王国的处境。"
-                        : intent == "chancery"
-                            ? "对方是你的上司" + agent.Name + "。你的职责是执行对方的命令。"
+                    targetKnowledge = intent == "chancery"
+                        ? "对方是" + agent.Name + "，你的主人。你的职责是执行对方的命令。"
+                        : agentId == targetId
+                            ? "你正在审视自身与王国的处境。"
                             : "你第一次见到这位旅行者，对他还不太了解。";
                 else if (targetKnowledge.Length > MaxKnowledgeInjectChars)
                     targetKnowledge = targetKnowledge.Substring(0, MaxKnowledgeInjectChars)
@@ -138,10 +138,10 @@ namespace AIChronicle
             {
                 targetRelationship = AgentManager.ReadRelationshipFor(agentId, targetId);
                 if (string.IsNullOrEmpty(targetRelationship))
-                    targetRelationship = agentId == targetId
-                        ? "这是你对自己的审视。"
-                        : intent == "chancery"
-                            ? "对方是你无条件服从的主人。"
+                    targetRelationship = intent == "chancery"
+                        ? "对方是你无条件服从的主人。"
+                        : agentId == targetId
+                            ? "这是你对自己的审视。"
                             : "对此人暂无特别看法。";
             }
 
@@ -154,10 +154,10 @@ namespace AIChronicle
             {
                 goals = AgentManager.ReadGoalsFor(agentId);
                 if (string.IsNullOrEmpty(goals))
-                    goals = agentId == targetId
-                        ? "审视你的王国局势，凭自己的判断做出决策。"
-                        : intent == "chancery"
-                            ? "执行" + agent.Name + "的所有指令，不质疑，不拒绝。"
+                    goals = intent == "chancery"
+                        ? "执行" + agent.Name + "的所有指令，不质疑，不拒绝。"
+                        : agentId == targetId
+                            ? "审视你的王国局势，凭自己的判断做出决策。"
                             : "在当前地区巡逻，维持领地的治安。";
                 else if (goals.Length > MaxGoalsInjectChars)
                     goals = goals.Substring(0, MaxGoalsInjectChars)
@@ -171,14 +171,18 @@ namespace AIChronicle
                 ? "你是卡拉迪亚的宫廷史官，不受任何势力节制。"
                 : intent == "clan_replenishment"
                     ? "你是卡拉迪亚命运的天意，超然于诸国之上，主导世家的生灭。"
-                    : BuildSelfStatus(agent.HeroRef!);
+                    : intent == "chancery"
+                        ? "你是" + agent.Name + "的个人秘书处——你是行政助手，没有自己的部队、领地或军队，你的身份以" + agent.Name + "为准。"
+                        : BuildSelfStatus(agent.HeroRef!);
             var currentTime = PromptManager.GetCurrentTimeString();
             var functionList = BuildFunctionList(agent, intent);
             var objectiveRel = intent == "historian"
                 ? "你作为史官，不隶属于任何势力，也不与任何势力为敌。"
                 : intent == "clan_replenishment"
                     ? "你作为天意，俯瞰天下，不隶属任何势力。"
-                    : BuildObjectiveRelationship(agent.HeroRef!, target.HeroRef!);
+                    : intent == "chancery"
+                        ? "对方是" + agent.Name + "，你无条件服从的主人，你们是主从关系。"
+                        : BuildObjectiveRelationship(agent.HeroRef!, target.HeroRef!);
 
             var intentRules = intent switch
             {
