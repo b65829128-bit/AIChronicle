@@ -591,7 +591,7 @@ namespace AIChronicle
         private bool _clanReplenishmentEnabled = false;
 
         [SettingPropertyBool("启用家族补充", Order = 17, RequireRestart = false,
-            HintText = "【实验性功能，默认关闭】开启：封臣家族或雇佣兵家族数量低于下限时，激活「天意」agent 补充新的贵族家族，防止大屠杀导致世家凋零、世界崩解。该功能仍不完善，建议先保持关闭。")]
+            HintText = "【实验性功能，默认关闭】开启：在世贵族/佣兵家族总数低于下限时，激活「天意」agent 补充新的贵族家族，防止大屠杀导致世家凋零、世界崩解。该功能仍不完善，建议先保持关闭。")]
         [SettingPropertyGroup("游戏设置")]
         public bool ClanReplenishmentEnabled
         {
@@ -606,37 +606,37 @@ namespace AIChronicle
             }
         }
 
-        private int _minVassalClans = 70;
+        private int _minTotalClans = 70;
 
-        [SettingPropertyInteger("封臣家族补充阈值", 20, 150, Order = 18, RequireRestart = false,
-            HintText = "封臣家族（非雇佣兵、非叛军的贵族氏族）数量低于此值时触发「天意」补充新家族。单位：家族。原版卡拉迪亚约 70 个封臣家族——调低则世界更冷清、家族更稀有，调高则世家更兴旺。")]
+        [SettingPropertyInteger("家族总数补充阈值", 20, 150, Order = 18, RequireRestart = false,
+            HintText = "在世贵族/佣兵家族总数低于此值时触发「天意」补充新家族。单位：家族。原版卡拉迪亚在世贵族世家+雇佣兵公司合计约 80 家——封臣与佣兵在本模组是动态身份（随时换国/改佣兵），故只按总数判定，不区分封臣/佣兵；默认 70 比原版稍低，只有真正凋零到一定程度才补族。新家族是封臣还是佣兵由天意依天下大势自行决定。")]
         [SettingPropertyGroup("游戏设置")]
-        public int MinVassalClans
+        public int MinTotalClans
         {
-            get => _minVassalClans;
+            get => _minTotalClans;
             set
             {
-                if (_minVassalClans != value)
+                if (_minTotalClans != value)
                 {
-                    _minVassalClans = value;
+                    _minTotalClans = value;
                     OnPropertyChanged();
                 }
             }
         }
 
-        private int _minMercenaryClans = 8;
+        private int _clanReplenishmentCooldownDays = 5;
 
-        [SettingPropertyInteger("雇佣兵家族补充阈值", 2, 30, Order = 19, RequireRestart = false,
-            HintText = "雇佣兵家族数量低于此值时触发「天意」补充。单位：家族。原版卡拉迪亚约 8 个雇佣兵家族。")]
+        [SettingPropertyInteger("家族补充冷却（游戏天）", 1, 30, Order = 19, RequireRestart = false,
+            HintText = "天意每次降下血脉后的冷却时间（游戏天）。冷却期内即使家族仍低于下限也不重复激活——避免世界长期凋零时每几天就连补一族的「永动机」式刷族。")]
         [SettingPropertyGroup("游戏设置")]
-        public int MinMercenaryClans
+        public int ClanReplenishmentCooldownDays
         {
-            get => _minMercenaryClans;
+            get => _clanReplenishmentCooldownDays;
             set
             {
-                if (_minMercenaryClans != value)
+                if (_clanReplenishmentCooldownDays != value)
                 {
-                    _minMercenaryClans = value;
+                    _clanReplenishmentCooldownDays = value;
                     OnPropertyChanged();
                 }
             }

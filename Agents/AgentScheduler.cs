@@ -110,6 +110,7 @@ namespace AIChronicle
             _playerProposalShowing = false;
             _lastChronicleYear = 0;
             _lastExpiryCheckDay = -1;
+            _lastClanReplenishDay = -1;
             _historianInitialized = false;
             _lastAdvisorySpeaker.Clear();
             _lastAdvisoryCheck.Clear();
@@ -297,48 +298,88 @@ namespace AIChronicle
             DiplomacyService.CheckExpiringAgreements();
         }
 
-        /// <summary>统计当前在世封臣/雇佣兵家族数量。
-        /// 封臣口径 = 所有在世贵族家族（含无主/换国过渡中的），排除雇佣兵与叛军——只有真正灭族才会拉低计数，
-        /// 符合「防世家凋零」的本意（原口径只算"当前挂在王国名下"的，家族一换国/叛变计数就掉，导致天意误判凋零而疯狂补族）。</summary>
-        private static (int Vassals, int Mercenaries) CountClans()
+        /// <summary>统计当前在世贵族/佣兵家族。返回 (总家族数, 正式封臣, 雇佣兵公司)。
+        /// 封臣与佣兵在本模组是动态身份（随时可换国/改佣兵），且「当前受雇」随签约状态波动（和平期大量未受雇），
+        /// 因此主口径是「家族总数」——只要不是真正灭族就不拉低计数，避免和平期/新档误判凋零而疯狂补族。
+        /// 封臣/佣兵拆分只作为天意的决策参考，不参与触发判定。
+        /// 存活判定用「家族成员有在世者」而非「族长非空」——族长死后接任需要时间（无继承人时原版甚至会暂留已故族长），
+        /// 若按族长判空会把族长交接的短暂窗口误判为家族凋零，从而错误激活天意。</summary>
+        private static (int Total, int Vassals, int Mercenaries) CountClans()
         {
-            if (Campaign.Current == null) return (0, 0);
+            if (Campaign.Current == null) return (0, 0, 0);
+            var total = 0;
             var vassals = 0;
             var mercenaries = 0;
             foreach (var clan in Clan.All)
             {
-                if (clan == null || clan.Leader == null) continue;
-                if (clan.IsUnderMercenaryService)
+                if (clan == null || clan.IsEliminated || clan.IsRebelClan || clan.IsBanditFaction) continue;
+                var hasLivingMember = false;
+                if (clan.Heroes != null)
+                {
+                    foreach (var member in clan.Heroes)
+                    {
+                        if (member != null && member.IsAlive)
+                        {
+                            hasLivingMember = true;
+                            break;
+                        }
+                    }
+                }
+                if (!hasLivingMember) continue;
+                if (clan.IsUnderMercenaryService || clan.IsClanTypeMercenary)
+                {
                     mercenaries++;
-                else if (!clan.IsRebelClan && clan.IsNoble)
+                    total++;
+                }
+                else if (clan.IsNoble)
+                {
                     vassals++;
+                    total++;
+                }
             }
-            return (vassals, mercenaries);
+            return (total, vassals, mercenaries);
         }
 
-        /// <summary>每日检测：封臣/雇佣兵家族低于下限时，激活「天意」补充新家族（家族补充系统，防大屠杀导致世家凋零）。
-        /// 有冷却（2 游戏天），且已有待处理的补充事件时不重复排队。</summary>
+        /// <summary>每日检测：在世贵族/佣兵家族总数低于下限时，激活「天意」补充新家族（家族补充系统，防大屠杀导致世家凋零）。
+        /// 有冷却（MCM「家族补充冷却」可调），且已有待处理的补充事件时不重复排队。
+        /// 只在玩家位于战役大地图时检测——捏脸/战役初始化阶段世界数据未稳定（家族族长未挂接、雇佣兵未签约），
+        /// 计数失真会误判凋零而错误激活天意。</summary>
         private static void CheckClanReplenishment()
         {
             if (Campaign.Current == null) return;
             var settings = MySettings.Instance;
             if (settings?.ClanReplenishmentEnabled != true) return;
+            if (!SubModule.IsPlayerFreeOnMap()) return;
 
             var nowDays = (int)CampaignTime.Now.ToDays;
-            if (_lastClanReplenishDay >= 0 && nowDays - _lastClanReplenishDay < 2) return;
+            var cooldownDays = settings.ClanReplenishmentCooldownDays;
+            if (_lastClanReplenishDay >= 0 && nowDays - _lastClanReplenishDay < cooldownDays) return;
             if (string.IsNullOrEmpty(PromptManager.CampaignDir)) return;
 
-            var (vassals, mercenaries) = CountClans();
-            var vassalThreshold = settings.MinVassalClans;
-            var mercenaryThreshold = settings.MinMercenaryClans;
-            if (vassals >= vassalThreshold && mercenaries >= mercenaryThreshold)
+            var (total, vassals, mercenaries) = CountClans();
+            var totalThreshold = settings.MinTotalClans;
+            if (total >= totalThreshold)
                 return;
 
             // 差距过大时连续激活：一次补一个，_lastClanReplenishDay 只在排队成功后推进
             _lastClanReplenishDay = nowDays;
-            var needVassal = Math.Max(0, vassalThreshold - vassals);
-            var needMercenary = Math.Max(0, mercenaryThreshold - mercenaries);
-            var content = $"当前封臣家族 {vassals} 个（下限 {vassalThreshold}，缺 {needVassal} 个）；雇佣兵家族 {mercenaries} 个（下限 {mercenaryThreshold}，缺 {needMercenary} 个）。请按规则创建一个新家族。";
+            var need = Math.Max(0, totalThreshold - total);
+
+            // 程序建议（仅参考，天意最终裁定）：某类明显凋敝则倾向补该类，否则由天意自行斟酌。
+            // 阈值只是提示——佣兵公司持续凋零（<4）建议佣兵，封臣世家凋敝（<40）建议封臣。
+            string recommendation;
+            if (mercenaries < 4)
+                recommendation = "封臣尚有余裕，而雇佣兵公司凋敝，建议以雇佣兵身份降下";
+            else if (vassals < 40)
+                recommendation = "雇佣兵尚可，而封臣世家凋敝，建议以正式封臣身份降下";
+            else
+                recommendation = "封臣与雇佣兵皆有余裕，可依天下大势自行斟酌";
+
+            var content = $"当前在世贵族/佣兵家族共 {total} 个（下限 {totalThreshold}，缺 {need} 个）。其中正式封臣家族 {vassals}、雇佣兵公司 {mercenaries}。{recommendation}。请按规则创建一个新家族。";
+
+            MainThreadExecutor.DisplayMessage(new InformationMessage(
+                $"[AI编年史] 世家凋零：在世贵族/佣兵家族仅 {total}/{totalThreshold} 家，天意将降下新的血脉。",
+                Colors.Cyan));
 
             QueueEvent(new ActivationEvent
             {

@@ -136,7 +136,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **主线程分发** | LLM 工具循环跑在后台线程，但**所有修改游戏状态的工具**经 `MainThreadExecutor` 排队到主线程 `OnApplicationTick` 执行（后台线程阻塞等待结果）；仅 `request_gold`/`request_items`/`browse_tools` 留在后台线程（前两者需主线程弹窗等待玩家，后者改本流程上下文）。背景：Bannerlord 游戏对象（MobileParty/Hero/Kingdom）是主线程独占的 |
 | **上下文隔离（AsyncLocal）** | `CurrentHero`/`CurrentIntent`/`ActivatedCategories`（AIChatClient）、`_agentEntityId`/`_targetEntityId`（AgentManager）、`_activeAgentId`/`_activeTargetId`（EntityManager）均为 `AsyncLocal`——聊天与后台信件/谏言/外交多个流程并发时上下文互不覆盖；实体缓存用 `ConcurrentDictionary`（线程安全） |
 | **秘书处** | M 键打开，玩家的个人行政助手。固定 persona（无条件服从），不读玩家 persona。国王/封臣/平民均可使用。**工具范围严格受限**：仅查询、谏言（`submit_advisory`/`submit_secret_advisory`）、诏令与问询回复（`submit_edict`/`reply_consult`，国王）、快速加入/脱离王国（`change_kingdom`，受家族等级限制）——行军/军事/金钱物品/好感/写信一律不可用（有替代路径），且不提供 `browse_tools`（防止解锁受限分类绕过权限）。玩家可经秘书处调 `submit_advisory` 提交公开谏言（雇佣兵除外） |
-| **天意** | 虚拟实体（ID: `__fate__`，HeroRef=null，与史官并列）。家族补充系统：封臣/雇佣兵家族低于下限时被激活，决定新家族名称/文化/投效势力（`create_clan`，能力门控仅天意可用），成员程序生成、等级 2、族长带兵，入原始史料但不激活史官 |
+| **天意** | 虚拟实体（ID: `__fate__`，HeroRef=null，与史官并列）。家族补充系统：在世贵族/佣兵家族**总数**（封臣世家 + 雇佣兵公司，佣兵不论是否受雇都计入）低于「家族总数补充阈值」时被激活，决定新家族名称/文化/投效势力/以封臣还是佣兵身份入世（`create_clan`，能力门控仅天意可用），成员程序生成、等级 2、族长带兵、旗帜随机，入原始史料但不激活史官。只在玩家位于大地图时检测（捏脸/初始化阶段计数失真），有 MCM 冷却防连补；成员模板用 `RebelliousHeroTemplates`（`GetRandomTemplateByOccupation(Lord)` 查不到 Lord 模板、恒 null 的历史死路径已弃） |
 | **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
 
 > **AI 聊天对话入口**：`LordChatBehavior` 在 `hero_main_options`（普通领主对话）与 `player_responds_to_surrender_demand`（被强敌擒获的投降/应战对话）两个节点注册【AI 聊天】选项。后者让被擒玩家可谈判，agent 可用 `let_go` 放行；`AIChatScreenVM` 在回复完成后检测 `PlayerEncounter.LeaveEncounter` 为真时自动关闭聊天并 `EndConversation()` 结束对话（对话中遭遇不会自动 tick 结束），玩家获释。
@@ -322,7 +322,7 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │   ├── ToolExecutor.Military.cs ← 行军/军事（move/raid/besiege/form_army/驻防/招募/俘虏）
 │   ├── ToolExecutor.Social.cs  ← 社交/通信（金钱物品/好感/放行/书信/谏言/诏令/问询）
 │   ├── ToolExecutor.Diplomacy.cs ← 阵营变更（change_kingdom 全模式 + 家族等级限制）
-│   └── ToolExecutor.Fate.cs    ← 天意建族（create_clan + 预算限流）
+│   └── ToolExecutor.Fate.cs    ← 天意建族（create_clan + 预算成功才占用 + 随机旗帜/定居点）
 ├── UI/                         ← 界面层
 │   ├── AIChatScreen.cs         ← 聊天屏幕管理器（静态类，GauntletLayer 挂载）
 │   ├── AIChatScreenVM.cs       ← 聊天 ViewModel（消息列表、输入绑定、function calling 处理）
@@ -951,7 +951,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | `let_go` | 社交 | 遭遇战中放走玩家（仅当己方兵力占优时可用，含冷却期） |
 | `release_prisoner` | 军事 | 释放自己部队中的俘虏（贵族英雄→逃亡者回领地，普通士兵→移除；支持按名单个释放或 all 全放） |
 | `execute_prisoner` | 军事 | 处决自己部队中的贵族俘虏（仅限贵族；受 MCM「处决无惩罚」控制，默认开=无惩罚） |
-| `create_clan` | 通用 | 天意建族（家族补充系统）：建新贵族家族（成员 3-6 人程序生成、家族等级 2、族长带兵、入原始史料但不激活史官）。仅 `__fate__` 实体可用（能力门控）。**代码强制每次激活只建一族**（LLM 可能连建多族，曾致原生崩溃）；英雄创建对齐游戏叛乱建族模式（先建英雄→注册进族→置 Active） |
+| `create_clan` | 通用 | 天意建族（家族补充系统）：建新贵族家族（成员 3-6 人程序生成、家族等级 2、族长带兵、旗帜随机、入原始史料但不激活史官）。仅 `__fate__` 实体可用（能力门控）。**代码强制每次激活只建一族**（LLM 可能连建多族，曾致原生崩溃）；英雄创建对齐游戏叛乱建族模式（先建英雄→注册进族→置 Active）；成员模板用 `CultureObject.RebelliousHeroTemplates`（Lord 模板不在 NotableTemplates，`GetRandomTemplateByOccupation(Lord)` 恒 null 的死路径已弃）；**预算只在建族成功后才占用**（失败不消耗、可重试） |
 
 ### 文件工具（agent_tools.json，16 个）
 

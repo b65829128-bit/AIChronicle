@@ -21,7 +21,8 @@ namespace AIChronicle
         private static bool _prevChanceryP;
         private static bool _prevHistoryH;
 
-        private static bool IsPlayerFreeOnMap()
+        /// <summary>玩家是否正位于战役大地图（非捏脸/菜单/战斗等界面）。天意等大地图系统的激活以此为准。</summary>
+        internal static bool IsPlayerFreeOnMap()
         {
             if (Campaign.Current == null) return false;
             try

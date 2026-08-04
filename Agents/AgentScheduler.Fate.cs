@@ -51,9 +51,28 @@ namespace AIChronicle
                 var response = await AIChatClient.SendMessage(
                     charPrompt, hero: null, includeTools: true, intent: "clan_replenishment");
 
-                var createdClan = response.ToolCalls.Any(tc => tc.Name == "create_clan");
-                if (!createdClan)
-                    DebugLogger.Log($"天意未调用 create_clan，本次补充未落地（稍后会再次尝试）。response={response.Content?.Substring(0, Math.Min(100, response.Content?.Length ?? 0))}");
+                // 从工具执行结果精确判断建族是否落地（结果以「已降下」开头 = 成功），
+                // 成功/失败都让玩家可见——之前只在 debug 日志里记录，玩家看到开始消息后全程无反馈。
+                var createCall = response.ToolCalls.FirstOrDefault(tc => tc.Name == "create_clan");
+                string? createResult = null;
+                if (createCall != null)
+                    response.ToolResults.TryGetValue(createCall.Id, out createResult);
+                var createdClan = createResult?.StartsWith("已降下") == true;
+
+                if (createdClan)
+                {
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
+                        $"天意降下了新的贵族血脉：{createResult}", Colors.Green));
+                }
+                else
+                {
+                    var snippet = response.Content;
+                    if (snippet != null && snippet.Length > 100) snippet = snippet.Substring(0, 100);
+                    DebugLogger.Log($"天意未成功降下血脉。工具调用={(createCall != null ? createCall.Name : "无")} 结果={createResult} response={snippet}");
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
+                        "[AI编年史] 天意沉吟未决，本次未降下血脉（数日后再试）。若反复如此，请检查「天意建族」场景的 API 连接配置。",
+                        Colors.Yellow));
+                }
             }
             catch (Exception ex)
             {
