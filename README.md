@@ -135,6 +135,14 @@ This repository was largely developed through an agent-driven workflow. `AGENTS.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution guidelines.
 
+## Acknowledgements
+
+This project stands on the shoulders of several open tools and references:
+
+- **[opencode](https://github.com/anomalyco/opencode)** — the agent-driven architecture (entities, dynamic context, file-as-memory) and especially the file read/write/grep tooling and tool-description conventions are modeled on it.
+- **DeepSeek** — the prompt-cache optimization (stable-prefix + volatile block) follows DeepSeek's official context-caching documentation.
+- **[DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)** — a DeepSeek-targeted coding agent whose approach informed our caching and streaming design.
+
 ## License
 
 [MIT](LICENSE)

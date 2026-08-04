@@ -592,5 +592,13 @@ AIChronicle/
 
 ---
 
+## 鸣谢
+
+本项目站在前人的肩膀上：
+
+- **[opencode](https://github.com/anomalyco/opencode)** — Agent 驱动架构（Entity 统一抽象、动态上下文、文件即记忆）以及文件读写/grep 工具与工具描述规范，均以其为蓝本
+- **DeepSeek** — 提示词缓存优化（稳定前缀 + 易变块）参考 DeepSeek 官方上下文缓存文档
+- **[DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)** — 面向 DeepSeek 的 coding agent，缓存与流式设计参考了它的思路
+
 ## 待办事项
 
