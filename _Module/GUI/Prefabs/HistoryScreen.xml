@@ -73,36 +73,41 @@
                                        HeightSizePolicy="CoverChildren"
                                        StackLayout.LayoutMethod="VerticalTopToBottom">
                               <ItemTemplate>
-                                <TextWidget WidthSizePolicy="StretchToParent"
-                                            HeightSizePolicy="Fixed" SuggestedHeight="30"
-                                            MarginTop="6" MarginBottom="2"
-                                            IsVisible="@IsHeader"
-                                            Text="@Name" FontSize="18"
-                                            Brush.FontColor="#8A7A66FF" />
-                                <ButtonWidget WidthSizePolicy="StretchToParent"
-                                              HeightSizePolicy="Fixed" SuggestedHeight="52"
-                                              MarginBottom="2"
-                                              IsVisible="@IsSelectable"
-                                              Brush="ButtonBrush2"
-                                              Command.Click="ExecuteSelect"
-                                              UpdateChildrenStates="true"
-                                              DoNotPassEventsToChildren="true">
+                                <Widget WidthSizePolicy="StretchToParent"
+                                        HeightSizePolicy="CoverChildren">
                                   <Children>
-                                    <Widget WidthSizePolicy="Fixed" HeightSizePolicy="Fixed"
-                                            SuggestedWidth="4" SuggestedHeight="36"
-                                            HorizontalAlignment="Left" VerticalAlignment="Center"
-                                            MarginLeft="6"
-                                            Sprite="BlankWhiteSquare_9"
-                                            Color="#D69846FF"
-                                            IsVisible="@IsSelected" DoNotAcceptEvents="true" />
                                     <TextWidget WidthSizePolicy="StretchToParent"
-                                                HeightSizePolicy="CoverChildren"
-                                                VerticalAlignment="Center"
-                                                MarginLeft="16"
+                                                HeightSizePolicy="Fixed" SuggestedHeight="30"
+                                                MarginTop="6" MarginBottom="2"
+                                                IsVisible="@IsHeader"
                                                 Text="@Name" FontSize="18"
-                                                Brush.FontColor="#D4C5B2FF" />
+                                                Brush.FontColor="#8A7A66FF" />
+                                    <ButtonWidget WidthSizePolicy="StretchToParent"
+                                                  HeightSizePolicy="Fixed" SuggestedHeight="52"
+                                                  MarginBottom="2"
+                                                  IsVisible="@IsSelectable"
+                                                  Brush="ButtonBrush2"
+                                                  Command.Click="ExecuteSelect"
+                                                  UpdateChildrenStates="true"
+                                                  DoNotPassEventsToChildren="true">
+                                      <Children>
+                                        <Widget WidthSizePolicy="Fixed" HeightSizePolicy="Fixed"
+                                                SuggestedWidth="4" SuggestedHeight="36"
+                                                HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                MarginLeft="6"
+                                                Sprite="BlankWhiteSquare_9"
+                                                Color="#D69846FF"
+                                                IsVisible="@IsSelected" DoNotAcceptEvents="true" />
+                                        <TextWidget WidthSizePolicy="StretchToParent"
+                                                    HeightSizePolicy="CoverChildren"
+                                                    VerticalAlignment="Center"
+                                                    MarginLeft="16"
+                                                    Text="@Name" FontSize="18"
+                                                    Brush.FontColor="#D4C5B2FF" />
+                                      </Children>
+                                    </ButtonWidget>
                                   </Children>
-                                </ButtonWidget>
+                                </Widget>
                               </ItemTemplate>
                             </ListPanel>
                           </Children>

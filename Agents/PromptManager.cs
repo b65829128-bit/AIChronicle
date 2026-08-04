@@ -205,6 +205,10 @@ namespace AIChronicle
             EntityManager.Initialize(npcBase);
             DebugLogger.Init(_campaignDir);
 
+            // 预置初始历史（史官开局前早已写成的上古编年史与诸文化源流纪事），
+            // 复制到 World/history/chronicles/ 供玩家（H 键史书）与 agent（read_file）阅读。
+            CopyInitialHistoryToWorld(npcBase);
+
             CopyPromptToCampaign("agent_system.txt");
             CopyPromptToCampaign("persona_generation.txt");
             CopyPromptToCampaign("diplomacy_rules.txt");
@@ -258,6 +262,35 @@ namespace AIChronicle
                     File.Copy(src, dest, true);
             }
             catch { }
+        }
+
+        /// <summary>
+        /// 战役预置初始历史：把基础目录 Prompts/InitialHistory/ 下的史文复制到
+        /// NPCs/World/history/chronicles/。只复制不存在的文件，绝不覆盖玩家已有史文
+        /// （史官未来成文、玩家手动修订均受保护）。
+        /// </summary>
+        private static void CopyInitialHistoryToWorld(string npcBase)
+        {
+            var srcDir = Path.Combine(_promptsBaseDir, "InitialHistory");
+            if (!Directory.Exists(srcDir)) return;
+
+            var destDir = Path.Combine(npcBase, "World", "history", "chronicles");
+            try
+            {
+                Directory.CreateDirectory(destDir);
+            }
+            catch { return; }
+
+            foreach (var file in Directory.GetFiles(srcDir, "*.txt"))
+            {
+                var dest = Path.Combine(destDir, Path.GetFileName(file));
+                try
+                {
+                    if (!File.Exists(dest))
+                        File.Copy(file, dest);
+                }
+                catch { }
+            }
         }
 
         public static string BuildSystemPrompt(string lordName, CharacterPrompt charPrompt)

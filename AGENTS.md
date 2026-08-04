@@ -354,6 +354,7 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │       ├── system_prompt.txt  ← 系统提示词模板（玩家可编辑，热重载）
 │       ├── world_info.txt     ← 默认世界背景（六大王国 + 天命）
 │       ├── world_info_nords.txt ← 可选诺德势力段（MCM「包含诺德势力」开启时由 ContextBuilder 拼入主世界观）
+│       ├── InitialHistory/     ← 开局预置初始历史（《卡拉迪亚上古编年史》+ 六国《XX源流纪事》，史官风格，止于1084年；战役进档时复制到 World/history/chronicles/，只补缺失不覆盖）
 │       ├── game_rules.txt     ← 游戏运转规则（玩家可编辑，热重载）
 │       ├── tools.json         ← 游戏工具定义（热重载）
 │       ├── agent_system.txt   ← Agent 系统提示词模板
