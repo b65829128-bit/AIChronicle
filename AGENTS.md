@@ -352,7 +352,8 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │   │       └── LetterListScreen.xml ← 书信收信人列表
 │   └── Prompts/
 │       ├── system_prompt.txt  ← 系统提示词模板（玩家可编辑，热重载）
-│       ├── world_info.txt     ← 默认世界背景
+│       ├── world_info.txt     ← 默认世界背景（六大王国 + 天命）
+│       ├── world_info_nords.txt ← 可选诺德势力段（MCM「包含诺德势力」开启时由 ContextBuilder 拼入主世界观）
 │       ├── game_rules.txt     ← 游戏运转规则（玩家可编辑，热重载）
 │       ├── tools.json         ← 游戏工具定义（热重载）
 │       ├── agent_system.txt   ← Agent 系统提示词模板
@@ -369,6 +370,7 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │           └── {战役名}/
 │               ├── system_prompt.txt    ← 本战役系统提示词（可独立编辑，热重载）
 │               ├── world_info.txt       ← 本战役世界背景（可独立编辑，热重载）
+│               ├── world_info_nords.txt ← 本战役诺德势力段（可独立编辑，热重载）
 │               ├── game_rules.txt       ← 本战役游戏运转规则（可独立编辑，热重载）
 │               ├── agent_system.txt     ← 本战役 Agent 提示词（热重载）
 │               ├── persona_generation.txt ← 本战役性格生成提示词（热重载）

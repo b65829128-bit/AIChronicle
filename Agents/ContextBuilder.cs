@@ -333,9 +333,27 @@ namespace AIChronicle
         {
             if (MySettings.Instance?.UseWorldInfo != true) return "";
             var path = PromptManager.GetWorldInfoPath();
+            string main;
             if (path == null || !File.Exists(path))
-                return "卡拉迪亚大陆，一片充满纷争与传奇的土地。众多王国与帝国征战不休，唯力量与智慧方能立足。";
-            return File.ReadAllText(path, Encoding.UTF8).Trim();
+                main = "卡拉迪亚大陆，一片充满纷争与传奇的土地。众多王国与帝国征战不休，唯力量与智慧方能立足。";
+            else
+                main = File.ReadAllText(path, Encoding.UTF8).Trim();
+
+            // 可选势力：诺德不是原版可交互势力，仅 MCM「包含诺德势力」开启时拼入主要势力列表。
+            // world_info.txt 里用 {nords} 占位符标记插入点；关闭时移除占位符行。
+            const string nordsMarker = "{nords}";
+            var nordsContent = "";
+            if (MySettings.Instance?.IncludeNordsFaction == true)
+            {
+                var nordsPath = PromptManager.GetWorldInfoNordsPath();
+                if (nordsPath != null && File.Exists(nordsPath))
+                    nordsContent = File.ReadAllText(nordsPath, Encoding.UTF8).Trim();
+            }
+            if (nordsContent.Length > 0)
+                main = main.Replace(nordsMarker, nordsContent);
+            else
+                main = main.Replace(nordsMarker + "\n", "").Replace(nordsMarker, "");
+            return main;
         }
 
         /// <summary>游戏规则层：让 agent 了解卡拉迪亚的实际运转机制（机动/金钱/部队上限/兵种/招募/战争/影响力），

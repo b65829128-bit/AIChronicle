@@ -372,6 +372,24 @@ namespace AIChronicle
             }
         }
 
+        private bool _includeNordsFaction = false;
+
+        [SettingPropertyBool("包含诺德势力", Order = 9, RequireRestart = false,
+            HintText = "是否在世界背景中加入「诺德」势力（大陆之外的北境异族）。默认关闭——诺德不是原版可交互势力，仅在装了相关 DLC/模组、希望 LLM 知道诺德存在时打开。")]
+        [SettingPropertyGroup("游戏设置")]
+        public bool IncludeNordsFaction
+        {
+            get => _includeNordsFaction;
+            set
+            {
+                if (_includeNordsFaction != value)
+                {
+                    _includeNordsFaction = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private float _surroundingsScanRadiusFraction = 0.2f;
 
         [SettingPropertyFloatingInteger("环境扫描半径（占地图比例）", 0.05f, 0.5f, Order = 8, RequireRestart = false,

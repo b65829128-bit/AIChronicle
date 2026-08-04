@@ -270,7 +270,8 @@ Agent 任何时候都可以调 `browse_tools("military")` 解锁某类工具，�
 ```
 _Module/Prompts/
 ├── system_prompt.txt            # 默认系统提示词模板（新战役复制为初始值）
-├── world_info.txt               # 默认世界背景介绍
+├── world_info.txt               # 默认世界背景介绍（六大王国 + 天命，独立成段可热重载）
+├── world_info_nords.txt         # 可选的诺德势力世界背景段（MCM「包含诺德势力」开启时拼入）
 ├── game_rules.txt               # 游戏运转规则（agent 按游戏机制决策，玩家可编辑，热重载）
 ├── tools.json                   # 游戏工具定义（热重载）
 ├── agent_system.txt             # Agent 系统提示词模板
@@ -300,6 +301,7 @@ _Module/Prompts/
     └── {战役名}/                 # 每个存档独立的目录
         ├── system_prompt.txt     # 本战役的系统提示词（可独立编辑，热重载）
         ├── world_info.txt        # 本战役的世界背景（可编辑，热重载）
+        ├── world_info_nords.txt  # 本战役的诺德势力段（可编辑，热重载）
         ├── game_rules.txt        # 本战役的游戏运转规则（可编辑，热重载）
         ├── agent_system.txt      # 本战役 Agent 提示词（热重载）
         ├── persona_generation.txt # 本战役性格生成提示词（热重载）
@@ -389,6 +391,7 @@ _Module/Prompts/
 | Agent 并发数 | 同时运行的 Agent 任务数上限。越大吞吐越高，但工具在主线程串行执行，过大会帧卡顿 | `5` |
 | 聊天历史上限（条） | 保留最近 N 条消息发给 AI | `20` |
 | 注入世界背景 | 是否在提示词中加入卡拉迪亚背景 | 开启 |
+| 包含诺德势力 | 是否在世界背景中额外加入「诺德」势力（大陆之外的北境异族）。默认关闭——诺德不是原版可交互势力，仅在装了相关 DLC/模组、希望 LLM 知道诺德存在时打开 | 关闭 |
 | 注入游戏规则 | 是否在提示词中加入卡拉迪亚实际运转规则（机动/金钱/部队上限/兵种/招募/战争/影响力/阵营归属——氏族加入哪国全在族长自决，无须国王准许），让 agent 按游戏机制而非现实经验决策。史官不注入 | 开启 |
 | 最大好感变化 | Agent 单次修改好感度的上限 | `5` |
 | 信件级联深度上限 | NPC 间连环写信的最大层数 | `5` |
@@ -515,6 +518,7 @@ AIChronicle/
 │   └── Prompts/
 │       ├── system_prompt.txt      # 系统提示词模板（玩家可编辑，热重载）
 │       ├── world_info.txt         # 默认世界背景
+│       ├── world_info_nords.txt   # 可选的诺德势力世界背景段（MCM 开关）
 │       ├── game_rules.txt         # 游戏运转规则（热重载）
 │       ├── tools.json             # 游戏工具定义（热重载）
 │       ├── agent_system.txt       # Agent 系统提示词模板

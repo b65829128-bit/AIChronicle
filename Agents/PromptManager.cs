@@ -144,6 +144,25 @@ namespace AIChronicle
                 catch { }
             }
 
+            // 可选的诺德势力世界观段（与 world_info 相同：基础目录比战役副本新则覆盖，玩家副本手动编辑保留）
+            var destWorldInfoNords = Path.Combine(_campaignDir, "world_info_nords.txt");
+            if (!File.Exists(destWorldInfoNords))
+            {
+                var defaultNordsPath = Path.Combine(_promptsBaseDir, "world_info_nords.txt");
+                if (File.Exists(defaultNordsPath))
+                    File.Copy(defaultNordsPath, destWorldInfoNords);
+            }
+            else
+            {
+                var defaultNordsPath = Path.Combine(_promptsBaseDir, "world_info_nords.txt");
+                try
+                {
+                    if (File.Exists(defaultNordsPath) && File.GetLastWriteTimeUtc(defaultNordsPath) > File.GetLastWriteTimeUtc(destWorldInfoNords))
+                        File.Copy(defaultNordsPath, destWorldInfoNords, true);
+                }
+                catch { }
+            }
+
             // 游戏规则层（与 world_info 相同：基础目录比战役副本新则覆盖，玩家副本手动编辑保留）
             var destGameRules = Path.Combine(_campaignDir, "game_rules.txt");
             if (!File.Exists(destGameRules))
@@ -324,6 +343,13 @@ namespace AIChronicle
         public static string? GetWorldInfoPath()
         {
             var path = Path.Combine(_campaignDir, "world_info.txt");
+            return File.Exists(path) ? path : null;
+        }
+
+        /// <summary>可选的诺德势力世界观段（MCM「包含诺德势力」开启时由 ContextBuilder 拼入主世界观）。</summary>
+        public static string? GetWorldInfoNordsPath()
+        {
+            var path = Path.Combine(_campaignDir, "world_info_nords.txt");
             return File.Exists(path) ? path : null;
         }
 
