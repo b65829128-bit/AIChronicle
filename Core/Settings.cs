@@ -372,19 +372,19 @@ namespace AIChronicle
             }
         }
 
-        private int _surroundingsScanRadius = 20;
+        private float _surroundingsScanRadiusFraction = 0.2f;
 
-        [SettingPropertyInteger("环境扫描半径（km）", 5, 200, Order = 8, RequireRestart = false,
-            HintText = "query_surroundings 的扫描半径硬上限。Agent 无论请求多大范围，实际都不会超过此值。")]
+        [SettingPropertyFloatingInteger("环境扫描半径（占地图比例）", 0.05f, 0.5f, Order = 8, RequireRestart = false,
+            HintText = "query_surroundings 的扫描半径硬上限 = 此比例 × 地图实际尺度。Agent 无论请求多大范围，实际都不会超过此值。\n地图尺度用城镇/城堡包围盒实测，全图约 2000-3000 地图单位；0.2 ≈ 500 单位 ≈ 1-2 座城池间距。")]
         [SettingPropertyGroup("游戏设置")]
-        public int SurroundingsScanRadius
+        public float SurroundingsScanRadiusFraction
         {
-            get => _surroundingsScanRadius;
+            get => _surroundingsScanRadiusFraction;
             set
             {
-                if (_surroundingsScanRadius != value)
+                if (Math.Abs(_surroundingsScanRadiusFraction - value) > 0.001f)
                 {
-                    _surroundingsScanRadius = value;
+                    _surroundingsScanRadiusFraction = value;
                     OnPropertyChanged();
                 }
             }

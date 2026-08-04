@@ -26,7 +26,7 @@
   {
     "name": "query_settlement",
     "category": "query",
-    "description": "Query real-time information about a settlement on the Calradia map.\n\nUsage:\n- Call this when you need to know who currently owns a settlement, its prosperity, or its type.\n- The name parameter should match the Chinese or English settlement name (e.g., \"俄尼拉\" or \"Onica\").\n- Returns: name, type (town/castle/village), owner clan, owner kingdom, prosperity level.",
+    "description": "Query real-time information about a settlement on the Calradia map.\n\nUsage:\n- Call this when you need to know who currently owns a settlement, its prosperity, its type, its defender strength, or whether it is under siege.\n- The name parameter should match the Chinese or English settlement name (e.g., \"俄尼拉\" or \"Onica\").\n- Returns: name, type (town/castle/village), owner clan, owner kingdom, prosperity level, DEFENDER STRENGTH (garrison + militia + noble parties stationed inside, as an exact number), and siege status (who is besieging it, if any).\n- BEFORE besieging a settlement, ALWAYS call this first to check its defender strength — besieging a heavily defended town with a small party will fail and waste your troops.",
     "parameters": [
       {
         "name": "name",
@@ -38,7 +38,7 @@
   {
     "name": "query_settlement_geography",
     "category": "query",
-    "description": "Get geographic intelligence about a settlement — its map position, what other settlements are nearby, and whether it's on the frontier or deep in friendly territory.\n\nUsage:\n- Call this to understand the STRATEGIC POSITION of a settlement before making military decisions.\n- The settlement_name must be a town or castle (not a village).\n- Returns: quadrant location on the Calradia map (NW/NE/SW/SE), nearby towns/castles sorted by distance (up to 8, with faction relations: 友方/敌方/中立), whether it's on the border (<15km from another kingdom) or core territory.\n- Distances are in km. All data is dynamically calculated from the live map state.\n- This is essential for planning invasions, defense lines, corridor strategies, and understanding geopolitical geography.",
+    "description": "Get geographic intelligence about a settlement — its map position, what other settlements are nearby, whether it's on the frontier or deep in friendly territory, and whether it is currently under siege.\n\nUsage:\n- Call this to understand the STRATEGIC POSITION of a settlement before making military decisions.\n- The settlement_name must be a town or castle (not a village).\n- Returns: quadrant location on the Calradia map (NW/NE/SW/SE), siege status (who is besieging it, if any), nearby towns/castles sorted by distance (up to 8, with faction relations: 友方/敌方/中立), whether it's on the border (<15km from another kingdom) or core territory.\n- Distances are in km. All data is dynamically calculated from the live map state.\n- This is essential for planning invasions, defense lines, corridor strategies, and understanding geopolitical geography.",
     "parameters": [
       {
         "name": "settlement_name",
@@ -159,7 +159,7 @@
   {
     "name": "besiege_settlement",
     "category": "military",
-    "description": "Send your party to besiege a town or castle — begin a siege assault.\n\nUsage:\n- Call this when you decide to lay siege to a fortified settlement.\n- The settlement_name must be a town or castle name in Chinese or English.\n- Your party will march there and begin constructing siege engines.\n- This is a major military operation that may trigger or escalate war.\n- Do NOT call this for villages (use raid_settlement for villages).\n- Only works if you are leading a party.",
+    "description": "Send your party to besiege a town or castle — begin a siege assault.\n\nUsage:\n- BEFORE calling, ALWAYS check the target's defender strength with query_settlement. The tool response tells you the estimated defenders — if they clearly outnumber your party, do NOT besiege alone: consider form_army to gather your kingdom's lords, or pick a weaker target.\n- Call this when you decide to lay siege to a fortified settlement.\n- The settlement_name must be a town or castle name in Chinese or English.\n- Your party will march there and begin constructing siege engines.\n- This is a major military operation that may trigger or escalate war.\n- Do NOT call this for villages (use raid_settlement for villages).\n- Only works if you are leading a party.",
     "parameters": [
       {
         "name": "settlement_name",
@@ -270,12 +270,12 @@
   {
     "name": "query_surroundings",
     "category": "query",
-    "description": "Scan your immediate surroundings — your current location, nearby settlements (towns and castles), and nearby mobile parties on the map.\n\nUsage:\n- Call this to understand WHERE you are right now and WHAT is around you — which factions control nearby territory and which armies or parties are nearby.\n- radius_km sets the scan radius in kilometers. Omit this parameter to use the game-configured default. If you provide it, it will be capped at the game's maximum.\n- max_settlements and max_parties limit how many of each type to return (default 5/8, max 15/20). Closer ones come first.\n- For each nearby party, returns: leader name, troop count, faction/bandit type, relation to you (friendly/hostile/neutral), and distance.\n- This is essential for making any travel, combat, or tactical decision — you need to know your context first.\n- Do NOT call this repeatedly without reason — it scans all settlements and parties on the map, which is wasteful if nothing has changed.",
+    "description": "Scan your immediate surroundings — your current location, nearby settlements (towns and castles), and nearby mobile parties on the map.\n\nUsage:\n- Call this to understand WHERE you are right now and WHAT is around you — which factions control nearby territory and which armies or parties are nearby.\n- radius_fraction sets the scan radius as a FRACTION of the whole map scale (0.05-0.5). 0.2 ≈ the distance of 1-2 cities. Omit this parameter to use the game-configured default. If you provide it, it will be capped at the game's maximum.\n- max_settlements and max_parties limit how many of each type to return (default 5/8, max 15/20). Closer ones come first.\n- For each nearby party, returns: leader name, troop count, faction/bandit type, relation to you (friendly/hostile/neutral), and distance.\n- This is essential for making any travel, combat, or tactical decision — you need to know your context first.\n- Do NOT call this repeatedly without reason — it scans all settlements and parties on the map, which is wasteful if nothing has changed.",
     "parameters": [
       {
-        "name": "radius_km",
-        "type": "integer",
-        "description": "Scan radius in kilometers (10-200). Omit to use the default set in game settings."
+        "name": "radius_fraction",
+        "type": "number",
+        "description": "Scan radius as a fraction of the whole map scale (0.05-0.5). 0.2 ≈ 1-2 cities apart. Omit to use the default set in game settings."
       },
       {
         "name": "max_settlements",

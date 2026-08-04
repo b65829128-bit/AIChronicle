@@ -169,11 +169,62 @@ namespace AIChronicle
             var owner = s.OwnerClan?.Name?.ToString() ?? "无主";
             var kingdom = s.OwnerClan?.Kingdom?.Name?.ToString();
             var prosperity = s.IsTown ? s.Town?.Prosperity.ToString("F0") ?? "?" : "-";
+            var siege = DescribeSiegeStatus(s);
+            var defenders = DescribeSettlementDefenders(s);
 
             return $"{s.Name}（{type}）\n"
                 + $"所属氏族：{owner}\n"
                 + (kingdom != null ? $"所属王国：{kingdom}\n" : "")
-                + $"繁荣度：{prosperity}";
+                + $"繁荣度：{prosperity}\n"
+                + $"守军兵力：{defenders}\n"
+                + $"围攻状态：{(siege.Length > 0 ? siege : "无")}";
+        }
+
+        /// <summary>围攻状态描述。未被围攻时返回空字符串。</summary>
+        private static string DescribeSiegeStatus(Settlement s)
+        {
+            try
+            {
+                if (!s.IsUnderSiege || s.SiegeEvent?.BesiegerCamp == null) return "";
+                var attacker = s.SiegeEvent.BesiegerCamp.LeaderParty?.MapFaction?.Name?.ToString()
+                    ?? s.SiegeEvent.BesiegerCamp.MapFaction?.Name?.ToString()
+                    ?? "未知势力";
+                return $"正被 {attacker} 围攻";
+            }
+            catch { return "正被围攻"; }
+        }
+
+        /// <summary>
+        /// 城中守军兵力（供攻城决策）：驻军 + 民兵 + 驻扎城内的贵族部队。
+        /// 设计权衡：不设情报迷雾、给准确数——agent 一次激活做出的决定没有中途取消的机会，判断必须可信。
+        /// </summary>
+        private static string DescribeSettlementDefenders(Settlement s)
+        {
+            try
+            {
+                int garrison = 0, militia = 0, lords = 0;
+                if (s.Town?.GarrisonParty != null)
+                    garrison = s.Town.GarrisonParty.MemberRoster.TotalHealthyCount;
+                if (s.MilitiaPartyComponent?.MobileParty != null)
+                    militia = s.MilitiaPartyComponent.MobileParty.MemberRoster.TotalHealthyCount;
+
+                foreach (var mp in MobileParty.All)
+                {
+                    if (mp == s.Town?.GarrisonParty) continue;
+                    if (mp == s.MilitiaPartyComponent?.MobileParty) continue;
+                    if (mp.CurrentSettlement != s) continue;
+                    if (!mp.IsActive || mp.LeaderHero == null) continue;
+                    lords += mp.MemberRoster.TotalHealthyCount;
+                }
+
+                var total = garrison + militia + lords;
+                var parts = new List<string>();
+                if (garrison > 0) parts.Add($"驻军{garrison}");
+                if (militia > 0) parts.Add($"民兵{militia}");
+                if (lords > 0) parts.Add($"贵族部队{lords}");
+                return parts.Count > 0 ? $"{total}（{string.Join("+", parts)}）" : "0（无守军）";
+            }
+            catch { return "未知"; }
         }
 
         private static string QueryWorldState(string? kingdomName)
@@ -272,7 +323,8 @@ namespace AIChronicle
 
                     var isBorder = IsBorderSettlement(s);
                     var tag = isBorder ? " ⚔边境" : "";
-                    var entry = s.Name + tag + "（" + (s.OwnerClan?.Name?.ToString() ?? "?") + "）";
+                    var siegeTag = DescribeSiegeStatus(s).Length > 0 ? " ⚠被围" : "";
+                    var entry = s.Name + tag + siegeTag + "（" + (s.OwnerClan?.Name?.ToString() ?? "?") + "）";
                     if (s.IsTown) towns.Add(entry);
                     else if (s.IsCastle) castles.Add(entry);
                 }
@@ -407,6 +459,10 @@ namespace AIChronicle
             sb.AppendLine($"类型：{(settlement.IsTown ? "城镇" : "城堡")}");
             sb.AppendLine($"坐标位置：大陆{nsDir}{ewDir}部 · {myKingdom?.Name?.ToString() ?? "中立区"}");
             sb.AppendLine($"所属家族：{settlement.OwnerClan?.Name?.ToString() ?? "无主"}");
+            sb.AppendLine($"守军兵力：{DescribeSettlementDefenders(settlement)}");
+            var siegeDesc = DescribeSiegeStatus(settlement);
+            if (siegeDesc.Length > 0)
+                sb.AppendLine($"围攻状态：⚠ {siegeDesc}");
             if (isBorder)
             {
                 var nearestKm = nearestOtherDist / 1000f;
@@ -765,14 +821,16 @@ namespace AIChronicle
             return sb.ToString().TrimEnd();
         }
 
-        private static string ExecuteQuerySurroundings(int radiusKm, int maxSettlements, int maxParties)
+        private static string ExecuteQuerySurroundings(float radiusFraction, int maxSettlements, int maxParties)
         {
             if (AIChatClient.CurrentHero == null)
                 return "[错误] 无当前领主";
 
-            var configRadius = MySettings.Instance?.SurroundingsScanRadius ?? 10;
-            if (radiusKm <= 0 || radiusKm > configRadius)
-                radiusKm = configRadius;
+            // 扫描半径 = 地图实际尺度 × 比例（同 query_party_troops 情报分级，不依赖绝对 km）。
+            // 背景：原实现用绝对 km（默认 20km = 20000 地图单位），而全图仅约 2500 单位——半径几乎覆盖全图，"扫描"形同虚设。
+            var configFraction = MySettings.Instance?.SurroundingsScanRadiusFraction ?? 0.2f;
+            if (radiusFraction <= 0 || radiusFraction > configFraction)
+                radiusFraction = configFraction;
             if (maxSettlements <= 0 || maxSettlements > 15)
                 maxSettlements = 5;
             if (maxParties <= 0 || maxParties > 20)
@@ -808,7 +866,8 @@ namespace AIChronicle
                 return (float)Math.Sqrt(dx * dx + dy * dy);
             }
 
-            var radiusMeters = radiusKm * 1000f;
+            var radiusMeters = Math.Max(100f, ComputeMapExtent() * radiusFraction);
+            var radiusKm = radiusMeters / 1000f;
             var myFaction = hero.MapFaction;
 
             string FactionRelation(MobileParty p)
@@ -872,7 +931,7 @@ namespace AIChronicle
             nearbyParties.Sort((a, b) => a.dist.CompareTo(b.dist));
 
             sb.AppendLine();
-            sb.AppendLine($"===== 附近定居点（{radiusKm}km） =====");
+            sb.AppendLine($"===== 附近定居点（半径{radiusKm:F1}km） =====");
             if (nearbySettlements.Count == 0)
                 sb.AppendLine("（无）");
             else
@@ -880,7 +939,7 @@ namespace AIChronicle
                     sb.AppendLine(desc);
 
             sb.AppendLine();
-            sb.AppendLine($"===== 附近部队（{radiusKm}km） =====");
+            sb.AppendLine($"===== 附近部队（半径{radiusKm:F1}km） =====");
             if (nearbyParties.Count == 0)
                 sb.AppendLine("（无）");
             else

@@ -256,7 +256,7 @@ namespace AIChronicle
 
                     case "query_surroundings":
                         return ExecuteQuerySurroundings(
-                            args["radius_km"]?.ToObject<int>() ?? 50,
+                            args["radius_fraction"]?.ToObject<float>() ?? 0.2f,
                             args["max_settlements"]?.ToObject<int>() ?? 5,
                             args["max_parties"]?.ToObject<int>() ?? 8);
 

@@ -423,7 +423,7 @@ namespace AIChronicle
                 new() { Name = "query_world_state", Category = "query",
                     Description = "查询世界局势（各王国兵力与交战状态）。" },
                 new() { Name = "query_settlement", Category = "query",
-                    Description = "查询定居点信息（所有者/繁荣度/类型）。",
+                    Description = "查询定居点信息（所有者/繁荣度/类型/守军兵力/围攻状态）。",
                     Parameters = new List<ToolParamDef> { new() { Name = "name", Type = "string", Description = "定居点名称" } } },
                 new() { Name = "change_relation", Category = "social",
                     Description = "修改对任意人物的好感度。",

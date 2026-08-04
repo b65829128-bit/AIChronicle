@@ -130,7 +130,35 @@ namespace AIChronicle
             var ba = PartyBehaviorManager.GetOrCreateAction(AIChatClient.CurrentHero);
             ba.Behavior = AiBehavior.BesiegeSettlement;
             ba.TargetSettlement = target;
-            return $"部队已出发围攻{target.Name}。";
+
+            // 守军评估：不设迷雾、给准确数。agent 一次激活做出的决定没有取消机会，发兵前必须让它看清强弱。
+            var defenders = DescribeSettlementDefenders(target);
+            var ownCount = party.MemberRoster.TotalHealthyCount;
+            string assessment;
+            if (defenders == "未知")
+                assessment = "（无法确认守军兵力）";
+            else if (defenders == "0（无守军）")
+                assessment = "（城中无守军）";
+            else if (TryParseDefenderTotal(defenders, out var defTotal))
+            {
+                assessment = ownCount < defTotal * 0.7f
+                    ? $"（⚠ 守军约 {defTotal} 人，你部仅 {ownCount} 人——兵力明显不足，强攻恐伤亡惨重；可考虑 form_army 拉军团或另择弱城）"
+                    : $"（守军约 {defTotal} 人，你部 {ownCount} 人）";
+            }
+            else
+                assessment = $"（守军{defenders}）";
+
+            return $"部队已出发围攻{target.Name}。{assessment}";
+        }
+
+        /// <summary>从 DescribeSettlementDefenders 的返回值中解析守军总数（首个『（』前的数字）。</summary>
+        private static bool TryParseDefenderTotal(string defenders, out int total)
+        {
+            total = 0;
+            if (string.IsNullOrEmpty(defenders)) return false;
+            var numEnd = defenders.IndexOf('（');
+            if (numEnd < 0) return false;
+            return int.TryParse(defenders.Substring(0, numEnd).Trim(), out total);
         }
 
         /// <summary>拉军团：以军事目标为指向召集本国领主成军团，交还原版 AI 指挥（集结→扑目标→攻城/劫掠→解散）。</summary>
