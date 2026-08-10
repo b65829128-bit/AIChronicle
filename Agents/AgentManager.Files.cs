@@ -176,6 +176,9 @@ namespace AIChronicle
             if (_immutableFiles.Contains(Path.GetFileName(cleanPath)))
                 return "[拒绝] 此文件不可修改：" + path;
 
+            if (string.IsNullOrEmpty(oldString))
+                return "[参数错误] old_string 不能为空。edit_file 用于替换文件中已存在的文本，你必须提供文件中实际存在的 old_string。若你想在文件末尾添加新内容，请改用 append_file；若想整体重写文件，请改用 write_file；若想精确替换，请先用 read_file 读出原文，把要替换的确切片段作为 old_string。";
+
             var fullPath = ResolvePath(path);
             if (fullPath == null)
                 return "[错误] 路径解析失败：" + path;
