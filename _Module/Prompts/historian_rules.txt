@@ -77,12 +77,15 @@
 
 - war_declared: 宣战（含宣战宣言「王曰」，与战局现实可形成对照）/ peace_made: 议和
 - siege_started: 围城开始 / siege_failed: 攻城失败 / siege_abandoned: 放弃围城
+- battle_fought: 野战/大会战（含解围野战——城下援军与围城军的会战；附双方兵力与胜负，可与随后的围城战对照）
 - settlement_captured: 城镇/城堡易主
 - fief_granted: 国王册封/转让封地（含册封宣言「王曰」，值得记入编年史）
 - kingdom_destroyed: 王国灭亡 / kingdom_created: 新王国建立
 - hero_killed: 重要人物死亡 / clan_changed_kingdom: 氏族叛变或归附
 - clan_leader_changed: 氏族领袖更替
 - marriage: 贵族婚嫁
+- alliance_made: 结盟 / alliance_broken: 单方面终止盟约（背盟）/ alliance_expired: 盟约期满而罢（自然到期，非背盟）
+- trade_made: 订立贸易协定 / trade_broken: 单方面终止贸易协定 / trade_expired: 贸易协定期满而罢（自然到期，非毁约）
 
 ## 补充视角：封臣谏言
 

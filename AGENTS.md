@@ -815,8 +815,9 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 > **盟约"号召盟友宣战"投票已拦截**：`SubModule.OnGameStart` 手动 patch `ProposeCallToWarAgreementDecision`/`AcceptCallToWarAgreementDecision` 的 `IsAllowed()`（Prefix 强制返回 false，`ShouldBeCancelled()` 在投票触发前将其取消；Election 类 PatchAll 会静默跳过，须手动注册）；并 patch `LordConversationsCampaignBehavior.conversation_player_wants_to_sponsor_call_to_war_on_condition` 隐藏玩家对话里的原版"号召盟友"选项（否则玩家会花影响力/金币却无声失效）。军事同盟只保留名义作用——是否号召盟友/宣战由国王 Agent 激活时自行决定。受 MCM「禁止原版外交」开关控制。
 
 - **记录**：`AgentScheduler.Tick` 每游戏日一次调 `DiplomacyService.CheckExpiringAgreements()`（无 LLM）——扫描剩余不足 1 天的盟约/贸易协定，写入 `World/diplomacy/expiry_log.txt`（行格式 `类型|王国1ID|王国2ID|到期日day|人类可读文本`，每对王国+类型一条，超 90 游戏天清除防堆积）
+- **自然到期入史（与背约区分）**：盟约/贸易协定的**自然到期**会写进原始史料（`alliance_expired`/`trade_expired`，如"X与Y的盟约于第1089年夏第12日期满而罢"），与单方背约（`alliance_broken`/`trade_broken`，"X单方面终止了与Y的盟约"）明确区分——期满而罢是"约期已尽"，背约是"单方毁约"，叙事价值完全不同。检测用观察集文件 `World/diplomacy/agreements_tracked.txt`（`类型|王国1ID|王国2ID|到期日day`）记录生效协定的到期日：到期当天协定被惰性清理（`HasTradeAgreement`/`IsAllyWithKingdom` 查询即删）时比对观察集判定自然到期，记一次即移除；到期前消失的协定静默移除不误报
 - **查看**：`query_world_state` 输出各王国名下附带「📜 盟约 X与Y 于…到期」；到期前不记录不提示，国王不查就不知道
-- **防矛盾**：`DiplomacyService.ClearExpiryRecord` 在协约**重新建立**（对方接受提案 `ExecuteRespondToProposal`）或**主动结束**（`ExecuteEndAlliance`/`ExecuteEndTradeAgreement`）的瞬间清除对应记录，防止国王再次激活时看到失效的「到期」信息而反复查询求证。key 排序规则（王国 ID 字典序）与写入端一致；旧存档无记录时调用为安全 no-op
+- **防矛盾**：`DiplomacyService.ClearAgreementTracking` 在协约**重新建立**（对方接受提案 `ExecuteRespondToProposal`）、**主动背约**（`ExecuteEndAlliance`/`ExecuteEndTradeAgreement`）、**战争毁约**（`HistoryRecorder.OnWarDeclared`，两国开战原版自动终止协定）与**灭国**（`HistoryRecorder.OnKingdomDestroyed`）时清除对应到期日志与观察项，防止国王再次激活时看到失效的「到期」信息，也防止观察集把"战争毁约/背约"误判为"期满而罢"。key 排序规则（王国 ID 字典序）与写入端一致；旧存档无记录时调用为安全 no-op
 - **续约**：不新增续约工具；国王若想续约，走现有 `propose_alliance`/`propose_trade` 流程
 
 ### 历史系统（HistoryRecorder + 史官 Agent）
@@ -829,14 +830,21 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 
 | 事件 | 游戏钩子 | 史料 type |
 |------|---------|-----------|
-| 宣战 | `WarDeclared` | `war_declared` |
+| 宣战 | `WarDeclared`（含宣战宣言 PendingWarDeclaration） | `war_declared` |
 | 议和 | `MakePeace` | `peace_made` |
+| 围城开始/失败/放弃 | `OnSiegeEventStartedEvent` / `SiegeCompletedEvent`（败） / `OnSiegeEventEndedEvent` | `siege_started` / `siege_failed` / `siege_abandoned` |
+| 野战/解围野战 | `MapEventEnded`（EventType=FieldBattle/SiegeOutside，**双方总兵力≥600 才入史**，附兵力/胜负/损失） | `battle_fought` |
 | 城镇/城堡易主 | `OnSettlementOwnerChangedEvent`（过滤 IsTown/IsCastle） | `settlement_captured` |
+| 国王册封/转让封地 | `OnSettlementOwnerChangedEvent`（detail=ByKingDecision/ByGift，含册封宣言 PendingFiefGrantText） | `fief_granted` |
 | 王国灭亡 | `KingdomDestroyedEvent` | `kingdom_destroyed` |
 | 新王国建立 | 无独立事件，从 `OnClanChangedKingdomEvent` 的 `CreateKingdom` 详情补记 | `kingdom_created` |
 | 贵族死亡 | `HeroKilledEvent`（过滤有 clan 的） | `hero_killed` |
 | 氏族叛变 | `OnClanChangedKingdomEvent` | `clan_changed_kingdom` |
+| 氏族领袖更替 | `OnClanLeaderChangedEvent` | `clan_leader_changed` |
 | 贵族婚嫁 | `OnMarriageOfferedToPlayerEvent`（直接注册） | `marriage` |
+| 天意建族 | 静态入口 `HistoryRecorder.RecordClanCreated`（create_clan 调用） | `clan_created` |
+| 结盟/背盟/盟约期满 | `DiplomacyService` 接受 alliance 提案 / `ExecuteEndAlliance` / 每日到期检测 | `alliance_made` / `alliance_broken` / `alliance_expired` |
+| 贸易协定/终止/期满 | `DiplomacyService` 接受 trade 提案 / `ExecuteEndTradeAgreement` / 每日到期检测 | `trade_made` / `trade_broken` / `trade_expired` |
 
 每条事件以 JSONL 格式追加到 `World/history/events_{year}.txt`：
 ```json

@@ -132,7 +132,7 @@
 - 战役地图上按 **H 键**打开史书 UI（1100×700 大屏，左侧目录右侧正文），**目录按体例分组显示**（本纪 → 世家 → 列传 → 编年史 → 纪事 → 其他 → 政务文献，编年史按年份倒序），字体大小可调
 - NPC Agent 可通过 `read_file` 阅读编年史——历史成为 NPC 的共同知识
 - 史官提示词（`historian_rules.txt`、`yearly_chronicle_prompt.txt`、`biography_prompt.txt`、`special_chronicle_prompt.txt`）全部热重载
-- 史料记录类型：war_declared（含宣战宣言）/ peace_made / siege_started / siege_failed / siege_abandoned / settlement_captured / fief_granted（国王册封，含册封宣言）/ kingdom_destroyed / kingdom_created / hero_killed / clan_changed_kingdom / clan_leader_changed / marriage
+- 史料记录类型：war_declared（含宣战宣言）/ peace_made / siege_started / siege_failed / siege_abandoned / battle_fought（野战/解围野战大会战，双方总兵力≥600 才入史，附兵力与胜负）/ settlement_captured / fief_granted（国王册封，含册封宣言）/ kingdom_destroyed / kingdom_created / hero_killed / clan_changed_kingdom / clan_leader_changed / marriage / clan_created（天意建族）/ alliance_made（结盟）/ alliance_broken（单方背盟）/ alliance_expired（盟约期满而罢，与背盟区分）/ trade_made（订立贸易协定）/ trade_broken（单方终止贸易协定）/ trade_expired（贸易协定期满而罢，与毁约区分）
 
 ### 天命意识形态
 

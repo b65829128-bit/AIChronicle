@@ -26,6 +26,8 @@ namespace AIChronicle
         // 攻城方名号的独立缓存（不随结束事件消耗）——OnSiegeEnded 与 OnSiegeCompleted 两个处理器都可能触发，
         // 若只读共享的 _siegeStartTroops，先触发者 Remove 后，后触发者就拿不到名号（史料 "?" 残留的根源）。
         private readonly Dictionary<Settlement, (string Leader, string Kingdom)> _siegeActorCache = new();
+        /// <summary>大会战入史门槛：双方总兵力达到此数才记 battle_fought 史料，避免小规模遭遇战刷屏。</summary>
+        private const int FieldBattleMinTroops = 600;
         private List<string>? _serializedSiegeIds;
         private List<int>? _serializedSiegeAttackers;
         private List<int>? _serializedSiegeDefenders;
@@ -52,6 +54,10 @@ namespace AIChronicle
 
             CampaignEvents.OnSiegeEventStartedEvent.AddNonSerializedListener(this,
                 new Action<SiegeEvent>(OnSiegeStarted));
+
+            // 野战/解围野战入史：战场决胜不伴随攻城时原史料缺失（战争叙事"围攻单边"），此事件补上大会战
+            CampaignEvents.MapEventEnded.AddNonSerializedListener(this,
+                new Action<MapEvent>(OnMapEventEnded));
 
             // 修复：直接用 AddNonSerializedListener 注册——CampaignEvents 成员是 CampaignEvent<T> 静态属性而非 CLR event，
             // 原反射 GetEvent 恒返回 null，导致 siege_abandoned/clan_leader_changed/kingdom_created/marriage 四种史料从不记录。
@@ -195,9 +201,20 @@ namespace AIChronicle
         /// <summary>静态入口：供 create_clan（天意建族）等外部模块记录家族建立事件。</summary>
         public static void RecordClanCreated(string summary)
         {
+            RecordExternalEvent("clan_created", summary);
+        }
+
+        /// <summary>静态入口：供 DiplomacyService 记录结盟/背盟/贸易协定等外交史料（alliance_made 等）。</summary>
+        public static void RecordDiplomacyEvent(string eventType, string summary)
+        {
+            RecordExternalEvent(eventType, summary);
+        }
+
+        private static void RecordExternalEvent(string eventType, string summary)
+        {
             if (Campaign.Current == null) return;
             var behavior = Campaign.Current.GetCampaignBehavior<HistoryRecorder>();
-            behavior?.RecordEvent("clan_created", summary);
+            behavior?.RecordEvent(eventType, summary);
         }
 
         private static string GetSeasonName(CampaignTime.Seasons s) => s switch
@@ -217,6 +234,14 @@ namespace AIChronicle
 
         private void OnWarDeclared(IFaction faction1, IFaction faction2, DeclareWarAction.DeclareWarDetail detail)
         {
+            // 开战即毁约：两国若在盟约/贸易协定期内，原版会随宣战自动终止协定。
+            // 清掉到期日志与自然到期观察项，避免该对协定之后被误判为"期满而罢"（战争毁约由 war_declared 叙事）。
+            if (faction1 is Kingdom warK1 && faction2 is Kingdom warK2)
+            {
+                DiplomacyService.ClearAgreementTracking("盟约", warK1, warK2);
+                DiplomacyService.ClearAgreementTracking("贸易", warK1, warK2);
+            }
+
             var attacker = FactionName(faction1);
             var defender = FactionName(faction2);
             var declaration = PendingWarDeclaration;
@@ -343,6 +368,49 @@ namespace AIChronicle
             }
         }
 
+        /// <summary>
+        /// 野战/解围野战入史：围攻全程由 siege_* 事件记录，这里补上"野外会战"——战场决胜不伴随攻城时
+        /// 原史料缺失（战争叙事"围攻单边"）。仅记够得上"大会战"门槛的野战（双方总兵力≥FieldBattleMinTroops），
+        /// 小规模遭遇战不刷屏。解围野战被击败时与 siege_abandoned 互补：先战而后围解。
+        /// </summary>
+        private void OnMapEventEnded(MapEvent mapEvent)
+        {
+            if (mapEvent.EventType != MapEvent.BattleTypes.FieldBattle
+                && mapEvent.EventType != MapEvent.BattleTypes.SiegeOutside) return;
+
+            var attacker = mapEvent.AttackerSide;
+            var defender = mapEvent.DefenderSide;
+            if (attacker == null || defender == null) return;
+
+            var attackerTroops = attacker.HealthyTroopCountAtMapEventStart;
+            var defenderTroops = defender.HealthyTroopCountAtMapEventStart;
+            if (attackerTroops + defenderTroops < FieldBattleMinTroops) return;
+
+            var attackerLeader = attacker.LeaderParty?.LeaderHero?.Name?.ToString();
+            var defenderLeader = defender.LeaderParty?.LeaderHero?.Name?.ToString();
+            if (string.IsNullOrEmpty(attackerLeader) || string.IsNullOrEmpty(defenderLeader)) return;
+
+            var attackerKingdom = attacker.MapFaction?.Name?.ToString() ?? "未知势力";
+            var defenderKingdom = defender.MapFaction?.Name?.ToString() ?? "未知势力";
+
+            var winner = mapEvent.Winner;
+            string resultPart;
+            if (winner == null)
+                resultPart = "，胜负未分"; // 撤退/中途结束（BattleState=None）不可强行分胜负
+            else if (winner.MissionSide == BattleSideEnum.Attacker)
+                resultPart = $"，{attackerKingdom}的{attackerLeader}获胜";
+            else
+                resultPart = $"，{defenderKingdom}的{defenderLeader}获胜";
+
+            var battleKind = mapEvent.EventType == MapEvent.BattleTypes.SiegeOutside ? "解围野战" : "野战";
+            var location = mapEvent.MapEventSettlement?.Name?.ToString();
+            var where = string.IsNullOrEmpty(location) ? "" : $"于{location}附近";
+            var casualties = attacker.TroopCasualties + defender.TroopCasualties;
+
+            var summary = $"{attackerKingdom}的{attackerLeader}率{attackerTroops}人与{defenderKingdom}的{defenderLeader}所部{defenderTroops}人{where}展开{battleKind}{resultPart}，双方共损失约{casualties}人";
+            RecordEvent("battle_fought", summary);
+        }
+
         private void OnSiegeEnded(SiegeEvent siegeEvent)
         {
             var settlement = siegeEvent.BesiegedSettlement;
@@ -372,6 +440,14 @@ namespace AIChronicle
 
         private void OnKingdomDestroyed(Kingdom kingdom)
         {
+            // 灭国即尽废其盟约/贸易协定：清掉该国参与的到期日志与观察项，防止之后被误判为"期满而罢"（灭国由本事件叙事）。
+            foreach (var other in Kingdom.All)
+            {
+                if (other == kingdom || other.IsEliminated) continue;
+                DiplomacyService.ClearAgreementTracking("盟约", kingdom, other);
+                DiplomacyService.ClearAgreementTracking("贸易", kingdom, other);
+            }
+
             var name = kingdom.Name?.ToString() ?? "未知王国";
             RecordEvent("kingdom_destroyed", $"{name}灭亡");
 

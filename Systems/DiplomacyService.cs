@@ -208,7 +208,8 @@ namespace AIChronicle
                 return $"[错误] {target.Name} 与你的王国没有盟约";
 
             allianceBehavior.EndAlliance(myKingdom, target); // 单向终止，无需对方确认
-            ClearExpiryRecord("盟约", myKingdom, target); // 主动结束 → 清掉可能的到期记录，防国王下次激活看到矛盾信息
+            ClearAgreementTracking("盟约", myKingdom, target); // 主动背约 → 清到期日志+观察项，防误判为期满而罢
+            HistoryRecorder.RecordDiplomacyEvent("alliance_broken", $"{myKingdom.Name}单方面终止了与{target.Name}的盟约");
             InformationManager.DisplayMessage(new InformationMessage(
                 $"{myKingdom.Name} 终止了与 {target.Name} 的盟约", Colors.Cyan));
             return $"你单方面终止了与 {target.Name} 的盟约。";
@@ -229,7 +230,8 @@ namespace AIChronicle
                 return $"[错误] {target.Name} 与你的王国没有贸易协定";
 
             tradeBehavior.EndTradeAgreement(myKingdom, target); // 单向终止，无需对方确认
-            ClearExpiryRecord("贸易协定", myKingdom, target); // 主动结束 → 清掉可能的到期记录
+            ClearAgreementTracking("贸易", myKingdom, target); // 主动背约 → 清到期日志+观察项，防误判为期满而罢
+            HistoryRecorder.RecordDiplomacyEvent("trade_broken", $"{myKingdom.Name}单方面终止了与{target.Name}的贸易协定");
             InformationManager.DisplayMessage(new InformationMessage(
                 $"{myKingdom.Name} 终止了与 {target.Name} 的贸易协定", Colors.Cyan));
             return $"你单方面终止了与 {target.Name} 的贸易协定。";
@@ -417,7 +419,8 @@ namespace AIChronicle
                     var ab = Campaign.Current.GetCampaignBehavior<IAllianceCampaignBehavior>();
                     if (ab == null) return "[错误] 联盟系统未初始化";
                     ab.StartAlliance(proposerKingdom, myKingdom);
-                    ClearExpiryRecord("盟约", proposerKingdom, myKingdom); // 重新结盟生效 → 立即清旧到期记录
+                    ClearAgreementTracking("盟约", proposerKingdom, myKingdom); // 重新结盟生效 → 立即清旧到期日志+观察项
+                    HistoryRecorder.RecordDiplomacyEvent("alliance_made", $"{proposerKingdom.Name}与{myKingdom.Name}结盟");
                     AgentManager.DeleteDiplomacyProposal(matchedId);
                     RecordDecision(myEntity.Id, proposerId, type, "接受", matchedId);
                     InformationManager.DisplayMessage(new InformationMessage(
@@ -429,7 +432,8 @@ namespace AIChronicle
                     var tb = Campaign.Current.GetCampaignBehavior<ITradeAgreementsCampaignBehavior>();
                     if (tb == null) return "[错误] 贸易系统未初始化";
                     tb.MakeTradeAgreement(proposerKingdom, myKingdom, CampaignTime.Years(1f));
-                    ClearExpiryRecord("贸易协定", proposerKingdom, myKingdom); // 重签生效 → 立即清旧到期记录
+                    ClearAgreementTracking("贸易", proposerKingdom, myKingdom); // 重签生效 → 立即清旧到期日志+观察项
+                    HistoryRecorder.RecordDiplomacyEvent("trade_made", $"{proposerKingdom.Name}与{myKingdom.Name}订立贸易协定");
                     AgentManager.DeleteDiplomacyProposal(matchedId);
                     RecordDecision(myEntity.Id, proposerId, type, "接受", matchedId);
                     InformationManager.DisplayMessage(new InformationMessage(
@@ -522,9 +526,14 @@ namespace AIChronicle
         private const double ExpiryLogThresholdDays = 1;
 
         /// <summary>
-        /// 每日轻量检测（无 LLM、不激活 Agent）：把当天到期的盟约/贸易协定写进
-        /// World/diplomacy/expiry_log.txt。每对王国+类型最多保留一条最近记录，超 90 游戏天的旧记录自动清除。
-        /// 到期之前不记录、不提示；国王下次 query_world_state 时自行看到「哪一天和谁的到期了」。
+        /// 每日轻量检测（无 LLM、不激活 Agent）：
+        /// 1) 把当天到期的盟约/贸易协定写进 World/diplomacy/expiry_log.txt（国王自查用）。每对王国+类型最多保留
+        ///    一条最近记录，超 90 游戏天的旧记录自动清除。到期之前不记录、不提示；国王下次 query_world_state 时自行看到。
+        /// 2) 盟约/贸易的**自然到期**写进原始史料（alliance_expired / trade_expired）——与单方背约
+        ///    （alliance_broken / trade_broken，ExecuteEnd* 记录）区分：期满而罢是"约期已尽"，背约是"单方毁约"。
+        ///    用 agreements_tracked.txt 做观察集（key=类型|王国1ID|王国2ID → 到期日day）：到期当天协定被惰性清理
+        ///    （HasTradeAgreement/IsAllyWithKingdom 查询即删）时，比对观察集判定"自然到期"，记一次即移除；
+        ///    到期前消失（战争/灭国/单方背约，已由对应路径清观察项）静默移除，不误报为到期。
         /// </summary>
         internal static void CheckExpiringAgreements()
         {
@@ -536,7 +545,7 @@ namespace AIChronicle
             var logPath = System.IO.Path.Combine(AgentManager.GetDiplomacyDir(), "expiry_log.txt");
             var nowDays = CampaignTime.Now.ToDays;
 
-            // 1) 读旧记录：key = 类型|王国1ID|王国2ID。超 90 游戏天的旧记录直接丢弃（防无限堆积）。
+            // 1) 读旧到期日志：key = 类型|王国1ID|王国2ID。超 90 游戏天的旧记录直接丢弃（防无限堆积）。
             var records = new Dictionary<string, string>(StringComparer.Ordinal);
             if (System.IO.File.Exists(logPath))
             {
@@ -548,7 +557,20 @@ namespace AIChronicle
                 }
             }
 
-            // 2) 扫描王国对，更新到期记录
+            // 2) 读观察集（自然到期检测用）：key = 类型|王国1ID|王国2ID → 到期日day
+            var trackedPath = System.IO.Path.Combine(AgentManager.GetDiplomacyDir(), "agreements_tracked.txt");
+            var tracked = new Dictionary<string, double>(StringComparer.Ordinal);
+            if (System.IO.File.Exists(trackedPath))
+            {
+                foreach (var raw in SafeFileIO.ReadAllLines(trackedPath))
+                {
+                    if (TryParseTrackedLine(raw, out var key, out var endDay))
+                        tracked[key] = endDay;
+                }
+            }
+
+            // 3) 扫描王国对：更新到期日志 + 刷新观察集（当前生效协定的到期日）
+            var active = new Dictionary<string, double>(StringComparer.Ordinal);
             foreach (var k1 in Kingdom.All)
             {
                 if (k1.IsEliminated) continue;
@@ -561,6 +583,7 @@ namespace AIChronicle
                     var tradeKey = $"贸易|{k1.StringId}|{k2.StringId}";
                     if (tb != null && tb.HasTradeAgreement(k1, k2, out var t))
                     {
+                        active[tradeKey] = t.EndTime.ToDays;
                         if (t.EndTime.RemainingDaysFromNow < ExpiryLogThresholdDays)
                             records[tradeKey] = BuildExpiryLine("贸易协定", k1, k2, t.EndTime);
                         else
@@ -573,6 +596,7 @@ namespace AIChronicle
                     if (ab != null && ab.IsAllyWithKingdom(k1, k2))
                     {
                         var end = ab.GetAllianceEndDate(k1, k2);
+                        active[allianceKey] = end.ToDays;
                         if (end.RemainingDaysFromNow < ExpiryLogThresholdDays)
                             records[allianceKey] = BuildExpiryLine("盟约", k1, k2, end);
                         else
@@ -581,7 +605,35 @@ namespace AIChronicle
                 }
             }
 
-            // 3) 写回
+            // 4) 自然到期检测：观察集里有、当前已不生效的协定 → 到期日已过则记 _expired 史料（期满而罢）；
+            //    到期前消失（战争/灭国/单方背约）静默移除——背约已由 ExecuteEnd* 记 _broken，战争/灭国由对应史料事件叙事。
+            foreach (var kv in tracked)
+            {
+                if (active.ContainsKey(kv.Key)) continue; // 仍在生效（含续约）
+                if (kv.Value > nowDays) continue;         // 到期前消失，非自然到期
+                if (TryParseTrackedKey(kv.Key, out var type, out var id1, out var id2))
+                {
+                    var kA = FindKingdomById(id1);
+                    var kB = FindKingdomById(id2);
+                    if (kA == null || kB == null) continue;
+                    var dueText = PromptManager.FormatCampaignDate(CampaignTime.Days((float)kv.Value));
+                    if (type == "盟约")
+                        HistoryRecorder.RecordDiplomacyEvent("alliance_expired", $"{kA.Name}与{kB.Name}的盟约于{dueText}期满而罢");
+                    else
+                        HistoryRecorder.RecordDiplomacyEvent("trade_expired", $"{kA.Name}与{kB.Name}的贸易协定于{dueText}期满而罢");
+                }
+            }
+
+            // 5) 写回观察集：只保留当前生效协定（到期/消失项不保留 → 自然到期只记一次）
+            var trackedLines = active.Select(kv => $"{kv.Key}|{(int)kv.Value}").ToList();
+            if (trackedLines.Count > 0)
+                SafeFileIO.WriteAllText(trackedPath, string.Join("\n", trackedLines));
+            else if (System.IO.File.Exists(trackedPath))
+            {
+                try { System.IO.File.Delete(trackedPath); } catch { }
+            }
+
+            // 6) 写回到期日志
             if (records.Count > 0)
                 SafeFileIO.WriteAllText(logPath, string.Join("\n", records.Values));
             else if (System.IO.File.Exists(logPath))
@@ -606,6 +658,68 @@ namespace AIChronicle
             if (!double.TryParse(parts[3], out endDay)) return false;
             key = parts[0] + "|" + parts[1] + "|" + parts[2];
             return true;
+        }
+
+        /// <summary>观察集行解析：类型|王国1ID|王国2ID|到期日day（见 agreements_tracked.txt）。</summary>
+        private static bool TryParseTrackedLine(string line, out string key, out double endDay)
+        {
+            key = null!;
+            endDay = 0;
+            var parts = line.Split('|');
+            if (parts.Length < 4) return false;
+            if (!double.TryParse(parts[3], out endDay)) return false;
+            key = parts[0] + "|" + parts[1] + "|" + parts[2];
+            return true;
+        }
+
+        private static bool TryParseTrackedKey(string key, out string type, out string kingdom1Id, out string kingdom2Id)
+        {
+            type = "";
+            kingdom1Id = "";
+            kingdom2Id = "";
+            var parts = key.Split('|');
+            if (parts.Length != 3) return false;
+            type = parts[0];
+            kingdom1Id = parts[1];
+            kingdom2Id = parts[2];
+            return true;
+        }
+
+        private static Kingdom? FindKingdomById(string id)
+        {
+            foreach (var k in Kingdom.All)
+            {
+                if (k.StringId == id) return k;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 协定因非自然原因终止（单方背约/战争毁约/灭国）时调用：清掉到期日志与该对的自然到期观察项，
+        /// 防止观察集把"战争毁约/背约"误判为"期满而罢"。type 用"盟约"/"贸易"（与观察集 key 前缀一致）。
+        /// </summary>
+        internal static void ClearAgreementTracking(string type, Kingdom k1, Kingdom k2)
+        {
+            ClearExpiryRecord(type == "贸易" ? "贸易协定" : type, k1, k2); // 到期日志类型前缀沿用原"贸易协定"写法
+            var trackedPath = System.IO.Path.Combine(AgentManager.GetDiplomacyDir(), "agreements_tracked.txt");
+            try
+            {
+                if (!System.IO.File.Exists(trackedPath)) return;
+                var id1 = k1.StringId;
+                var id2 = k2.StringId;
+                var prefixes = new[] { $"{type}|{id1}|{id2}|", $"{type}|{id2}|{id1}|" };
+                var remaining = SafeFileIO.ReadAllLines(trackedPath)
+                    .Where(l => !prefixes.Any(p => l.StartsWith(p, StringComparison.Ordinal))).ToList();
+                if (remaining.Count == 0)
+                {
+                    try { System.IO.File.Delete(trackedPath); } catch { }
+                }
+                else
+                {
+                    SafeFileIO.WriteAllText(trackedPath, string.Join("\n", remaining));
+                }
+            }
+            catch { }
         }
 
         /// <summary>
