@@ -86,16 +86,12 @@ namespace AIChronicle
         private static string _campaignDir = "";
         private static string _charactersDir = "";
 
-        private static string _cachedSystemPrompt = "";
-        private static DateTime _lastSystemPromptCheck;
         private static string _cachedWorldInfo = "";
         private static DateTime _lastWorldInfoCheck;
         private static List<ToolDef> _cachedTools = new();
         private static DateTime _lastToolsCheck;
         private static List<ToolDef> _cachedAgentTools = new();
         private static DateTime _lastAgentToolsCheck;
-        private static string _cachedAgentPrompt = "";
-        private static DateTime _lastAgentPromptCheck;
         private static string _cachedYearlyChroniclePrompt = "";
         private static DateTime _lastYearlyChroniclePromptCheck;
         private static string _cachedSpecialChroniclePrompt = "";
@@ -182,24 +178,6 @@ namespace AIChronicle
                 catch { }
             }
 
-            var destSystemPrompt = Path.Combine(_campaignDir, "system_prompt.txt");
-            if (!File.Exists(destSystemPrompt))
-            {
-                var defaultPath = Path.Combine(_promptsBaseDir, "system_prompt.txt");
-                if (File.Exists(defaultPath))
-                    File.Copy(defaultPath, destSystemPrompt);
-            }
-            else
-            {
-                var defaultPath = Path.Combine(_promptsBaseDir, "system_prompt.txt");
-                try
-                {
-                    if (File.Exists(defaultPath) && File.GetLastWriteTimeUtc(defaultPath) > File.GetLastWriteTimeUtc(destSystemPrompt))
-                        File.Copy(defaultPath, destSystemPrompt, true);
-                }
-                catch { }
-            }
-
             var npcBase = Path.Combine(_campaignDir, "NPCs");
             AgentManager.Initialize(npcBase);
             EntityManager.Initialize(npcBase);
@@ -209,7 +187,6 @@ namespace AIChronicle
             // 复制到 World/history/chronicles/ 供玩家（H 键史书）与 agent（read_file）阅读。
             CopyInitialHistoryToWorld(npcBase);
 
-            CopyPromptToCampaign("agent_system.txt");
             CopyPromptToCampaign("persona_generation.txt");
             CopyPromptToCampaign("diplomacy_rules.txt");
             CopyPromptToCampaign("chancery_rules.txt");
@@ -291,19 +268,6 @@ namespace AIChronicle
                 }
                 catch { }
             }
-        }
-
-        public static string BuildSystemPrompt(string lordName, CharacterPrompt charPrompt)
-        {
-            var template = LoadSystemPromptTemplate();
-            var worldInfo = MySettings.Instance?.UseWorldInfo == true ? LoadWorldInfo() : "";
-
-            return template
-                .Replace("{lord_name}", lordName)
-                .Replace("{basic_info}", charPrompt.HeroName)
-                .Replace("{world_info}", worldInfo)
-                .Replace("{player_knowledge}", "")
-                .Replace("{current_time}", GetCurrentTimeString());
         }
 
         /// <summary>解析当前交互的 agent/target 实体 ID（与构建稳定前缀使用同一套逻辑，保证易变块与稳定前缀指向同一对实体）。</summary>
@@ -398,40 +362,6 @@ namespace AIChronicle
             combined.AddRange(LoadTools());
             combined.AddRange(LoadAgentTools());
             return combined;
-        }
-
-        private static string LoadSystemPromptTemplate()
-        {
-            var path = Path.Combine(_campaignDir, "system_prompt.txt");
-            if (!File.Exists(path))
-                path = Path.Combine(_promptsBaseDir, "system_prompt.txt");
-            if (!File.Exists(path))
-                return "你是{lord_name}。{basic_info}\n{world_info}\n你对对方的了解：{player_knowledge}";
-
-            var lastWrite = File.GetLastWriteTimeUtc(path);
-            if (_cachedSystemPrompt == "" || lastWrite > _lastSystemPromptCheck)
-            {
-                _cachedSystemPrompt = File.ReadAllText(path, Encoding.UTF8);
-                _lastSystemPromptCheck = lastWrite;
-            }
-            return _cachedSystemPrompt;
-        }
-
-        private static string LoadAgentSystemPromptTemplate()
-        {
-            var path = Path.Combine(_campaignDir, "agent_system.txt");
-            if (!File.Exists(path))
-                path = Path.Combine(_promptsBaseDir, "agent_system.txt");
-            if (!File.Exists(path))
-                return "你是{persona}\n\n{world_info}\n\n你对对方的了解：{player_knowledge}";
-
-            var lastWrite = File.GetLastWriteTimeUtc(path);
-            if (_cachedAgentPrompt == "" || lastWrite > _lastAgentPromptCheck)
-            {
-                _cachedAgentPrompt = File.ReadAllText(path, Encoding.UTF8);
-                _lastAgentPromptCheck = lastWrite;
-            }
-            return _cachedAgentPrompt;
         }
 
         public static List<ToolDef> LoadTools()

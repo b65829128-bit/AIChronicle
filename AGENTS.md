@@ -131,7 +131,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
 | **工具定义文件化** | 66 个工具定义在 `tools.json`（50 个游戏工具）和 `agent_tools.json`（16 个文件/通信工具，含 `write_chronicle`/`submit_advisory`/`submit_edict`/`consult_king`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
 | **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁。**玩家发起的聊天（conversation）是全功能通道——全部分类默认激活**（AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全则对话里达成的承诺无法兑现；能力门控照旧，国王专属工具仍只有国王拿到） |
-| **提示词全部可编辑** | `system_prompt.txt`、`agent_system.txt`、`persona_generation.txt`、`context_template.txt`、`chancery_rules.txt` 均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
+| **提示词全部可编辑** | `context_template.txt`、`persona_generation.txt`、`chancery_rules.txt`、`world_info.txt`、`game_rules.txt` 等均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环，模型调用工具 → 执行 → 追加结果 → 重请求，直到模型自然停止（无轮数限制，仅保留极高安全阀防死循环） |
 | **主线程分发** | LLM 工具循环跑在后台线程，但**所有修改游戏状态的工具**经 `MainThreadExecutor` 排队到主线程 `OnApplicationTick` 执行（后台线程阻塞等待结果）；仅 `request_gold`/`request_items`/`browse_tools` 留在后台线程（前两者需主线程弹窗等待玩家，后者改本流程上下文）。背景：Bannerlord 游戏对象（MobileParty/Hero/Kingdom）是主线程独占的 |
 | **上下文隔离（AsyncLocal）** | `CurrentHero`/`CurrentIntent`/`ActivatedCategories`（AIChatClient）、`_agentEntityId`/`_targetEntityId`（AgentManager）、`_activeAgentId`/`_activeTargetId`（EntityManager）均为 `AsyncLocal`——聊天与后台信件/谏言/外交多个流程并发时上下文互不覆盖；实体缓存用 `ConcurrentDictionary`（线程安全） |
@@ -151,12 +151,17 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 >
 > **运行期热重载**：游戏运行中，编辑战役副本文件立即生效（加载器按 LastWriteTime 重新读取）；编辑基础目录要下次进档才同步。
 
-### 两个模型
+### 单一模型架构
 
-| 模型 | 用途 | 提示词来源 |
-|------|------|-----------|
-| Agent 模型 | 思考、读写文件、调工具、决定回什么 | `context_template.txt` → ContextBuilder 动态组装 |
-| 前台模型 | 把 Agent 给的上下文变成自然对话 | 极简，不带工具，只做角色扮演 |
+整个模组只有**一套 LLM 调用链路**（无第二段独立调用）——角色扮演与工具调用在同一次请求内完成，模型同时输出文本和 tool_calls：
+
+| 项 | 说明 |
+|------|------|
+| 提示词来源 | `context_template.txt` → ContextBuilder 动态组装（`BuildStable`/`BuildVolatile`/合并 `Build`） |
+| 消费入口 | `AIChatClient.SendMessage`（SSE 流式多轮循环） |
+| 模板文件 | 只有 `context_template.txt` 生效；`system_prompt.txt`/`agent_system.txt` 旧模板已废弃删除 |
+
+> 历史：早期架构曾有「前台模型」概念（第二次调用把 Agent 上下文变成自然对话），已在单模型架构演进中移除——当前角色扮演就是 Agent 模型本身输出的内容，不存在单独的对话润色调用。
 
 ### 场景连接配置（每场景独立 URL/模型/密钥）
 
@@ -221,7 +226,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 - 「该人物」= `query_character` 返回结果的前缀（如"该人物：拉盖娅"）
 - 禁止出现「TA」、「他/她」、「其」等模糊指代
 
-此约定适用于 `context_template.txt`、`agent_system.txt` 以及所有新增的工具返回格式。
+此约定适用于 `context_template.txt` 以及所有新增的工具返回格式。
 
 ### 提示词克制原则（模糊化，最核心的提示词设计原则）
 
@@ -351,13 +356,11 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │   │       ├── AIChatScreen.xml  ← 聊天窗口布局
 │   │       └── LetterListScreen.xml ← 书信收信人列表
 │   └── Prompts/
-│       ├── system_prompt.txt  ← 系统提示词模板（玩家可编辑，热重载）
 │       ├── world_info.txt     ← 默认世界背景（六大王国 + 天命）
 │       ├── world_info_nords.txt ← 可选诺德势力段（MCM「包含诺德势力」开启时由 ContextBuilder 拼入主世界观）
 │       ├── InitialHistory/     ← 开局预置初始历史（《卡拉迪亚上古编年史》+ 六国《XX源流纪事》，史官风格，止于1084年；战役进档时复制到 World/history/chronicles/，只补缺失不覆盖）
 │       ├── game_rules.txt     ← 游戏运转规则（玩家可编辑，热重载）
 │       ├── tools.json         ← 游戏工具定义（热重载）
-│       ├── agent_system.txt   ← Agent 系统提示词模板
 │       ├── agent_tools.json   ← Agent 文件工具定义（热重载）
 │       ├── persona_generation.txt ← NPC性格生成提示词（玩家可编辑，热重载）
 │       ├── advisory_rules.txt  ← 封臣谏言规则（热重载）
@@ -369,11 +372,9 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │       │   ├── context_template.txt ← Context 模板
 │       └── Campaigns/         ← 各战役目录（运行时创建）
 │           └── {战役名}/
-│               ├── system_prompt.txt    ← 本战役系统提示词（可独立编辑，热重载）
 │               ├── world_info.txt       ← 本战役世界背景（可独立编辑，热重载）
 │               ├── world_info_nords.txt ← 本战役诺德势力段（可独立编辑，热重载）
 │               ├── game_rules.txt       ← 本战役游戏运转规则（可独立编辑，热重载）
-│               ├── agent_system.txt     ← 本战役 Agent 提示词（热重载）
 │               ├── persona_generation.txt ← 本战役性格生成提示词（热重载）
 │               ├── context_template.txt ← 本战役 Context 模板（热重载）
 │               └── NPCs/          ← Agent 管理的 NPC 文件系统
@@ -682,7 +683,7 @@ Usage:
 
 ### 当前实现
 
-`AIChatClient.cs` 中定义了所有 23 个工具（15 个游戏工具 + 8 个文件/通信工具）。每次 API 请求都附带能力过滤后的工具定义。模型自行判断是否需要调用。返回的 `ChatResponse` 包含：
+所有 66 个工具（50 个游戏工具 + 16 个文件/通信工具）定义在 `tools.json`/`agent_tools.json`（热重载，不硬编码）。每次 API 请求都附带能力过滤后的工具定义。模型自行判断是否需要调用。返回的 `ChatResponse` 包含：
 - `Content`：角色扮演文本回复
 - `LearnedKnowledge`：如果模型调用了 `update_knowledge`，这里包含新认知
 - `ToolCalls`：原始工具调用数据（用于构建反馈闭环）

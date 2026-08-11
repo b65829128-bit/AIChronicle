@@ -270,13 +270,11 @@ Agent 任何时候都可以调 `browse_tools("military")` 解锁某类工具，�
 
 ```
 _Module/Prompts/
-├── system_prompt.txt            # 默认系统提示词模板（新战役复制为初始值）
 ├── world_info.txt               # 默认世界背景介绍（六大王国 + 天命，独立成段可热重载）
 ├── world_info_nords.txt         # 可选的诺德势力世界背景段（MCM「包含诺德势力」开启时拼入）
 ├── InitialHistory/              # 开局预置初始历史（《卡拉迪亚上古编年史》+ 六国《XX源流纪事》，止于1084年）
 ├── game_rules.txt               # 游戏运转规则（agent 按游戏机制决策，玩家可编辑，热重载）
 ├── tools.json                   # 游戏工具定义（热重载）
-├── agent_system.txt             # Agent 系统提示词模板
 ├── agent_tools.json             # Agent 文件工具定义（热重载）
 ├── persona_generation.txt       # NPC性格生成提示词（玩家可编辑，热重载）
 ├── chancery_rules.txt           # 秘书处行为规则（热重载）
@@ -301,11 +299,9 @@ _Module/Prompts/
 │   └── relationship.txt
 └── Campaigns/
     └── {战役名}/                 # 每个存档独立的目录
-        ├── system_prompt.txt     # 本战役的系统提示词（可独立编辑，热重载）
         ├── world_info.txt        # 本战役的世界背景（可编辑，热重载）
         ├── world_info_nords.txt  # 本战役的诺德势力段（可编辑，热重载）
         ├── game_rules.txt        # 本战役的游戏运转规则（可编辑，热重载）
-        ├── agent_system.txt      # 本战役 Agent 提示词（热重载）
         ├── persona_generation.txt # 本战役性格生成提示词（热重载）
         ├── context_template.txt  # 本战役 Context 模板（热重载）
         ├── diplomacy_rules.txt   # 本战役外交决策规则（热重载）
@@ -330,7 +326,7 @@ _Module/Prompts/
 > 禁止使用「TA」「他/她」「其」等模糊人称。未来添加新提示词文件时必须遵守此约定。
 
 > **上下文结构（缓存优化）**：`context_template.txt` 以 `<!--VOLATILE-->` 标记分为两段——
-> **稳定前缀**（身份/persona/世界背景/工具清单/行为守则）进 system 消息；**易变块**（当前时间/自身状态/对对方认知/目标/客观关系/内政报告）单独作为【当前状况】user 消息插在最新消息前。
+> **稳定前缀**（身份/persona/世界背景/工具清单/行为守则）进 system 消息；**易变块**（当前时间/自身状态/对对方认知/目标/客观关系/内政报告）单独作为【当前状况】system 消息插在历史之后、当前 user 消息之前。
 > 这样 system+历史构成逐字节稳定的前缀，最大化 DeepSeek 前缀缓存命中（缓存命中输入价格仅为未命中的 1/50）。
 > **史官例外**：史官 intent 不拆易变块，保持单一 system 消息——文笔是模组核心，结构与旧版一致，绝对保真。
 > 旧版模板（无标记）整体按稳定处理，行为与旧版一致；模板改动随 newer-wins 同步到战役副本。
@@ -340,8 +336,8 @@ _Module/Prompts/
 - **Agent 系统**：每个 NPC 有独立文件系统，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`list_dir`/`glob`/`grep`/`send_letter` 工具管理记忆
 - **信息隔离**：Agent 只能操作自己目录下的文件 + World/ 目录，不能读取其他 NPC 的信息
 - **解耦存储**：聊天记录（`chat_logs/`）、对 Entity 认知（`knowledge/`）、NPC 性格（`persona.txt`）全部独立文件，Agent 按需精确读取
-- **LLM 生成 persona**：首次对话时自动调用 LLM 为 NPC 生成结构化 persona（玩家角色除外，使用静态占位文本）。生成使用 `reasoning_effort=low` + 4096 token 上限（机械任务不需要深度思考，防止思考占满 token 导致正文截断）；加载时若检测到 persona.txt 缺失标准段落标记（被截断的残缺文件）会自动重新生成
-- **ContextBuilder**：根据交互双方动态组装提示词，通过 `context_template.txt` 模板注入 persona 和能力信息；输出拆分为稳定前缀（system）+ 易变块（【当前状况】user 消息），史官 intent 例外（合并为单一 system）
+- **LLM 生成 persona**：首次对话时自动调用 LLM 为 NPC 生成结构化 persona（玩家角色除外，使用静态占位文本）。生成使用 `reasoning_effort=low`，max_tokens 由 MCM「最大 Token 数」统一控制（机械任务不需要深度思考，防止思考占满 token 导致正文截断）；加载时若检测到 persona.txt 缺失标准段落标记（被截断的残缺文件）会自动重新生成
+- **ContextBuilder**：根据交互双方动态组装提示词，通过 `context_template.txt` 模板注入 persona 和能力信息；输出拆分为稳定前缀（system）+ 易变块（【当前状况】system 消息），史官 intent 例外（合并为单一 system）
 - **世界信息系统**：卡拉迪亚大陆介绍，每个战役可独立编辑
 - **系统提示词**：控制 AI 行为风格的核心提示，每个战役独立
 - **工具定义**（`tools.json`）：定义 AI 可调用的游戏函数
@@ -458,7 +454,7 @@ _Module/Prompts/
 1. 启动游戏，在启动器中勾选 **AI Chronicle: Words Become Deeds** 及四个前置模组
 2. 进入主菜单后，在 **Mod Options → AI编年史·言出法随** 中填入 API Key
 3. 开新档或读档 → 模组自动在 `Prompts/Campaigns/` 下创建本战役的提示词目录
-4. （可选）编辑 `system_prompt.txt`、`world_info.txt` 或角色 JSON 文件来定制 AI 行为
+4. （可选）编辑 `context_template.txt`、`world_info.txt`、`game_rules.txt` 或角色 JSON 文件来定制 AI 行为
 5. 与任意领主对话 → 点击 **「【AI 聊天】」**
 6. 在聊天窗口中输入消息，按「发送」按钮
 7. AI 回复会显示在聊天窗口中，支持多轮对话
@@ -518,13 +514,11 @@ AIChronicle/
 │   │   ├── LetterListScreen.xml  # 书信系统界面布局
 │   │   └── HistoryScreen.xml     # 史书 UI 布局（1100×700 双栏）
 │   └── Prompts/
-│       ├── system_prompt.txt      # 系统提示词模板（玩家可编辑，热重载）
 │       ├── world_info.txt         # 默认世界背景
 │       ├── world_info_nords.txt   # 可选的诺德势力世界背景段（MCM 开关）
 │       ├── InitialHistory/        # 开局预置初始历史（止于1084年）
 │       ├── game_rules.txt         # 游戏运转规则（热重载）
 │       ├── tools.json             # 游戏工具定义（热重载）
-│       ├── agent_system.txt       # Agent 系统提示词模板
 │       ├── agent_tools.json       # Agent 文件工具（热重载）
 │       ├── persona_generation.txt # NPC性格生成提示词（热重载）
 │       ├── Templates/             # NPC 目录模板（含 context_template.txt）

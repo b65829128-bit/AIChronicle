@@ -310,7 +310,9 @@ namespace AIChronicle
             }
             else
             {
-                systemPrompt = PromptManager.BuildSystemPrompt(charPrompt.HeroName, charPrompt);
+                // 防御兜底：正常流程不会走到（所有调用都传入 hero 或走史官/天意分支）。
+                // 已废弃 system_prompt.txt 模板，此处仅给出极简提示避免空引用。
+                systemPrompt = "你是" + charPrompt.HeroName + "。" + charPrompt.HeroName;
                 volatileBlock = "";
             }
 
