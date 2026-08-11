@@ -123,7 +123,7 @@ namespace AIChronicle
                         ? "对方是" + agent.Name + "，你的主人。你的职责是执行对方的命令。"
                         : agentId == targetId
                             ? "你正在审视自身与王国的处境。"
-                            : "你第一次见到这位旅行者，对他还不太了解。";
+                            : "你第一次见到这位旅行者，对对方还不太了解。";
                 else if (targetKnowledge.Length > MaxKnowledgeInjectChars)
                     targetKnowledge = targetKnowledge.Substring(0, MaxKnowledgeInjectChars)
                         + "\n…（记忆较长已截断，完整内容可用 read_file 读取）";
@@ -379,7 +379,7 @@ namespace AIChronicle
         private static string BuildConversationRules()
         {
             return LoadRulesFile("conversation_rules.txt", ref _cachedConversationRules, ref _lastConversationRulesCheck)
-                ?? "你就是{name}，{title}。你不是在扮演他，你就是他本人。\n\n"
+                ?? "你就是{name}，{title}。你不是在扮演什么别的角色——你就是{name}本人，你的言行就是{name}的言行。\n\n"
                 + "你的回复规则：\n"
                 + "- 回复保持 4 句话以内。绝不输出超过 4 句\n"
                 + "- 使用中世纪贵族的正式口吻\n"
@@ -394,7 +394,7 @@ namespace AIChronicle
                 + "- 每次对话开始时，使用 query_character 查询对方的基本信息（身份、家族、王国等）\n"
                 + "- 然后使用 read_file 读取 knowledge/{target_id}.txt 了解你对对方的私人认知\n"
                 + "- 然后使用 read_file 读取 goals/current.txt 了解你的当前计划\n"
-                + "- 当对方透露了关于他自己的新信息时，立即调用 append_file 将内容追加到 knowledge/{target_id}.txt\n"
+                + "- 当对方透露了对方自身的新信息时，立即调用 append_file 将内容追加到 knowledge/{target_id}.txt\n"
                 + "- 如果对话中需要提及你与第三方的过往，先用 read_file 读取 relationships/{该人名}.txt\n"
                 + "- 在作出涉及你的记忆或决策之前，先使用 read_file 确认已有信息，不要凭猜测行动\n\n"
                 + "你的跨对话持久记忆规则（极其重要）：\n"
@@ -412,7 +412,7 @@ namespace AIChronicle
                 + "- 开头要有得体的称谓（如「尊敬的{target_name}阁下」或根据你的性格和关系调整）\n"
                 + "- 正文使用正式书面语，可以比口头对话稍长\n"
                 + "- 结尾要有署名（如「——{name}，{title}」）和日期\n"
-                + "- 你不在对方面前——不要写任何括号内的动作描写（如他微笑了或他叹了口气之类），你写的只有文字\n\n"
+                + "- 你不在对方面前——不要写任何括号内的动作描写（如对方微笑了或对方叹了口气之类），你写的只有文字\n\n"
                 + "书信中的限制：\n"
                 + "- 你不能在信中给予或索要金币（钱没办法随信寄到）\n"
                 + "- 你可以在信中建议对方去某地、约定在某处见面\n"
@@ -696,7 +696,7 @@ namespace AIChronicle
                         else if (kingdom != null && targetHero == kingdom.Leader)
                         {
                             var desc = agentIsMerc ? "雇佣兵首领" : "封臣";
-                            sb.AppendLine($"对方与你同属{targetFaction.Name}。对方是你的君主，你是其{desc}。");
+                            sb.AppendLine($"对方与你同属{targetFaction.Name}。对方是你的君主，你是对方的{desc}。");
                         }
                         else if (agentHero.Clan == targetHero.Clan)
                             sb.AppendLine($"对方与你同属{agentHero.Clan?.Name?.ToString() ?? "同一家族"}。你们是同一家族的成员。");
