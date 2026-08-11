@@ -276,7 +276,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 | 项目 | 值 |
 |------|-----|
-| 游戏 | Mount & Blade II: Bannerlord v1.4.7 |
+| 游戏 | Mount & Blade II: Bannerlord v1.4.8 |
 | 游戏路径 | `D:\steam\steamapps\common\Mount & Blade II Bannerlord` |
 | IDE | JetBrains Rider 2026.2 |
 | 开发目录 | `C:\Users\<用户名>\BLMods\AIChronicle` |
@@ -448,7 +448,7 @@ git commit -m "简短一句话（建议英文、单行）"
 | 目录/文件 | 原因 |
 |-----------|------|
 | `bin/` `obj/` | 编译产物 |
-| `BLSource/` | 反编译的游戏源码（5332 文件，只读参考） |
+| `BLSource/` | 反编译的游戏源码（6288 文件，只读参考） |
 | `_Module/Prompts/Campaigns/` | 运行时生成的战役存档数据 |
 | `.idea/` `.vscode/` `Thumbs.db` | IDE 和系统文件 |
 
@@ -546,7 +546,7 @@ public static void Postfix(int param1, float param2)
 
 ## 使用 BLSource 搜索游戏逻辑
 
-BLSource 包含完整的反编译游戏源码（5332 个 .cs 文件），供 AI 搜索和理解游戏内部实现。常用搜索路径：
+BLSource 包含完整的反编译游戏源码（6288 个 .cs 文件），供 AI 搜索和理解游戏内部实现。常用搜索路径：
 
 | 要找的内容 | 搜索目录 |
 |-----------|---------|

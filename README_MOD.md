@@ -523,14 +523,14 @@ AIChronicle/
 │       ├── persona_generation.txt # NPC性格生成提示词（热重载）
 │       ├── Templates/             # NPC 目录模板（含 context_template.txt）
 │       └── Campaigns/             # 各战役独立目录（运行时自动创建）
-└── BLSource/             # 反编译的游戏源码（5332 个文件，只读）
+└── BLSource/             # 反编译的游戏源码（6288 个文件，只读）
 ```
 
 ---
 
 ## 版本
 
-- 游戏版本：Bannerlord v1.4.7
+- 游戏版本：Bannerlord v1.4.8
 - 模组版本：**v2.2.2**
 
 ### v2.2.2 更新要点

@@ -11,7 +11,7 @@ Thank you for your interest! This is an experimental hobby project open-sourced 
 ## Project status / expectations
 
 - The codebase was largely written with AI assistance; the author's role was design and logic review.
-- It targets **Bannerlord v1.4.7**. Game updates may break it. Please state your game version when reporting issues.
+- It targets **Bannerlord v1.4.8**. Game updates may break it. Please state your game version when reporting issues.
 - All comments and prompts are currently in **Chinese**. English contributions are welcome, but please keep existing Chinese comments intact unless you update the corresponding docs too.
 - No test framework exists yet. **Do not break the build**; verify by compiling locally.
 

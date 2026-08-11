@@ -35,6 +35,6 @@ dotnet clean -c Release && dotnet build -c Release
 
 ## 禁区
 
-- **BLSource/**：反编译的游戏源码（5332 文件），只读参考——绝不修改、绝不删除、绝不提交
+- **BLSource/**：反编译的游戏源码（6288 文件），只读参考——绝不修改、绝不删除、绝不提交
 - **_Module/Prompts/Campaigns/**：运行时生成的战役存档数据——绝不提交
 - **工具定义同步**：`tools.json` / `agent_tools.json` 与 `ToolExecutor.cs` 的 switch 必须同步（新增工具：定义 → case → 显示映射，详见 AGENTS.md「扩展方式」）

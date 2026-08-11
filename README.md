@@ -83,7 +83,7 @@ Key design principles:
 
 ## Requirements
 
-- **Mount & Blade II: Bannerlord** (developed against **v1.4.7**)
+- **Mount & Blade II: Bannerlord** (developed against **v1.4.8**)
 - Four prerequisite mods (matching your game version):
   - Harmony (`Bannerlord.Harmony`)
   - ButterLib (`Bannerlord.ButterLib`)
