@@ -15,11 +15,14 @@ namespace AIChronicle
 {
     public class HistoryRecorder : CampaignBehaviorBase
     {
-        private string? _historyDir;
         /// <summary>册封宣言：由 ExecuteTransferFief 在转让前设置（「{国王}以「{reason}」册封」），OnSettlementOwnerChanged 读取后清空。</summary>
         public static string? PendingFiefGrantText;
         /// <summary>宣战宣言：由 ExecuteDeclareWar 在宣战前设置（国王的宣战声明），OnWarDeclared 读取后清空——历史与现实形成对照的素材。</summary>
         public static string? PendingWarDeclaration;
+        /// <summary>死亡时原始身份标记：BeforeHeroKilled 捕获（统治者/族长/成员/冒险者），OnHeroKilled 读取后清空。
+        /// 用途：KillCharacterAction 在触发 HeroKilled 前已完成族长/国王继任改选，实时判断会误判身份，
+        /// 导致关闭「所有贵族立传」时国王/族长不立传。</summary>
+        private static string? _pendingHeroDeathTitle;
         private readonly HashSet<Settlement> _recentSiegeCaptures = new();
         // 围城开始时即记录攻城方名号——结束时 LeaderParty 可能已被击败/解散而取不到名字（史料 "?" 的根源）
         private readonly Dictionary<Settlement, (int Attackers, int Defenders, string Leader, string Kingdom)> _siegeStartTroops = new();
@@ -46,6 +49,11 @@ namespace AIChronicle
                 new Action<Kingdom>(OnKingdomDestroyed));
             CampaignEvents.HeroKilledEvent.AddNonSerializedListener(this,
                 new Action<Hero, Hero, KillCharacterAction.KillCharacterActionDetail, bool>(OnHeroKilled));
+            // 死亡事件触发前，族长/国王的继任改选已完成（KillCharacterAction.ApplyInternal 先改选再触发 HeroKilled），
+            // 此时 victim.Clan.Leader / RulingClan.Leader 已不是 victim，实时判断会把国王/族长误判成"普通成员"，
+            // 关闭「所有贵族立传」时导致国王/族长不立传。BeforeHeroKilled 在改选之前触发，在此捕获死亡时原始身份。
+            CampaignEvents.BeforeHeroKilledEvent.AddNonSerializedListener(this,
+                new Action<Hero, Hero, KillCharacterAction.KillCharacterActionDetail, bool>(OnBeforeHeroKilled));
             CampaignEvents.OnClanChangedKingdomEvent.AddNonSerializedListener(this,
                 new Action<Clan, Kingdom, Kingdom, ChangeKingdomAction.ChangeKingdomActionDetail, bool>(OnClanChangedKingdom));
 
@@ -99,6 +107,7 @@ namespace AIChronicle
                 dataStore.SyncData("mfm_siege_kingdoms", ref _serializedSiegeKingdoms);
 
                 _siegeStartTroops.Clear();
+                _siegeActorCache.Clear();
                 if (_serializedSiegeIds != null && _serializedSiegeAttackers != null && _serializedSiegeDefenders != null)
                 {
                     for (int i = 0; i < _serializedSiegeIds.Count
@@ -114,6 +123,10 @@ namespace AIChronicle
                             if (s.StringId == id)
                             {
                                 _siegeStartTroops[s] = (_serializedSiegeAttackers[i], _serializedSiegeDefenders[i], leader, kingdom);
+                                // 同步填充名号兜底缓存：跨存档围攻（开始于上次会话、结束于本次）时，
+                                // 若 _siegeStartTroops 已被先触发的结束处理器消耗，后触发的处理器仍能取到名号。
+                                // 之前该缓存只在内存中，读档后为空 → 围攻跨存档时史料出现 "?" 名号。
+                                _siegeActorCache[s] = (leader, kingdom);
                                 break;
                             }
                         }
@@ -125,16 +138,16 @@ namespace AIChronicle
 
         private string GetHistoryDir()
         {
-            if (_historyDir == null)
-            {
-                var baseDir = PromptManager.CampaignDir;
-                if (string.IsNullOrEmpty(baseDir))
-                    baseDir = PromptManager.PromptsBaseDir;
-                _historyDir = Path.Combine(baseDir, "NPCs", "World", "history");
-                Directory.CreateDirectory(_historyDir);
-                Directory.CreateDirectory(Path.Combine(_historyDir, "chronicles"));
-            }
-            return _historyDir;
+            // 不缓存：每次实时读 CampaignDir（与 GetCourtDir 一致）。若缓存，进档后第一帧在
+            // StartCampaign 设置 CampaignDir 之前触发记录时，会把 fallback 的基础目录路径缓存下来，
+            // 导致整个会话的史料都写进 Prompts/NPCs/World/history/ 而不是战役目录。
+            var baseDir = PromptManager.CampaignDir;
+            if (string.IsNullOrEmpty(baseDir))
+                baseDir = PromptManager.PromptsBaseDir;
+            var dir = Path.Combine(baseDir, "NPCs", "World", "history");
+            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(Path.Combine(dir, "chronicles"));
+            return dir;
         }
 
         private string GetCourtDir()
@@ -262,12 +275,13 @@ namespace AIChronicle
         private void OnSettlementOwnerChanged(Settlement settlement, bool openToClaim, Hero newOwner, Hero oldOwner, Hero capturer, ChangeOwnerOfSettlementAction.ChangeOwnerOfSettlementDetail detail)
         {
             if (!settlement.IsTown && !settlement.IsCastle) return;
-            if (_recentSiegeCaptures.Remove(settlement)) return;
 
-            // 国王册封/转让：记 fief_granted（附册封宣言），而非 settlement_captured——转让不是攻城
+            // 国王册封/转让：独立历史事件，先清残留的攻城去重标记（防止去重误吞册封记录），再记 fief_granted
             if (detail == ChangeOwnerOfSettlementAction.ChangeOwnerOfSettlementDetail.ByKingDecision
                 || detail == ChangeOwnerOfSettlementAction.ChangeOwnerOfSettlementDetail.ByGift)
             {
+                _recentSiegeCaptures.Remove(settlement);
+
                 var name = settlement.Name?.ToString() ?? "未知";
                 var oldClan = oldOwner?.Clan?.Name?.ToString() ?? "未知";
                 var newClan = newOwner?.Clan?.Name?.ToString() ?? "未知";
@@ -282,6 +296,14 @@ namespace AIChronicle
                 RecordEvent("fief_granted", summary);
                 return;
             }
+            // 攻城夺城（BySiege）：攻克记录已由 OnSiegeCompleted 写入，这里只消费去重标记，不再记"易主"
+            if (detail == ChangeOwnerOfSettlementAction.ChangeOwnerOfSettlementDetail.BySiege)
+            {
+                _recentSiegeCaptures.Remove(settlement);
+                return;
+            }
+            // 其他易主（叛乱/灭族/离国/交易等）：若是刚攻下的城（去重标记残留），跳过，避免与"攻克"重复
+            if (_recentSiegeCaptures.Remove(settlement)) return;
 
             var sName = settlement.Name?.ToString() ?? "未知";
             var oldClanName = oldOwner?.Clan?.Name?.ToString() ?? "未知";
@@ -462,13 +484,8 @@ namespace AIChronicle
 
             var name = victim.Name?.ToString() ?? "未知";
             var clan = victim.Clan?.Name?.ToString() ?? "";
-            var title = "";
-            if (victim.Clan?.Kingdom?.RulingClan?.Leader == victim)
-                title = victim.Clan.Kingdom.Name + "统治者";
-            else if (victim.Clan?.Leader == victim)
-                title = $"{clan}族长";
-            else if (!string.IsNullOrEmpty(clan))
-                title = $"{clan}成员";
+            // 死亡时原始身份（BeforeHeroKilled 在继任改选前捕获）——避免国王/族长被误判为普通成员
+            var title = _pendingHeroDeathTitle ?? "";
 
             var cause = detail switch
             {
@@ -489,11 +506,17 @@ namespace AIChronicle
             // 传记摘要带上受害者编号（StringId），供史官用 query_character 精确查询——重名者多，仅凭姓名会张冠李戴
             var idTag = string.IsNullOrEmpty(victim.StringId) ? "" : $"（{victim.StringId}）";
 
-            if (victim.Clan?.Kingdom?.RulingClan?.Leader == victim)
+            // 立传判定用死亡时原始身份（_pendingHeroDeathTitle，BeforeHeroKilled 捕获）——
+            // HeroKilled 触发时继任改选已完成，实时查 Clan.Leader/RulingClan.Leader 会把国王/族长误判成普通成员，
+            // 关闭「所有贵族立传」时导致国王/族长不立传。
+            _pendingHeroDeathTitle = null; // 用完即清
+
+            if (title.EndsWith("统治者"))
             {
-                AgentScheduler.QueueSpecialChronicle($"重要人物之死：{victim.Clan.Kingdom.Name}统治者 {name}{idTag}{cause}。");
+                var kingdomName = title.Substring(0, title.Length - "统治者".Length);
+                AgentScheduler.QueueSpecialChronicle($"重要人物之死：{kingdomName}统治者 {name}{idTag}{cause}。");
             }
-            else if (victim.Clan?.Leader == victim)
+            else if (title.EndsWith("族长"))
             {
                 AgentScheduler.QueueSpecialChronicle($"重要人物之死：{clan}族长 {name}{idTag}{cause}。");
             }
@@ -505,6 +528,30 @@ namespace AIChronicle
             {
                 AgentScheduler.QueueSpecialChronicle($"重要人物之死：冒险者 {name}{idTag}{cause}，一段传奇就此落幕。");
             }
+        }
+
+        /// <summary>
+        /// 死亡前一刻捕获原始身份：KillCharacterAction.ApplyInternal 在触发 HeroKilledEvent 之前已完成
+        /// 族长/国王继任改选（ChangeClanLeaderAction / ChangeRulingClanAction）与灭族处理，事件触发时
+        /// victim.Clan.Leader / RulingClan.Leader 已不再指向 victim。此回调在改选之前触发，在此记录
+        /// victim 死亡时的真实身份（统治者/族长/成员/冒险者），供 OnHeroKilled 立传判定使用。
+        /// </summary>
+        private void OnBeforeHeroKilled(Hero victim, Hero killer, KillCharacterAction.KillCharacterActionDetail detail, bool showNotifications)
+        {
+            if (victim == null) return;
+            var clan = victim.Clan;
+            if (clan == null)
+            {
+                _pendingHeroDeathTitle = victim == Hero.MainHero ? "冒险者" : "";
+                return;
+            }
+            var kingdom = clan.Kingdom;
+            if (kingdom?.RulingClan?.Leader == victim)
+                _pendingHeroDeathTitle = kingdom.Name?.ToString() + "统治者";
+            else if (clan.Leader == victim)
+                _pendingHeroDeathTitle = clan.Name?.ToString() + "族长";
+            else
+                _pendingHeroDeathTitle = clan.Name?.ToString() + "成员";
         }
 
         private void OnClanChangedKingdom(Clan clan, Kingdom oldKingdom, Kingdom newKingdom, ChangeKingdomAction.ChangeKingdomActionDetail detail, bool showNotifications = true)

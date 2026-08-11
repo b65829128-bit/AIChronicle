@@ -836,10 +836,10 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | 围城开始/失败/放弃 | `OnSiegeEventStartedEvent` / `SiegeCompletedEvent`（败） / `OnSiegeEventEndedEvent` | `siege_started` / `siege_failed` / `siege_abandoned` |
 | 野战/解围野战 | `MapEventEnded`（EventType=FieldBattle/SiegeOutside，**双方总兵力≥600 才入史**，附兵力/胜负/损失） | `battle_fought` |
 | 城镇/城堡易主 | `OnSettlementOwnerChangedEvent`（过滤 IsTown/IsCastle） | `settlement_captured` |
-| 国王册封/转让封地 | `OnSettlementOwnerChangedEvent`（detail=ByKingDecision/ByGift，含册封宣言 PendingFiefGrantText） | `fief_granted` |
+| 国王册封/转让封地 | `OnSettlementOwnerChangedEvent`（detail=ByKingDecision/ByGift，含册封宣言 PendingFiefGrantText）。**去重顺序**：国王册封分支先于攻城去重标记判断（`_recentSiegeCaptures`）——否则攻城后国王用 `gift_fief` 重新册封时，去重标记残留会把 `fief_granted` 吞掉，史官误以为封地直接归统治者 | `fief_granted` |
 | 王国灭亡 | `KingdomDestroyedEvent` | `kingdom_destroyed` |
 | 新王国建立 | 无独立事件，从 `OnClanChangedKingdomEvent` 的 `CreateKingdom` 详情补记 | `kingdom_created` |
-| 贵族死亡 | `HeroKilledEvent`（过滤有 clan 的） | `hero_killed` |
+| 贵族死亡 | `HeroKilledEvent`（过滤有 clan 的）；身份用 `BeforeHeroKilledEvent` 在继任改选**之前**捕获（`_pendingHeroDeathTitle`，死亡时原始身份：统治者/族长/成员/冒险者——KillCharacterAction 触发 HeroKilled 前已完成族长/国王改选，实时判断会误判身份，导致关闭「所有贵族立传」时国王/族长不立传） | `hero_killed` |
 | 氏族叛变 | `OnClanChangedKingdomEvent` | `clan_changed_kingdom` |
 | 氏族领袖更替 | `OnClanLeaderChangedEvent` | `clan_leader_changed` |
 | 贵族婚嫁 | `OnMarriageOfferedToPlayerEvent`（直接注册） | `marriage` |
@@ -857,7 +857,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 - **触发时机**：每年年终（年份推进时），`AgentScheduler.CheckYearAdvance()` 检测年份变化并队列 `YearlyChronicle` 事件
 - **专题触发**：灭国/新王国建立时，`HistoryRecorder` 调用 `AgentScheduler.QueueSpecialChronicle()` 即时队列 `SpecialChronicle` 事件
 - **专题合并（防杀人潮）**：`QueueSpecialChronicle` 会先写入合并缓冲——若已有一个待处理专题史事件，后续事件只追加不新开；处理时一次史官激活合并全部（如玩家连杀十几人 → 只生成一次传记专题，而非连环激活）
-- **传记质量**：`query_character` 现可查已故人物（枚举所有氏族成员含已故 + 在世英雄）并返回出生/卒年；传记提示词要求开头点明身份（统治者/族长/成员）与生卒年。成功判定改为"chronicles 目录出现新文件"（传记/世家/纪事是自命名体例文件，原只查 `chronicle_*.txt` 会误报"未生成"）
+- **传记质量**：`query_character` 现可查已故人物（枚举所有氏族成员含已故 + 在世英雄）并返回出生/卒年；传记提示词要求开头点明身份（统治者/族长/成员）与生卒年。**立传身份在死亡前一刻捕获**（`BeforeHeroKilledEvent` 存 `_pendingHeroDeathTitle`，先于原版继任改选），关闭「所有贵族立传」后国王/族长仍立传。成功判定改为"chronicles 目录出现新文件"（传记/世家/纪事是自命名体例文件，原只查 `chronicle_*.txt` 会误报"未生成"）
 - **Entity**：史官是虚拟 Entity（ID: `__historian__`，`HeroRef = null`），不映射任何游戏 NPC
 - **工具**：`query` + `file` 分类的工具（`ActivatedCategories = {"universal", "query", "file"}`），含专属落盘工具 `write_chronicle`（`Chronicler` 能力门控，仅史官可用）
 - **权限**：可读 `World/history/` 目录，可写 `World/history/chronicles/` 目录
