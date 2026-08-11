@@ -127,5 +127,113 @@ namespace AIChronicle
             }
         }
 
+        /// <summary>
+        /// 封臣/独立氏族领袖自立建国。门槛对齐原版 KingdomCreationModel（家族等级4 + 至少1座城镇/城堡 + 至少100兵）。
+        /// 封臣建国先叛乱脱离旧国（保留封地、对旧国及其交战方宣战）再建国——仿原版玩家建国同款公开 API
+        /// （GovernorCampaignBehavior 逐字调用 KingdomManager.CreateKingdom，接受任意氏族为 founder）。
+        /// </summary>
+        private static string ExecuteCreateKingdom(string kingdomName, string culture, string motto)
+        {
+            if (Campaign.Current == null) return "[错误] 战役未加载。";
+            var hero = AIChatClient.CurrentHero;
+            if (hero == null) return "[错误] 无当前领主";
+            if (hero.Clan == null) return "[错误] 你不属于任何氏族";
+            if (hero.Clan.Leader != hero) return "[错误] 只有氏族领袖才能建国";
+            var clan = hero.Clan;
+
+            // 排除：已是统治者（国王）——无需另立新国
+            if (clan.Kingdom?.RulingClan == clan) return "[错误] 你已是一国之君，无需另立新国";
+            // 排除：雇佣兵——非正式封臣，不能持有封地、不能建国
+            if (clan.IsUnderMercenaryService) return "[错误] 雇佣兵不能建国——先结束雇佣兵契约，成为独立氏族或正式封臣";
+
+            // 对齐原版 KingdomCreationModel 门槛（DefaultKingdomCreationModel：tier4 / 1封地 / 100兵）
+            var model = Campaign.Current.Models.KingdomCreationModel;
+            if (clan.Tier < model.MinimumClanTierToCreateKingdom)
+                return $"[错误] 家族等级不足：建国需要家族等级达到 {model.MinimumClanTierToCreateKingdom} 级（当前 {clan.Tier} 级）。";
+            var ownedFiefs = clan.Settlements.Count(s => s.IsTown || s.IsCastle);
+            if (ownedFiefs < model.MinimumNumberOfSettlementsOwnedToCreateKingdom)
+                return $"[错误] 领地不足：建国至少需要 {model.MinimumNumberOfSettlementsOwnedToCreateKingdom} 座城镇或城堡（当前 {ownedFiefs} 座）。";
+            var troopCount = clan.Fiefs.Sum(t => t.GarrisonParty?.MemberRoster?.TotalHealthyCount ?? 0)
+                             + clan.WarPartyComponents.Sum(w => w.MobileParty.MemberRoster.TotalHealthyCount);
+            if (troopCount < model.MinimumTroopCountToCreateKingdom)
+                return $"[错误] 兵力不足：建国需要至少 {model.MinimumTroopCountToCreateKingdom} 名可战之士（当前 {troopCount} 人，含守军）。";
+
+            if (string.IsNullOrWhiteSpace(kingdomName))
+                return "[错误] 请提供新王国的名称（国号）。";
+            // 国号查重：避免与现有王国同名造成世界局势/外交按名解析混淆
+            foreach (var k in Kingdom.All)
+            {
+                if (!k.IsEliminated && (k.Name?.ToString() ?? "").Equals(kingdomName, StringComparison.OrdinalIgnoreCase))
+                    return $"[错误] 已有王国名为「{kingdomName}」，请另取国号。";
+            }
+
+            // 文化：参数指定（精确优先，再模糊；忽略大小写）或取氏族文化。
+            // 修复（与 query_character 同款）：原实现只有双向 Contains 模糊匹配且区分大小写——
+            // 精确名未优先（如输入"帝国"时可能命中多个帝国子串）、英文小写"empire"会失配。
+            CultureObject? cultureObj = null;
+            if (!string.IsNullOrEmpty(culture))
+            {
+                try
+                {
+                    var cultures = Game.Current.ObjectManager.GetObjectTypeList<CultureObject>().ToList();
+                    cultureObj = cultures.FirstOrDefault(c =>
+                            (c.Name?.ToString() ?? "").Equals(culture, StringComparison.OrdinalIgnoreCase))
+                        ?? cultures.FirstOrDefault(c =>
+                        {
+                            var cn = c.Name?.ToString() ?? "";
+                            return cn.IndexOf(culture, StringComparison.OrdinalIgnoreCase) >= 0
+                                || culture.IndexOf(cn, StringComparison.OrdinalIgnoreCase) >= 0;
+                        });
+                }
+                catch { }
+            }
+            cultureObj ??= clan.Culture;
+            if (cultureObj == null)
+                return "[错误] 无法确定新王国的文化。";
+
+            var oldKingdom = clan.Kingdom;
+            var oldKingdomName = oldKingdom?.Name?.ToString() ?? "?";
+
+            try
+            {
+                // 封臣：先叛乱脱离旧国（保留封地、对旧国及其交战方宣战），再建国。
+                if (clan.Kingdom != null)
+                    ChangeKingdomAction.ApplyByLeaveWithRebellionAgainstKingdom(clan);
+
+                // 建国：新建王国、本族为统治氏族、施加文化默认政策、对无邦交势力宣战。
+                // 原版玩家建国同款公开 API（KingdomManager.CreateKingdom 接受任意氏族为 founder），
+                // kingdom_created / clan_changed_kingdom / war_declared 均由 HistoryRecorder 自动入史。
+                Campaign.Current.KingdomManager.CreateKingdom(
+                    new TextObject(kingdomName), new TextObject(kingdomName), cultureObj, clan,
+                    null, null, null, null);
+
+                var newKingdom = clan.Kingdom;
+                if (newKingdom == null || !newKingdom.Name.ToString().Equals(kingdomName, StringComparison.OrdinalIgnoreCase))
+                    return "[错误] 建国流程异常：未能建立王国。";
+
+                // 角色转变：建国称王后刷新实体头衔与能力缓存——否则本实体拿不到 Diplomat（国王工具门控）直到下次建档
+                EntityManager.RefreshEntity(hero);
+
+                // 立国宣言补记入史（kingdom_created 已由 OnClanChangedKingdom 自动记录，此处补记宣言）
+                if (!string.IsNullOrEmpty(motto))
+                    HistoryRecorder.RecordDiplomacyEvent("kingdom_created", $"{clan.Name}之立国宣言：「{motto}」");
+
+                // 建国专题纪事：史官立即编纂建国始末（增强叙事）
+                AgentScheduler.QueueSpecialChronicle($"新王国建立：{newKingdom.Name}，{clan.Name}族长{clan.Leader?.Name}称王。");
+
+                var founderLine = clan.Leader != null ? $"你即位为第一代国君。" : "";
+                var secessionLine = oldKingdom != null
+                    ? $"你已以叛乱之姿脱离{oldKingdomName}，对其宣战并保留了封地。"
+                    : "你以独立氏族之姿举旗立国。";
+                var mottoLine = !string.IsNullOrEmpty(motto) ? $" 立国宣言：「{motto}」" : "";
+                return $"国号已立：{kingdomName}（{cultureObj.Name}文化）。{secessionLine} {clan.Name}成为统治氏族，{founderLine}{mottoLine}";
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"create_kingdom 异常：{ex}");
+                return $"[错误] 建国失败：{ex.Message}";
+            }
+        }
+
     }
 }

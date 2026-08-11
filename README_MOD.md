@@ -152,6 +152,21 @@
 - 封地审视规则：`fief_review_rules.txt`（热重载）；审视上下文含外交分类工具，封臣**知道**自己能转投
 - **攻城后定归属**：城镇/城堡被攻下（无论玩家或 AI）不再触发原版影响力投票，改由国王 Agent 决定（P1 级激活，与外交提案同级），用 `gift_fief` 赐予合适家族；攻城后默认归国王氏族。国王是玩家时由玩家经秘书处处理。开关：MCM「册封由 Agent 主导」
 
+### 封臣自立建国（实验性，未经过实机测试）
+
+> ⚠️ 此功能为**实验性功能**，尚未经过实机测试，是为未来功能提前做的准备。使用前请先存档。
+
+- 封臣或独立氏族领袖可调用 `create_kingdom` 工具自立建国：给出国号（可选文化/立国宣言），当即称王、本族成为统治氏族
+- **门槛对齐原版** `KingdomCreationModel`（与玩家建国相同）：
+  - 家族等级 ≥ 4
+  - 持有城镇/城堡 ≥ 1
+  - 兵力 ≥ 100（守军 + 野战部队健康数）
+  - 且必须是**氏族领袖**；**国王**与**雇佣兵**被排除
+- **封臣建国 = 叛乱自立**：自动对旧王国宣战并保留封地（同时与旧国的交战方也进入战争状态）——评估能否扛住战争再动手；独立氏族领袖则直接举旗建国，无战争
+- **文化不可自创**：文化在游戏机制中有实际意义（兵种树、文化特性、建国默认政策、忠诚度、NPC 模板），只能取**现有文化**——culture 参数精确优先匹配，不匹配回退氏族文化；原版玩家建国同样只能选氏族+封地文化，本工具不自创文化
+- **入史**：`kingdom_created`（含立国宣言）自动记入原始史料，并触发史官专题**建国纪事**（《X国建立纪事》），年度编年史亦收录；叛乱战争以 `war_declared` 入史
+- **建国后自动接入外交循环**：`AgentScheduler` 遍历 `Kingdom.All`，新王国的国王自动进入国王政务审视（KingDiplomacy），封地册封/诏令/问询/谏言等系统对其开放
+
 ### 封臣谏言
 
 - 每个王国每天有概率（MCM 可调，默认 10%）触发一位氏族领袖向国王进谏
@@ -194,7 +209,7 @@
 | social | change_relation, give_gold, request_gold, give_item, request_items, let_go | conversation |
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous（conversation 亦激活） |
 | military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops, form_army, release_prisoner, execute_prisoner | autonomous（conversation 亦激活） |
-| diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal, gift_fief, change_kingdom, submit_edict, consult_king, reply_consult | diplomacy（conversation 亦激活） |
+| diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal, gift_fief, change_kingdom, create_kingdom（实验性）, submit_edict, consult_king, reply_consult | diplomacy（conversation 亦激活） |
 | file | read_file, write_file, write_chronicle（仅史官）, append_file, edit_file, delete_file, move_file, list_dir, glob, grep | letter, autonomous, conversation |
 | communication | send_letter | letter（conversation 亦激活） |
 

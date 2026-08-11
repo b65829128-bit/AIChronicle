@@ -423,6 +423,7 @@ namespace AIChronicle
                                     "release_prisoner" => $"释放了俘虏 {a["prisoner_name"]?.ToString()}",
                                     "execute_prisoner" => $"处决了俘虏 {a["prisoner_name"]?.ToString()}",
                                     "create_clan" => $"降下了新的贵族血脉 {a["clan_name"]?.ToString()}",
+                                    "create_kingdom" => $"自立为王，建立了新王国 {a["kingdom_name"]?.ToString()}",
                                     _ => $"调用了 {tc.Name}"
                                 };
                             }

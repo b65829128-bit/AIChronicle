@@ -673,6 +673,28 @@
     ]
   },
   {
+    "name": "create_kingdom",
+    "category": "diplomacy",
+    "description": "Found your own new kingdom — declare independence and take the throne. This is how a vassal or an independent clan leader becomes a king.\n\nUsage:\n- Call this ONLY if you are a clan leader (not a ruler, not a mercenary) and you have decided to found a new kingdom.\n- Requirements (checked against the game's kingdom creation model): your clan tier must be at least 4, you must own at least 1 town or castle, and you must have at least 100 able-bodied troops (garrison + fielded parties combined). If you do not meet a requirement, the system will tell you exactly what is missing.\n- If you are currently a vassal of another kingdom, this will make you REBEL against your liege: you keep your fiefs and immediately go to war with your former kingdom AND all of its enemies. Evaluate with query_war_status first whether you can survive that war.\n- If you are an independent clan (no kingdom), this simply raises your banner as the ruling clan of the new kingdom.\n- kingdom_name: the name of your new kingdom (unique — cannot match an existing kingdom).\n- culture: optional. The new kingdom's culture (e.g. 帝国/巴旦尼亚/库赛特/阿塞莱/瓦兰迪亚/斯特吉亚). Omit to use your own clan's culture.\n- motto: optional. A one-line founding declaration, recorded in the historical chronicle and known to the world.\n- This takes effect immediately. The historian will record your founding as a chronicle.\n- Do NOT call this if you are already a king, or if you only wish to change allegiance (use change_kingdom instead).",
+    "parameters": [
+      {
+        "name": "kingdom_name",
+        "type": "string",
+        "description": "The name of your new kingdom (国号), in Chinese or English. Must be unique among existing kingdoms."
+      },
+      {
+        "name": "culture",
+        "type": "string",
+        "description": "Optional. The new kingdom's culture (e.g. 帝国/巴旦尼亚/库赛特/阿塞莱/瓦兰迪亚/斯特吉亚). Omit to use your own clan's culture."
+      },
+      {
+        "name": "motto",
+        "type": "string",
+        "description": "Optional. A one-line founding declaration (立国宣言), recorded in history."
+      }
+    ]
+  },
+  {
     "name": "let_go",
     "category": "social",
     "description": "Let the other party go free from an encounter.\n\nUsage:\n- Call this when you are in an encounter with the other person and your forces are significantly stronger than theirs.\n- You decide to release them without a fight, granting them safe passage.\n- This ends the current encounter peacefully. The released party will be teleported away and cannot be attacked for a period of time.\n- Call this ONLY if you are the stronger party in the encounter and have decided not to attack.\n- Do NOT call this if you are in a settlement, in a battle, or not currently in an encounter with the other person.\n- This is a diplomatic gesture — releasing someone may improve relations, but it also means you lose the chance to capture them or take their loot.",

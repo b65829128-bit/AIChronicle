@@ -128,8 +128,7 @@ namespace AIChronicle
             if (_heroToEntity.TryGetValue(hero, out var existing))
                 return existing;
 
-            var id = GenerateEntityId(hero);
-            if (_entityCache.TryGetValue(id, out var cached))
+            var id = GenerateEntityId(hero);            if (_entityCache.TryGetValue(id, out var cached))
             {
                 _heroToEntity[hero] = cached;
                 return cached;
@@ -151,6 +150,18 @@ namespace AIChronicle
             _entityCache[id] = entity;
             _heroToEntity[hero] = entity;
             return entity;
+        }
+
+        /// <summary>角色状态变化后刷新缓存的实体头衔与能力（如氏族领袖建国称王后需立即获得 Diplomat 国王工具门控）。
+        /// 实体缓存仅在建档/首次遇到时计算一次，中途角色转变（禅位/建国/继任）会过期——本方法在此补刷新。</summary>
+        public static void RefreshEntity(Hero hero)
+        {
+            if (hero == null) return;
+            if (_heroToEntity.TryGetValue(hero, out var entity))
+            {
+                entity.Title = ComputeTitle(hero);
+                entity.Capabilities = ComputeCapabilities(hero, entity.Controller);
+            }
         }
 
         public static Entity? GetEntityById(string id)

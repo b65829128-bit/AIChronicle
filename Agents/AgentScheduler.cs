@@ -630,6 +630,12 @@ namespace AIChronicle
                     return prompt + "\n\n体例建议：此为王国灭亡，应以「世家」体例为该王国作兴衰史（如《南帝国世家》）。write_chronicle(体例=世家, 名称=该王国名)。";
                 }
 
+                if (first.StartsWith("新王国建立"))
+                {
+                    var prompt = PromptManager.LoadSpecialChroniclePrompt().Replace("{event_summary}", joined);
+                    return prompt + "\n\n体例建议：此为新王国建立，应以「纪事」体例叙述建国始末（如《X国建立纪事》），点明建国者、称王时间、立国宣言与新国疆域。write_chronicle(体例=纪事, 名称=新王国名或建国事件名)。";
+                }
+
                 var sprompt = PromptManager.LoadSpecialChroniclePrompt().Replace("{event_summary}", joined);
                 return sprompt + "\n\n体例建议：此系一般重大事件，应以「纪事」体例叙述（如《帝国分裂纪事》）。write_chronicle(体例=纪事, 名称=事件名)。";
             }

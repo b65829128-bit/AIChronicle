@@ -129,7 +129,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **书信模式** | 支持书信 intent，O 键唤起书信往来面板（统一线程列表 + 未读角标） |
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 66 个工具定义在 `tools.json`（50 个游戏工具）和 `agent_tools.json`（16 个文件/通信工具，含 `write_chronicle`/`submit_advisory`/`submit_edict`/`consult_king`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
+| **工具定义文件化** | 67 个工具定义在 `tools.json`（51 个游戏工具）和 `agent_tools.json`（16 个文件/通信工具，含 `write_chronicle`/`submit_advisory`/`submit_edict`/`consult_king`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
 | **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁。**玩家发起的聊天（conversation）是全功能通道——全部分类默认激活**（AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全则对话里达成的承诺无法兑现；能力门控照旧，国王专属工具仍只有国王拿到） |
 | **提示词全部可编辑** | `context_template.txt`、`persona_generation.txt`、`chancery_rules.txt`、`world_info.txt`、`game_rules.txt` 等均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环，模型调用工具 → 执行 → 追加结果 → 重请求，直到模型自然停止（无轮数限制，仅保留极高安全阀防死循环） |
@@ -683,7 +683,7 @@ Usage:
 
 ### 当前实现
 
-所有 66 个工具（50 个游戏工具 + 16 个文件/通信工具）定义在 `tools.json`/`agent_tools.json`（热重载，不硬编码）。每次 API 请求都附带能力过滤后的工具定义。模型自行判断是否需要调用。返回的 `ChatResponse` 包含：
+所有 67 个工具（51 个游戏工具 + 16 个文件/通信工具）定义在 `tools.json`/`agent_tools.json`（热重载，不硬编码）。每次 API 请求都附带能力过滤后的工具定义。模型自行判断是否需要调用。返回的 `ChatResponse` 包含：
 - `Content`：角色扮演文本回复
 - `LearnedKnowledge`：如果模型调用了 `update_knowledge`，这里包含新认知
 - `ToolCalls`：原始工具调用数据（用于构建反馈闭环）
@@ -712,11 +712,15 @@ Usage:
 - ~~发起外交/王国级动作~~ → `declare_war` / `propose_peace` / `propose_alliance` / `propose_trade` / `gift_fief`（已全部实现）
 - 物品交易 → `give_item` / `give_item` / `request_items`（已全部实现）
 - ~~氏族阵营切换~~ → `change_kingdom`（已实现，支持离国/加入/叛逃/雇佣兵四种模式）
-- NPC 自立建国 → `create_kingdom`（待开发）<br>
-  `ChangeKingdomAction.ApplyByCreateKingdom(Clan, Kingdom)` 后端方法已存在，接受任意氏族。<br>
-  阻碍：① `Kingdom` 对象构造函数不在反编译源码中，可能需要反射或查找静态工厂；<br>
-  ② `DefaultKingdomCreationModel` 全部方法硬编码为 `IsPlayerKingdomCreationPossible`（只检 `Hero.MainHero`），需替换或 patch。<br>
-   条件门槛（四级家族+有封地+100兵）本身合理，移植给 NPC 直接可用。
+- ~~NPC 自立建国~~ → `create_kingdom`（已实现，**实验性功能：未经实机测试，为未来功能提前做的准备**）<br>
+  封臣/独立氏族领袖自立建国。实现要点：
+  - **API 无阻碍**：`Campaign.Current.KingdomManager.CreateKingdom(name, informalName, culture, founderClan, ...)` 是公开方法、接受任意氏族为 founder（原版玩家建国 GovernorCampaignBehavior 逐字调用）；`Kingdom.CreateKingdom(string)` 静态工厂在反编译源码里。旧笔记里的"构造函数不在源码 / DefaultKingdomCreationModel 硬编码玩家"两个阻碍均不成立（后者只是玩家 UI 门槛，本工具自己做运行时校验）。
+  - **门槛对齐原版**：读 `Campaign.Current.Models.KingdomCreationModel`（tier4 + 城镇/城堡≥1 + 兵≥100[守军+野战健康数]）。
+  - **封臣叛乱先行**：`ApplyByCreateKingdom` 内部 `ClanLeaveKingdom` 只置 Kingdom=null（不转封地、不宣战）——封臣直接建国会"无声脱离旧国"。故工具内先 `ApplyByLeaveWithRebellionAgainstKingdom`（保封地、对旧国及其交战方宣战）再建国。叛乱触发 `war_declared` 入史。
+  - **史官自动入史**：`kingdom_created` 由 HistoryRecorder.OnClanChangedKingdom 按 CreateKingdom detail 自动补记；工具另补记立国宣言（`RecordDiplomacyEvent`）并 `QueueSpecialChronicle("新王国建立：...")` 触发建国纪事（ConsumeSpecialChronicleContent 已加"新王国建立"→纪事体例建议）。
+  - **能力刷新**：建国称王后调 `EntityManager.RefreshEntity(hero)` 重算 Title/Capabilities——否则缓存实体拿不到 Diplomat（国王工具门控）直到下次建档（此刷新方法同时可修 abdicate 后的同类过期问题，但未在其他路径接入）。
+  - **文化匹配**：culture 参数精确优先（OrdinalIgnoreCase）再双向 Contains 模糊（与 query_character 同款修复，原实现模糊优先级高且区分大小写）；不匹配回退氏族文化。**不自创文化**——CultureObject 是 XML 静态内容（sealed，无运行时创建 API，含兵种树/文化特性/默认政策/模板等），原版建国也只能选氏族+封地文化。
+  - 运行时校验（仿 change_kingdom 模式，不新增 capability）：非氏族领袖/已为统治者/雇佣兵/门槛不足/国号重名均明确报错。
 - **中英双语（i18n，长线待办）**：模组目前**完全面向中文玩家**——提示词、史书、UI、文件名、语义设计（如「皇帝」交权的语义就是按中文读者设计的）皆是中文。未来目标**中文 → 中英双语**（这一档已覆盖绝大多数玩家），不做 Minecraft 式全语言全球化（个人能力有限，除非模组有热度后靠社区维护）。架构方向：**机制中立、内容跟随**——① 提示词按语言分目录（`_Module/Prompts/zh-CN/`、`en-US/`…），`PromptManager` 按 MCM「界面语言」（Auto 跟随游戏语言）加载对应语言集；② 系统提示词加「用玩家语言回复」指令，LLM 对话/书信/谏言输出即时跟随；③ 史官文风按语言提供（中文=资治通鉴风，英文=拉丁/盎格鲁-撒克逊编年史风），保住「史书」这一核心特色；④ UI 硬编码文案（史书/书信/秘书处/信息弹窗）抽成语料表按语言加载；⑤ 文件名/数据结构中立化（历史文件、NPC 目录改用 ID/英文命名）——**破坏性**（触及 ParseChronicleName、权限白名单、复制逻辑、旧档兼容），长期搁置。实现顺序：先搭「语言设置 + 提示词分目录 + 语言跟随指令」框架，其余语言只加文件；UI 资源化按需；文件结构中立化最后。
 
 ### 流式架构（已实现，参考 opencode）
@@ -915,7 +919,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | dotnet CLI | `dotnet` | 编译、创建新项目 |
 | Rider | `C:\Program Files\JetBrains\JetBrains Rider 2026.2\bin\rider64.exe` | IDE |
 
-### 游戏工具（tools.json，50 个）
+### 游戏工具（tools.json，51 个）
 
 | 工具 | 类别 | 说明 |
 |------|------|------|
@@ -965,6 +969,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | `release_prisoner` | 军事 | 释放自己部队中的俘虏（贵族英雄→逃亡者回领地，普通士兵→移除；支持按名单个释放或 all 全放） |
 | `execute_prisoner` | 军事 | 处决自己部队中的贵族俘虏（仅限贵族；受 MCM「处决无惩罚」控制，默认开=无惩罚） |
 | `create_clan` | 通用 | 天意建族（家族补充系统）：建新贵族家族（成员 3-6 人程序生成、家族等级 2、族长带兵、旗帜随机、入原始史料但不激活史官）。仅 `__fate__` 实体可用（能力门控）。**代码强制每次激活只建一族**（LLM 可能连建多族，曾致原生崩溃）；英雄创建对齐游戏叛乱建族模式（先建英雄→注册进族→置 Active）；成员模板用 `CultureObject.RebelliousHeroTemplates`（Lord 模板不在 NotableTemplates，`GetRandomTemplateByOccupation(Lord)` 恒 null 的死路径已弃）；**预算只在建族成功后才占用**（失败不消耗、可重试） |
+| `create_kingdom` | 外交 | 封臣/独立氏族领袖自立建国（**实验性功能：未经实机测试，为未来功能提前做的准备**）。门槛对齐原版 KingdomCreationModel（tier4 + 城镇/城堡≥1 + 兵≥100）；排除国王与雇佣兵；封臣建国先叛乱脱离旧国（保封地、对旧国及其交战方宣战）再建国；文化参数精确优先再模糊匹配，不自创文化（CultureObject 是 XML 静态内容）；国号查重；史官自动入史 + 建国纪事；称王后 `EntityManager.RefreshEntity` 补 Diplomat 能力 |
 
 ### 文件工具（agent_tools.json，16 个）
 

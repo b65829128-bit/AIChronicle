@@ -322,6 +322,12 @@ namespace AIChronicle
                             args["motivation"]?.ToString() ?? "",
                             args["is_mercenary"]?.ToObject<bool>() ?? false);
 
+                    case "create_kingdom":
+                        return ExecuteCreateKingdom(
+                            args["kingdom_name"]?.ToString() ?? "",
+                            args["culture"]?.ToString() ?? "",
+                            args["motto"]?.ToString() ?? "");
+
                     case "query_settlement_villages":
                         return ExecuteQuerySettlementVillages(args["settlement_name"]?.ToString() ?? "");
 
