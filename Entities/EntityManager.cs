@@ -127,8 +127,8 @@ namespace AIChronicle
         {
             if (_heroToEntity.TryGetValue(hero, out var existing))
                 return existing;
-
-            var id = GenerateEntityId(hero);            if (_entityCache.TryGetValue(id, out var cached))
+            var id = GenerateEntityId(hero);
+            if (_entityCache.TryGetValue(id, out var cached))
             {
                 _heroToEntity[hero] = cached;
                 return cached;
