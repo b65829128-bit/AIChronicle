@@ -197,6 +197,21 @@ namespace AIChronicle
                             $"你收到了{replySenderName}的回信，按 O 键打开书信面板查看。", Colors.Green));
                     }
                 }
+
+                // 结束声明：明确告知玩家该次激活已处理完毕——避免"只有开始没有结束"的困惑
+                var doneMsg = evt.Type switch
+                {
+                    ActivationEventType.KingDiplomacy => $"{agentName} 已处理完内外政务。",
+                    ActivationEventType.SelfReview => $"{agentName} 已完成对自己的审视。",
+                    ActivationEventType.FiefReview => $"{agentName} 已处置好夺封之事。",
+                    ActivationEventType.KingConsult => $"{agentName} 已回应 {targetName} 的使者。",
+                    ActivationEventType.EnvoyReceived => $"{agentName} 已处理 {targetName} 的密使。",
+                    ActivationEventType.BehaviorCheckIn => $"{agentName} 已重新评估当前任务。",
+                    ActivationEventType.PlanCheckIn => $"{agentName} 已继续执行计划。",
+                    _ => ""
+                };
+                if (doneMsg.Length > 0)
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(doneMsg, Colors.Green));
             }
             catch (Exception ex)
             {
