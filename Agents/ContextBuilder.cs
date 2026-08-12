@@ -845,8 +845,13 @@ namespace AIChronicle
 
             if (party.Army != null)
             {
-                var armyLeader = party.Army.LeaderParty?.LeaderHero?.Name?.ToString() ?? "未知";
-                sb.Append($"，身处{armyLeader}的军团中");
+                var armyLeader = party.Army.LeaderParty?.LeaderHero;
+                var armyTotal = 0;
+                try { foreach (var mp in party.Army.Parties) armyTotal += mp.MemberRoster.TotalManCount; } catch { }
+                if (armyLeader == hero)
+                    sb.Append($"，你是这支军团的首领（全军约{armyTotal}人）");
+                else
+                    sb.Append($"，身处{armyLeader?.Name?.ToString() ?? "未知"}的军团（全军约{armyTotal}人）");
             }
 
             sb.Append(party.IsMoving ? "，正行军。" : "，已停留。");

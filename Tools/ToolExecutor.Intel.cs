@@ -51,6 +51,7 @@ namespace AIChronicle
             sb.AppendLine($"金币: {gold}  |  日薪: {wage}");
             sb.AppendLine($"兵力 {totalMen} 人, 伤 {totalWounded} 人, 上限 {maxSize}");
             sb.AppendLine($"粮食: {party.TotalFoodAtInventory} (约 {foodDays:F1} 天)");
+            AppendArmyInfo(sb, party, leader);
             sb.AppendLine();
 
             if (elements.Count == 0)
@@ -210,6 +211,38 @@ namespace AIChronicle
             return sb.ToString().TrimEnd();
         }
 
+        /// <summary>
+        /// 军团上下文（地图上可见的公开信息）：查询部队是否隶属军团、谁是军团长、全军合计兵力与成员。
+        /// 修复：agent 查询自己部队时若身处军团，会误以为只带本部人马。
+        /// </summary>
+        private static void AppendArmyInfo(StringBuilder sb, MobileParty party, Hero? leader)
+        {
+            var army = party.Army;
+            if (army == null) return;
+
+            var armyLeader = army.LeaderParty?.LeaderHero;
+            var total = 0;
+            var memberNames = new List<string>();
+            try
+            {
+                foreach (var mp in army.Parties)
+                {
+                    if (mp.MemberRoster != null) total += mp.MemberRoster.TotalManCount;
+                    var ml = mp.LeaderHero?.Name?.ToString();
+                    if (!string.IsNullOrEmpty(ml)) memberNames.Add(ml);
+                }
+            }
+            catch { }
+
+            var armyLeaderName = armyLeader?.Name?.ToString() ?? "未知";
+            var own = party.MemberRoster?.TotalManCount ?? 0;
+            if (leader != null && armyLeader == leader)
+                sb.AppendLine($"军团：该部队是军团首领 {armyLeaderName} 的本部（全军约 {total} 人）");
+            else
+                sb.AppendLine($"军团：隶属 {armyLeaderName} 的军团（全军约 {total} 人，含本部 {own} 人）");
+            sb.AppendLine($"军团成员：{string.Join("、", memberNames)}");
+        }
+
         /// <summary>军情情报等级：Full=全量精确，NearScout=近距侦察，FarScout=远方模糊，Rumor=传闻。</summary>
         private enum IntelTier { Full, NearScout, FarScout, Rumor }
 
@@ -351,6 +384,7 @@ namespace AIChronicle
                     sb.AppendLine($"伤兵：约 {FuzzRound(wounded, 10)} 人");
                 sb.AppendLine($"兵种构成：{SafeComposition(party, totalMen)}");
                 sb.AppendLine($"当前位置：{SafeLocationDesc(party, leader)}");
+                sb.Append(BuildFuzzyArmyLine(party));
                 sb.AppendLine("【侦察情报】近距观察所得，兵力、规模上限与兵种构成基本可信；金币、军饷、兵种经验、升级路线、俘虏与物资详情无法从外部探知。");
                 return sb.ToString().TrimEnd();
             }
@@ -366,6 +400,7 @@ namespace AIChronicle
                 sb.AppendLine($"兵种构成：{SafeComposition(party, totalMen)}");
                 sb.AppendLine($"装备水平：{SafeGearQuality(party, totalMen)}");
                 sb.AppendLine($"当前位置：{SafeLocationDesc(party, leader)}");
+                sb.Append(BuildFuzzyArmyLine(party));
                 sb.AppendLine("【情报不确定】远处得来的消息，仅有大致兵力、规模上限与构成印象；具体军情（金币、军饷、兵种经验、升级路线、俘虏、物资、装备）无从得知。");
                 return sb.ToString().TrimEnd();
             }
@@ -381,6 +416,18 @@ namespace AIChronicle
         private static int SafeTotalMen(MobileParty party)
         {
             try { return party.MemberRoster?.TotalManCount ?? 0; } catch { return 0; }
+        }
+
+        /// <summary>军团隶属（地图可见的公开信息，供近/远侦察档位）：该部队是否隶属某军团、军团长是谁。</summary>
+        private static string BuildFuzzyArmyLine(MobileParty party)
+        {
+            try
+            {
+                if (party.Army == null) return "";
+                var armyLeader = party.Army.LeaderParty?.LeaderHero?.Name?.ToString();
+                return $"军团：隶属{(string.IsNullOrEmpty(armyLeader) ? "一支军团" : armyLeader + "的军团")}\n";
+            }
+            catch { return ""; }
         }
 
         private static int SafePartySizeLimit(MobileParty party)
