@@ -23,7 +23,7 @@
 - **动态上下文组装**：ContextBuilder 根据交互双方动态构建系统提示词
 - **工具能力过滤**：每个 Entity 有 EntityCapability 集合，无部队的 NPC 不拿到行军工具
 - 认知更新机制使用 OpenAI function calling 协议
-  - Agent 可以调用 `query_settlement` 查询任意定居点实时信息（所有者、繁荣度、**守军兵力**——驻军+民兵+驻城贵族部队的准确数、**围攻状态**）
+  - Agent 可以调用 `query_settlement` 查询任意定居点实时信息（所有者、繁荣度、**守军兵力**——驻军+民兵+驻城贵族部队的准确数，**含伤兵**、与游戏守城口径一致、**围攻状态**）
   - Agent 可以调用 `query_settlement_geography` 查询任意城镇/城堡的地理情报（大陆方位、周边定居点及阵营关系、边境/腹地标签，距离精确到km，全部动态计算实时地图数据）
   - Agent 可以调用 `query_world_state` 获取当前世界局势（各王国兵力、交战状态，含近期到期的盟约/贸易协定）
   - Agent 可以调用 `move_to_settlement` 工具，让 NPC 部队实际行军移动到地图上的城镇/城堡（非瞬移）
@@ -571,6 +571,7 @@ AIChronicle/
 - **日记工具 `record_resolve`**：强制 `[年季节日] 类型：内容` 格式落笔日记（类型白名单：决心/决定/承诺/计策/情报/评价/结果/战略），防止日记格式破坏导致记忆检索失效
 - **自省先读日记**：`self_review_rules.txt` 要求先 `read_file decisions/diary.txt` 回顾进行中的计策/承诺；记忆巩固前置接入自省与密使回应
 - **MCM 文案**：「启用封臣谏言」「封臣谏言概率/天」「强制封臣进谏」→「启用封臣自省/谏言」「自省/谏言概率/天」「强制封臣自省」（数值开关沿用，旧配置保留）
+- **守军兵力口径修正（对齐游戏守城方）**：`query_settlement`/`besiege_settlement` 的守军数改用 `TotalManCount`（**含伤兵**，伤兵同样守城）并补入定居点自身守御方与民兵缓冲兜底，城内部队过滤对齐游戏 `Town.GetDefenderParties`（活跃、非村民、非商队，不再要求领袖）——修复"AI 仅凭健康数低估守军"导致的莽撞围攻
 - **场景连接**：`self_review` / `envoy_reply` 复用「封臣谏言」场景，不新增配置组
 
 ### v2.2.2 更新要点
@@ -604,7 +605,7 @@ AIChronicle/
 ### v2.0.5 更新要点
 
 - **攻城决策信息补全（围城不盲打）**：此前 agent 围城完全不知道城中守军——`query_settlement` 只返回繁荣度，`besiege_settlement` 直接发兵。现在：
-  - `query_settlement` / `query_settlement_geography` 新增**守军兵力**（驻军 + 民兵 + 驻城贵族部队的准确总数与构成）
+  - `query_settlement` / `query_settlement_geography` 新增**守军兵力**（驻军 + 民兵 + 驻城贵族部队的准确总数与构成，**含伤兵**——伤兵同样守城，用 `TotalManCount` 对齐游戏 `NumberOfAllMembers` 口径；另含定居点自身守御方与民兵缓冲兜底）
   - `besiege_settlement` 返回时附带**守军评估**：守军总数与己方兵力对比，明显不足（<70%）时提醒可 `form_army` 拉军团或另择弱城（不硬拦，保留 agent 自主权）
   - 设计权衡：守军数**不设情报迷雾**、给准确判断——玩家实时激活可反复试，但 agent 一次激活做出的决定没有中途取消的机会，判断必须可信
   - 提示词引导：`besiege_settlement` 工具描述要求"围城前先 `query_settlement` 摸守军"；`game_rules.txt` 新增「围城之守」条目（守军构成 + 悬殊勿单部强攻）

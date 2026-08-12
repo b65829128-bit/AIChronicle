@@ -196,7 +196,11 @@ namespace AIChronicle
 
         /// <summary>
         /// 城中守军兵力（供攻城决策）：驻军 + 民兵 + 驻扎城内的贵族部队。
-        /// 设计权衡：不设情报迷雾、给准确数——agent 一次激活做出的决定没有中途取消的机会，判断必须可信。
+        /// 与游戏权威口径对齐（Town.GetDefenderParties / NumberOfAllMembers）：
+        ///  - 用 TotalManCount（含伤兵）而非 TotalHealthyCount——伤兵同样守城，原实现少算
+        ///  - 含 Settlement.Party（定居点自身守御方，游戏恒计入）
+        ///  - 民兵部队缺失时兜底用 Settlement.Militia（含未转入部队的 _readyMilitia 缓冲）
+        ///  - 城内部队过滤与游戏一致：活跃、非村民、非商队（不要求 LeaderHero）
         /// </summary>
         private static string DescribeSettlementDefenders(Settlement s)
         {
@@ -204,17 +208,24 @@ namespace AIChronicle
             {
                 int garrison = 0, militia = 0, lords = 0;
                 if (s.Town?.GarrisonParty != null)
-                    garrison = s.Town.GarrisonParty.MemberRoster.TotalHealthyCount;
+                    garrison = s.Town.GarrisonParty.MemberRoster.TotalManCount;
                 if (s.MilitiaPartyComponent?.MobileParty != null)
-                    militia = s.MilitiaPartyComponent.MobileParty.MemberRoster.TotalHealthyCount;
+                    militia = s.MilitiaPartyComponent.MobileParty.MemberRoster.TotalManCount;
+                else
+                    militia = (int)s.Militia; // 民兵缓冲未转入部队时的兜底（_readyMilitia）
+
+                // 定居点自身守御方（游戏 GetDefenderParties 恒含 Settlement.Party；要塞通常为空，有则补上）
+                if (s.IsFortification && s.Party?.MemberRoster != null)
+                    lords += s.Party.MemberRoster.TotalManCount;
 
                 foreach (var mp in MobileParty.All)
                 {
                     if (mp == s.Town?.GarrisonParty) continue;
                     if (mp == s.MilitiaPartyComponent?.MobileParty) continue;
                     if (mp.CurrentSettlement != s) continue;
-                    if (!mp.IsActive || mp.LeaderHero == null) continue;
-                    lords += mp.MemberRoster.TotalHealthyCount;
+                    // 与游戏 Town.GetDefenderParties 过滤对齐：活跃、非村民、非商队（守卫部队不要求 LeaderHero）
+                    if (!mp.IsActive || mp.IsVillager || mp.IsCaravan) continue;
+                    lords += mp.MemberRoster.TotalManCount;
                 }
 
                 var total = garrison + militia + lords;
