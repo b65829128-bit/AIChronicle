@@ -84,6 +84,67 @@ namespace AIChronicle
             return Path.Combine(_baseDir, agentEntityId, "chat_logs", SanitizeFile(targetEntityId) + ".txt");
         }
 
+        /// <summary>私有密使线程路径（World/correspondence/{idA}_and_{idB}.txt，与 ToolExecutor 写入端同路径）。</summary>
+        public static string? GetCorrespondencePathFor(string idA, string idB)
+        {
+            if (string.IsNullOrEmpty(_baseDir) || string.IsNullOrEmpty(idA) || string.IsNullOrEmpty(idB))
+                return null;
+            var pair = string.CompareOrdinal(idA, idB) <= 0 ? idA + "_and_" + idB : idB + "_and_" + idA;
+            return Path.Combine(_baseDir, "World", "correspondence", pair + ".txt");
+        }
+
+        /// <summary>解析密使线程行：[时间] 名字（标题）遣使/答复：内容。解析失败的行跳过。</summary>
+        private static EnvoyEntry? ParseEnvoyLine(string line)
+        {
+            var tsEnd = line.IndexOf("] ", StringComparison.Ordinal);
+            if (tsEnd < 1) return null;
+            var time = line.Substring(1, tsEnd - 1);
+            var rest = line.Substring(tsEnd + 2);
+            var nameEnd = rest.IndexOf("（", StringComparison.Ordinal);
+            if (nameEnd <= 0) return null;
+            var sender = rest.Substring(0, nameEnd);
+            var titleEnd = rest.IndexOf("）", nameEnd, StringComparison.Ordinal);
+            if (titleEnd < 0) return null;
+            var tail = rest.Substring(titleEnd + 1);
+            var colon = tail.IndexOf('：');
+            if (colon < 0) return null;
+            return new EnvoyEntry { Time = time, Sender = sender, Content = tail.Substring(colon + 1).Trim() };
+        }
+
+        /// <summary>读取双方私有密使线程，按时间顺序返回。</summary>
+        public static List<EnvoyEntry> ReadCorrespondenceThread(string idA, string idB)
+        {
+            var result = new List<EnvoyEntry>();
+            var path = GetCorrespondencePathFor(idA, idB);
+            if (path == null || !File.Exists(path)) return result;
+            try
+            {
+                foreach (var line in SafeFileIO.ReadAllLines(path))
+                {
+                    if (string.IsNullOrWhiteSpace(line)) continue;
+                    var entry = ParseEnvoyLine(line);
+                    if (entry != null) result.Add(entry);
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        /// <summary>密使未读数：自己最近一条消息之后由对方发来的条数（派生，无需水位文件）。</summary>
+        public static int GetEnvoyUnreadCount(string npcId, string playerId)
+        {
+            var entries = ReadCorrespondenceThread(npcId, playerId);
+            if (entries.Count == 0) return 0;
+            var playerName = Hero.MainHero?.Name?.ToString() ?? "";
+            var unread = 0;
+            for (var i = entries.Count - 1; i >= 0; i--)
+            {
+                if (entries[i].Sender == playerName) break;
+                unread++;
+            }
+            return unread;
+        }
+
         public static string? GetTargetKnowledgePath()
         {
             if (string.IsNullOrEmpty(_agentDir)) return null;
@@ -506,5 +567,13 @@ namespace AIChronicle
         // ============ 每线程已读/未读追踪（玩家端） ============
 
         private static readonly object _threadReadLock = new();
+    }
+
+    /// <summary>私有密使线程单条记录（UI 展示用）。</summary>
+    public class EnvoyEntry
+    {
+        public string Time { get; set; } = "";
+        public string Sender { get; set; } = "";
+        public string Content { get; set; } = "";
     }
 }

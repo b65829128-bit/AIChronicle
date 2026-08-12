@@ -16,6 +16,7 @@ namespace AIChronicle
     {
         private static Hero? _pendingChatHero;
         private static Hero? _pendingLetterHero;
+        private static Hero? _pendingEnvoyHero;
         private static LordChatBehavior? _chatBehavior;
         private static bool _prevLetterO;
         private static bool _prevChanceryP;
@@ -265,6 +266,22 @@ namespace AIChronicle
                         Colors.Red));
                 }
             }
+
+            if (_pendingEnvoyHero != null)
+            {
+                var hero = _pendingEnvoyHero;
+                _pendingEnvoyHero = null;
+                try
+                {
+                    AIChatScreen.DoOpenEnvoy(hero);
+                }
+                catch (Exception ex)
+                {
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"[AI编年史] 打开密使往来窗口异常：{ex.Message}",
+                        Colors.Red));
+                }
+            }
         }
 
         public static void RequestChatOpen(Hero hero)
@@ -275,6 +292,11 @@ namespace AIChronicle
         public static void RequestLetterOpen(Hero hero)
         {
             _pendingLetterHero = hero;
+        }
+
+        public static void RequestEnvoyOpen(Hero hero)
+        {
+            _pendingEnvoyHero = hero;
         }
 
         private static void KdpbRegisterPatched()

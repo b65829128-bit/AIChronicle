@@ -14,6 +14,7 @@ namespace AIChronicle
         private string _npcLabel = "";
         private readonly LetterListVM _parent;
         private readonly Hero? _writerHero;
+        private readonly bool _isEnvoy;
 
         [DataSourceProperty]
         public string NpcLabel
@@ -22,16 +23,17 @@ namespace AIChronicle
             set => SetField(ref _npcLabel, value, "NpcLabel");
         }
 
-        public LetterListEntryVM(string label, Hero? hero, LetterListVM parent)
+        public LetterListEntryVM(string label, Hero? hero, LetterListVM parent, bool isEnvoy = false)
         {
             _npcLabel = label;
             _writerHero = hero;
             _parent = parent;
+            _isEnvoy = isEnvoy;
         }
 
         public void ExecuteSelect()
         {
-            _parent.OnEntrySelected(_writerHero);
+            _parent.OnEntrySelected(_writerHero, _isEnvoy);
         }
     }
 
@@ -41,16 +43,16 @@ namespace AIChronicle
         public MBBindingList<LetterListEntryVM> Messages { get; } = new();
 
         public Action? OnClose { get; set; }
-        public Action<Hero?>? OnSelectNpc { get; set; }
+        public Action<Hero?, bool>? OnSelectNpc { get; set; }
 
-        public void AddEntry(string label, Hero? hero)
+        public void AddEntry(string label, Hero? hero, bool isEnvoy = false)
         {
-            Messages.Add(new LetterListEntryVM(label, hero, this));
+            Messages.Add(new LetterListEntryVM(label, hero, this, isEnvoy));
         }
 
-        public void OnEntrySelected(Hero? hero)
+        public void OnEntrySelected(Hero? hero, bool isEnvoy)
         {
-            OnSelectNpc?.Invoke(hero);
+            OnSelectNpc?.Invoke(hero, isEnvoy);
         }
 
         public void ExecuteClose()
@@ -80,20 +82,25 @@ namespace AIChronicle
             if (Hero.MainHero != null)
                 playerId = EntityManager.GetOrCreateEntity(Hero.MainHero).Id;
 
-            // 统一联系人列表：KnownNpcIds（面对面聊过 + 来信过的 NPC），每行附未读角标
-            var rows = new List<(string label, Hero? hero, int unread, DateTime lastWrite)>();
+            // 统一联系人列表：KnownNpcIds（面对面聊过 + 来信过的 NPC），每行附未读角标；
+            // 兼有私有密使往来（World/correspondence/）时附 📨 标记与密使未读角标。
+            var rows = new List<(string label, Hero? hero, int unread, DateTime lastWrite, bool pendingEnvoy)>();
             foreach (var entityId in SubModule.GetKnownNpcIds())
             {
                 var entity = EntityManager.GetOrCreateEntityById(entityId);
                 if (entity == null || entity.HeroRef == null) continue;
 
                 var unread = AgentManager.GetThreadUnreadCount(entityId, playerId);
+                var envoyUnread = AgentManager.GetEnvoyUnreadCount(entityId, playerId);
+                var hasEnvoyThread = AgentManager.ReadCorrespondenceThread(entityId, playerId).Count > 0;
 
                 var label = entity.Name;
                 if (!string.IsNullOrEmpty(entity.Title))
                     label += "  " + entity.Title;
-                if (unread > 0)
-                    label += $"  · {unread} 条未读";
+                if (hasEnvoyThread)
+                    label += "  📨密使";
+                if (unread + envoyUnread > 0)
+                    label += $"  · {unread + envoyUnread} 条未读";
 
                 var lastWrite = DateTime.MinValue;
                 try
@@ -101,10 +108,18 @@ namespace AIChronicle
                     var threadPath = AgentManager.GetChatLogPathFor(entityId, playerId);
                     if (threadPath != null && File.Exists(threadPath))
                         lastWrite = File.GetLastWriteTimeUtc(threadPath);
+                    var corrPath = AgentManager.GetCorrespondencePathFor(entityId, playerId);
+                    if (corrPath != null && File.Exists(corrPath))
+                    {
+                        var corrWrite = File.GetLastWriteTimeUtc(corrPath);
+                        if (corrWrite > lastWrite) lastWrite = corrWrite;
+                    }
                 }
                 catch { }
 
-                rows.Add((label, entity.HeroRef, unread, lastWrite));
+                // 有待回复的密使（对方最新发来）→ 打开密使往来窗口回复；否则走正常书信窗口
+                var pendingEnvoy = envoyUnread > 0;
+                rows.Add((label, entity.HeroRef, unread + envoyUnread, lastWrite, pendingEnvoy));
             }
 
             // 排序：未读优先 → 线程最近活跃优先
@@ -114,7 +129,7 @@ namespace AIChronicle
                 .ToList();
 
             foreach (var row in rows)
-                _vm.AddEntry(row.label, row.hero);
+                _vm.AddEntry(row.label, row.hero, row.pendingEnvoy);
 
             if (_vm.Messages.Count == 0)
             {
@@ -125,14 +140,17 @@ namespace AIChronicle
                 return;
             }
 
-            _vm.OnSelectNpc = (hero) =>
+            _vm.OnSelectNpc = (hero, isEnvoy) =>
             {
                 if (hero == null) return;
                 Close();
                 var player = Hero.MainHero;
                 if (player != null)
                     EntityManager.ActivateInteraction(hero, player);
-                AIChatScreen.RequestOpenLetter(hero);
+                if (isEnvoy)
+                    AIChatScreen.RequestOpenEnvoy(hero);
+                else
+                    AIChatScreen.RequestOpenLetter(hero);
             };
 
             _vm.OnClose = () =>

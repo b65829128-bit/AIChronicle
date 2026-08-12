@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Encounters;
@@ -188,6 +189,7 @@ namespace AIChronicle
             {
                 "letter" => $"给 {_charPrompt.HeroName} 写信",
                 "chancery" => "秘书处",
+                "envoy" => $"与 {_charPrompt.HeroName} 密使往来",
                 _ => $"与 {_charPrompt.HeroName} 对话"
             };
             _chatFontSize = MySettings.Instance?.ChatFontSize ?? 24;
@@ -235,7 +237,22 @@ namespace AIChronicle
                     _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
                     _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
             }
+
+            // 密使往来模式：在聊天/信件线程之外，附加私有密使线程（📨 紫色标记），让玩家看到对方遣来的密使。
+            // 书信模式也附带展示（只读），便于玩家回顾；写信行为不受影响（仍写 chat_logs）。
+            if (intent == "envoy" || intent == "letter")
+            {
+                var envoyEntries = AgentManager.ReadCorrespondenceThread(_agentId, _targetId);
+                var playerName = Hero.MainHero?.Name?.ToString() ?? "你";
+                foreach (var e in envoyEntries)
+                {
+                    var sender = e.Sender == playerName ? "你" : e.Sender;
+                    Messages.Add(new ChatMessageVM("📨 " + sender, e.Content, "system", "#8E44ADFF", e.Time,
+                        _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
+                        _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
+                }
             }
+        }
         }
 
         public void ExecuteClose()
@@ -283,6 +300,35 @@ namespace AIChronicle
             Messages.Add(new ChatMessageVM("你", userMsg, "user", "#5DADE2FF", now,
                 _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
                 _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
+
+            // 密使往来模式：玩家回复写入私有密使线程（不写信、不惊动对方——对方下次自省时才读到）。
+            if (_intent == "envoy")
+            {
+                var playerHero = Hero.MainHero;
+                var playerName = playerHero?.Name?.ToString() ?? "你";
+                var playerTitle = "?";
+                var playerEntity = playerHero != null ? EntityManager.GetOrCreateEntity(playerHero) : null;
+                if (playerEntity != null && !string.IsNullOrEmpty(playerEntity.Title))
+                    playerTitle = playerEntity.Title;
+
+                var corrPath = AgentManager.GetCorrespondencePathFor(_agentId, _targetId);
+                if (corrPath != null)
+                {
+                    var dir = Path.GetDirectoryName(corrPath);
+                    if (dir != null) Directory.CreateDirectory(dir);
+                    SafeFileIO.AppendAllText(corrPath, $"[{now}] {playerName}（{playerTitle}）答复：{userMsg}\n");
+                }
+
+                Messages.Add(new ChatMessageVM("系统",
+                    "密使已送出，对方将在下次审视自身事务时读到（不会惊动他立刻回话）。",
+                    "system", "#E67E22FF", PromptManager.GetCurrentTimeString(),
+                    _chatFontSize, _chatSenderFontSize, _chatTimeFontSize,
+                    _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
+                IsLoading = false;
+                SendButtonText = "发送";
+                return;
+            }
+
             // 修复：只有写信（_intent=="letter"）才标记为书信；普通对话不加【信】前缀（原实现硬编码 true 导致正常对话也被标成书信）
             var isLetter = _intent == "letter";
             _sessionMessages.Add(new ChatHistoryEntry { Role = "user", Content = userMsg, IsLetter = isLetter });
@@ -420,6 +466,9 @@ namespace AIChronicle
                                     "write_chronicle" => $"落盘了史文：{a["name"]?.ToString()}{a["genre"]?.ToString()}",
                                     "consult_king" => "遣使问询了",
                                     "reply_consult" => "回复了外交问询",
+                                    "send_envoy" => $"向 {tname} 派遣了密使",
+                                    "reply_envoy" => $"回复了 {tname} 的密使",
+                                    "record_resolve" => $"在日记记下了：{a["type"]?.ToString()}",
                                     "release_prisoner" => $"释放了俘虏 {a["prisoner_name"]?.ToString()}",
                                     "execute_prisoner" => $"处决了俘虏 {a["prisoner_name"]?.ToString()}",
                                     "create_clan" => $"降下了新的贵族血脉 {a["clan_name"]?.ToString()}",

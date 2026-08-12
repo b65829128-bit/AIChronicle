@@ -14,7 +14,7 @@ namespace AIChronicle
     {
         private static readonly Dictionary<EntityCapability, string[]> CapabilityToolMap = new()
         {
-            [EntityCapability.FileSystem] = new[] { "read_file", "append_file", "write_file", "edit_file", "delete_file", "list_dir", "glob", "grep", "move_file" },
+            [EntityCapability.FileSystem] = new[] { "read_file", "append_file", "write_file", "edit_file", "delete_file", "list_dir", "glob", "grep", "move_file", "record_resolve" },
             [EntityCapability.MoveParty] = new[] { "move_to_settlement", "raid_settlement", "besiege_settlement", "engage_party", "defend_settlement", "patrol_settlement", "escort_party", "go_around_party" },
             [EntityCapability.WaitAtSettlement] = new[] { "wait_at_settlement" },
             [EntityCapability.GiveGold] = new[] { "give_gold" },
@@ -173,7 +173,9 @@ namespace AIChronicle
                     ? "你是卡拉迪亚命运的天意，超然于诸国之上，主导世家的生灭。"
                     : intent == "chancery"
                         ? "你是" + agent.Name + "的个人秘书处——你是行政助手，没有自己的部队、领地或军队，你的身份以" + agent.Name + "为准。"
-                        : BuildSelfStatus(agent.HeroRef!);
+                        : intent == "self_review"
+                            ? BuildSelfReviewDigest(agent.HeroRef!)
+                            : BuildSelfStatus(agent.HeroRef!);
             var currentTime = PromptManager.GetCurrentTimeString();
             var functionList = BuildFunctionList(agent, intent);
             var objectiveRel = intent == "historian"
@@ -194,6 +196,7 @@ namespace AIChronicle
                 "clan_replenishment" => BuildClanReplenishmentRules(),
                 "advisory" => BuildAdvisoryRules(),
                 "fief_review" => BuildFiefReviewRules(),
+                "self_review" => BuildSelfReviewRules(),
                 "consolidation" => BuildConsolidationRules(),
                 "chat" => BuildChatRules(),
                 _ => BuildConversationRules()
@@ -260,6 +263,29 @@ namespace AIChronicle
             return filtered;
         }
 
+        // 自省 intent 的意图级工具排除：一次激活 = 一次自包含行动。
+        // 排除"需要未来激活的链式"（招兵/升级/买粮需先到定居点再激活）、级联（写信）、无意义项、以及按场景不适用的工具。
+        private static readonly HashSet<string> _selfReviewExcludedTools = new()
+        {
+            "recruit_troops", "upgrade_troops", "buy_food",        // 链式：需"先到定居点→到达→再激活"
+            "send_letter",                                         // 级联激活，token 爆炸
+            "wait_at_settlement",                                  // 无后续动作的等待无意义
+            "query_available_troops", "query_settlement_villages", // 招兵专属服务，招兵已排除
+            "update_knowledge",                                    // 无对话对象
+            "let_go",                                              // 仅遭遇战场景
+            "query_pending_proposals",                             // 国王专用，封臣恒空
+            "give_item", "request_items",                          // 社交只保留好感/馈赠，避免过载
+            "escort_party"                                         // 保持一次性军事集精简
+        };
+
+        /// <summary>intent 级工具排除（API tools 与提示词索引共用，保证两处一致）。非目标 intent 返回空集。</summary>
+        public static HashSet<string> GetExcludedToolsForIntent(string intent)
+        {
+            return intent == "self_review" ? _selfReviewExcludedTools : EmptyTools;
+        }
+
+        private static readonly HashSet<string> EmptyTools = new();
+
         private static string ParsePersonaSection(string persona, string sectionName)
         {
             var marker = "[" + sectionName + "]";
@@ -289,6 +315,11 @@ namespace AIChronicle
             // 否则提示词文本列出该工具、API tools 却不含，模型会尝试调用一个不存在的工具。
             if (intent == "chancery")
                 capabilityTools = capabilityTools.Where(t => t.Name != "create_kingdom").ToList();
+
+            // intent 级工具排除（自省剔除链式/级联等），与 AIChatClient.BuildTools 保持一致
+            var excluded = GetExcludedToolsForIntent(intent);
+            if (excluded.Count > 0)
+                capabilityTools = capabilityTools.Where(t => !excluded.Contains(t.Name)).ToList();
 
             var activatedSet = AIChatClient.ActivatedCategories;
             var activeCategories = capabilityTools
@@ -603,6 +634,157 @@ namespace AIChronicle
                     + "- 只追加、不删除、不改写旧条目；旧决定被推翻时补记 [日期] 结果：…\n"
                     + "- 不要写信、不要做任何外交或军事动作，不要回复任何人\n"
                     + "- 若没有值得记录的往来，直接回复「无需记录」");
+        }
+
+        private static string _cachedSelfReviewRules = "";
+        private static DateTime _lastSelfReviewRulesCheck;
+
+        private static string BuildSelfReviewRules()
+        {
+            return LoadRulesFile("self_review_rules.txt", ref _cachedSelfReviewRules, ref _lastSelfReviewRulesCheck)
+                ?? "你就是{name}，{title}。你正处在一个独处的时刻，审视你自己的处境、家族与将来。\n\n"
+                + "开始之前，先 read_file 读取 decisions/diary.txt 回顾你的日记——尤其那些还没有「结果」标记的计策、承诺与计划（它们仍被视为正在进行中）；若 chat_logs/ 里有比日记更新的往来，以聊天记录为准。\n\n"
+                + "你接下来要做的事，只关乎你自己。你可以：\n"
+                + "- 经营家族：整备军队、移防自保、处置战俘\n"
+                + "- 经营关系：向某人示好、馈赠，或疏远\n"
+                + "- 互通消息：派密使联络某位家族领袖或某国国王（向自家王上进言用进谏，不派使者）\n"
+                + "- 进谏或密陈：若你认为国王该知道某件事\n"
+                + "- 思量立场：是否满足于现状，是否该另谋出路（可考虑叛变、叛逃，乃至自立建国）\n"
+                + "- 立下决心：用 record_resolve 记入日记\n\n"
+                + "注意：你这次的命令一经发出便会立即执行完毕，不会有后续的询问来请你「下一步怎么办」。所以此刻只做一件当场就能完成的事；需要「先到某处、到达后再行动」的事，留到下次自省时再定夺。\n\n"
+                + "若你动了去意（叛变、叛逃、自立），你是家族领袖，可自行裁决（change_kingdom / create_kingdom）；自立需有封地，是否可行由你的处境决定。\n\n"
+                + "密使往来仅你与对方知晓，不会进入史册——不可告人的谋划尽可放心地谈。\n"
+                + "说你要做什么就必须调用对应的 function——光说不做等于什么都没发生。\n\n"
+                + "若没有特别要事，用 record_resolve 记下近况，然后结束自省。";
+        }
+
+        /// <summary>自省摘要（纯代码组装，零 token 开销）：让封臣审视"自己的处境"，而非王国的政务。</summary>
+        private static string BuildSelfReviewDigest(Hero hero)
+        {
+            if (hero == null) return "未知。";
+
+            var sb = new StringBuilder();
+
+            // 封地
+            var fiefs = new List<string>();
+            if (hero.Clan != null)
+            {
+                foreach (var s in Settlement.All)
+                {
+                    if (s.IsTown || s.IsCastle)
+                    {
+                        if (s.OwnerClan == hero.Clan)
+                            fiefs.Add((s.IsTown ? "城" : "堡") + (s.Name?.ToString() ?? "?"));
+                    }
+                }
+            }
+            sb.AppendLine(fiefs.Count == 0 ? "你的家族没有封地。" : "你的封地：" + string.Join("、", fiefs));
+
+            // 部队
+            var party = hero.PartyBelongedTo;
+            if (party != null)
+            {
+                var manCount = party.MemberRoster.TotalManCount;
+                var isLeader = party.LeaderHero == hero;
+                sb.AppendLine(isLeader ? $"你正率领约 {manCount} 人的部队。" : $"你在 {party.LeaderHero?.Name} 的部队中（约 {manCount} 人）。");
+                if (party.IsMoving)
+                    sb.AppendLine("部队正在行军。");
+            }
+            else if (hero.CurrentSettlement != null)
+            {
+                sb.AppendLine($"你目前在 {hero.CurrentSettlement.Name}，没有带领部队。");
+            }
+
+            // 王国归属与君主
+            var kingdom = hero.MapFaction as Kingdom;
+            if (kingdom != null)
+            {
+                if (hero.Clan?.IsUnderMercenaryService == true)
+                    sb.AppendLine($"你是 {kingdom.Name} 麾下的雇佣兵首领。");
+                else if (kingdom.RulingClan?.Leader == hero)
+                    sb.AppendLine($"你是 {kingdom.Name} 的至高统治者。");
+                else if (kingdom.RulingClan?.Leader != null)
+                {
+                    var ruler = kingdom.RulingClan.Leader;
+                    var rulerName = ruler.Name?.ToString() ?? "?";
+                    int rel = 0;
+                    try { rel = CharacterRelationManager.GetHeroRelation(hero, ruler); } catch { }
+                    sb.AppendLine($"你是 {kingdom.Name} 的封臣，君主是 {rulerName}，你们的关系 {rel} 点。");
+                }
+            }
+            else
+            {
+                sb.AppendLine("你不属于任何王国——你无主，为自己的家族而活。");
+            }
+
+            // 王国战和（简要）
+            if (kingdom != null)
+            {
+                try
+                {
+                    var enemies = new List<string>();
+                    foreach (var k in Kingdom.All)
+                    {
+                        if (k != kingdom && kingdom.IsAtWarWith(k))
+                            enemies.Add(k.Name?.ToString() ?? "?");
+                    }
+                    if (enemies.Count > 0)
+                        sb.AppendLine($"你的王国正与 {string.Join("、", enemies)} 交战。");
+                    else
+                        sb.AppendLine("你的王国当前无战事。");
+                }
+                catch { }
+            }
+
+            // 未读密使线程（对方最后发来的）
+            try
+            {
+                var envNotes = BuildUnreadEnvoyNotes(hero);
+                if (envNotes.Length > 0)
+                    sb.AppendLine(envNotes);
+            }
+            catch { }
+
+            return sb.ToString().TrimEnd();
+        }
+
+        /// <summary>扫描 World/correspondence/ 下含自己的线程，列出对方最新发来的密使消息（供自省时看到并决定是否回复）。</summary>
+        private static string BuildUnreadEnvoyNotes(Hero hero)
+        {
+            if (string.IsNullOrEmpty(PromptManager.CampaignDir) || hero == null) return "";
+            var entity = EntityManager.GetOrCreateEntity(hero);
+            if (entity == null) return "";
+
+            var corrDir = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "correspondence");
+            if (!Directory.Exists(corrDir)) return "";
+
+            var notes = new List<string>();
+            try
+            {
+                foreach (var file in Directory.GetFiles(corrDir, "*.txt"))
+                {
+                    var fname = Path.GetFileNameWithoutExtension(file);
+                    var sep = "_and_";
+                    var idx = fname.IndexOf(sep, StringComparison.Ordinal);
+                    if (idx <= 0) continue;
+                    var idA = fname.Substring(0, idx);
+                    var idB = fname.Substring(idx + sep.Length);
+                    if (idA != entity.Id && idB != entity.Id) continue;
+
+                    var lines = SafeFileIO.ReadAllLines(file);
+                    if (lines.Length == 0) continue;
+                    var last = lines[lines.Length - 1].Trim();
+                    if (last.Length == 0) continue;
+                    // 最后一条是自己发出的（尚无回音），不注入；对方发来的才注入
+                    // 行格式：[时间] {名字}（{标题}）遣使/答复：…
+                    if (last.Contains("] " + entity.Name + "（")) continue;
+                    notes.Add("  " + last);
+                }
+            }
+            catch { }
+
+            if (notes.Count == 0) return "";
+            return "你的密使往来：\n" + string.Join("\n", notes) + "\n（可用 reply_envoy 回复对方，或置之不理。）";
         }
 
         private static string BuildSelfStatus(Hero hero)

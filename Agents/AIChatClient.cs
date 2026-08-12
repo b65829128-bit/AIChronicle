@@ -106,6 +106,11 @@ namespace AIChronicle
             "fief_review" => new[] { "universal", "query", "file", "communication", "diplomacy" },
             "consolidation" => new[] { "universal", "file" },
             "chat" => new[] { "universal", "query", "file", "social", "communication" },
+            // 自省 = 激活就是激活：处理自身事务（行军/军事/社交/外交/进谏/密使）皆可，工具级排除表收窄
+            //（招兵/买粮/升级等"到点再激活"的链式、写信级联、browse_tools 解锁等在此 intent 中被剔除）。
+            "self_review" => new[] { "universal", "query", "social", "movement", "military", "diplomacy", "communication", "file" },
+            // 密使回应：窄会话，只回应（query + file + 通信），单跳防环（send_envoy 被排除）
+            "envoy_reply" => new[] { "universal", "query", "file", "communication" },
             // 秘书处是玩家的行政助手，不是战斗/财务代理：只保留查询、通信（谏言/密陈）、外交（换国/诏令/问询回复）。
             // 行军/军事/社交（给钱拿钱/送物/改好感）全部移除——玩家在这些方面有替代路径（游戏 UI、部队命令、O 键书信）。
             "chancery" => new[] { "universal", "query", "communication", "diplomacy" },
@@ -156,6 +161,7 @@ namespace AIChronicle
             var activeAgent = EntityManager.ActiveAgent;
             var activeTarget = EntityManager.ActiveTarget;
             List<ToolDef> toolDefs;
+            var excluded = ContextBuilder.GetExcludedToolsForIntent(CurrentIntent);
             if (activeAgent != null)
             {
                 var capabilityTools = ContextBuilder.GetFilteredTools(activeAgent);
@@ -174,14 +180,21 @@ namespace AIChronicle
             {
                 toolDefs = PromptManager.LoadAllTools().Where(t => ActivatedCategories.Contains(t.Category)).ToList();
             }
+            // intent 级工具排除：按场景收窄工具集（如自省剔除链式/级联工具）
+            if (excluded.Count > 0)
+                toolDefs = toolDefs.Where(t => !excluded.Contains(t.Name)).ToList();
             // 严格单向防环：被问询方（king_consult 会话）拿不到 consult_king，不能发起新问询，只能 reply_consult 回复
             if (CurrentIntent == "king_consult")
                 toolDefs.RemoveAll(t => t.Name == "consult_king");
+            // 密使回应（envoy_reply）单跳防环：被回应方拿不到 send_envoy，不能顺手再派新使者
+            if (CurrentIntent == "envoy_reply")
+                toolDefs.RemoveAll(t => t.Name == "send_envoy");
             // 秘书处排除 create_kingdom：建国是游戏内重大国体变更，玩家走原版正规流程（与总督对话建国），不经秘书处
             if (CurrentIntent == "chancery")
                 toolDefs.RemoveAll(t => t.Name == "create_kingdom");
-            // 秘书处不提供 browse_tools：防止它解锁被限制的分类（行军/军事/社交）绕过权限收窄
-            if (CurrentIntent != "chancery")
+            // 秘书处不提供 browse_tools（防止解锁被限制的分类绕过权限收窄）；
+            // 自省/密使回应也不提供（自省是固定动作菜单，密使回应是窄会话，无需按需解锁分类）
+            if (CurrentIntent != "chancery" && CurrentIntent != "self_review" && CurrentIntent != "envoy_reply")
                 toolDefs.Add(BrowseToolsDef);
             return BuildTools(toolDefs);
         }

@@ -168,18 +168,31 @@
 - **入史**：`kingdom_created`（含立国宣言）自动记入原始史料，并触发史官专题**建国纪事**（《X国建立纪事》），年度编年史亦收录；叛乱战争以 `war_declared` 入史
 - **建国后自动接入外交循环**：`AgentScheduler` 遍历 `Kingdom.All`，新王国的国王自动进入国王政务审视（KingDiplomacy），封地册封/诏令/问询/谏言等系统对其开放
 
-### 封臣谏言
+### 封臣自省（激活即自由行动）
 
-- 每个王国每天有概率（MCM 可调，默认 10%）触发一位氏族领袖向国王进谏
-- 按权重随机选择谏言者（权重 = 氏族等级×3 + 影响力/50 + 封地数），排除雇佣兵、俘虏、逃亡者、玩家和国王本人；同一封臣不会连续进谏
-- 封臣激活后阅读自己的私人笔记（`decisions/personal_notes.txt`）、查询世界局势，然后调用 **`submit_advisory` 工具**提交公开谏言
-- 公开谏言由系统自动归档到 `World/advisory/{王国}_{年份}.txt`（含时间戳、姓名、头衔，按年分文件封存）
-- 私人笔记 `decisions/personal_notes.txt` 非强制，封臣可自行决定是否记录
-- 国王的外交提示词中自动注入"先阅读封臣谏言"的指引，但国王保留绝对决策权
-- 战役地图上按 **H 键**可查阅本国封臣的公开谏言
-- 史官可读取所有王国的公开谏言写入编年史
-- **秘密谏言**：封臣可用 `submit_secret_advisory` 密陈给国王（写 `World/secret_advisory/`，**仅本国国王可读、不入史册**——本国封臣与史官亦不可读）——公开谏言表达立场进史，秘密谏言说那些不适合被历史记录或旁人知晓的事，封臣可公开一套、私下另一套。**玩家国王**按 H 键可在史书中查看本国密陈（「国王密陈 · 王国 · 第X年」），玩家封臣/平民看不到
-- 提示词：`advisory_rules.txt` 支持热重载；`tools.json`/`agent_tools.json` 删除时自动回退内嵌最小工具集
+> 由「封臣谏言」泛化而来：激活就是激活，激活后可做写信之外的任何事，**谏言只是其中一个选项**。封臣不再围着国王转，而是围着自己的处境转——他要篡位、要自立，终于有了自己的激活渠道。
+
+- 每个王国每天有概率（MCM 可调，默认 10%）触发一位氏族领袖自省，选择方式为**公平轮转**——距上次自省最久者优先，人人有机会；选池放宽为**封臣 + 雇佣兵 + 独立氏族领袖**，仍排除国王本人、玩家、俘虏、逃亡
+- **独立氏族领袖**（无王国、非佣兵势力）各自以半概率低频自省——他们无王可依，是自立欲望最强、也最需要自省的群体
+- **自省 = 处理自身事务**（intent `self_review`）：一次激活只做一件**自包含**的事——派密使、进谏/密陈、整备军队、移防自保、处置战俘、思量立场（叛变/叛逃/自立）、`record_resolve` 记决心，或按兵不动
+- **一次性行动原则**：命令一经发出立即执行完毕，无后续激活续接——因此**不支持**招兵/买粮/升级等"先到定居点、到达后再行动"的链式（工具已剔除），也不支持 `send_letter`（级联烧钱）
+- **自省前先读日记**：提示词要求先 `read_file decisions/diary.txt` 回顾那些没有「结果」标记的计策/承诺/计划（仍视为进行中），`chat_logs/` 比日记新则以聊天为准；记忆巩固（`MemoryConsolidator`）在自省前静默补记
+- **公开谏言**（`submit_advisory`）：自省时若认为国王该知道某件事，可进谏——归档 `World/advisory/{王国}_{年}.txt`（时间戳+姓名+头衔，按年封存），史官可读、可入编年史
+- **秘密谏言**（`submit_secret_advisory`）：不适合被历史记录或旁人知晓的事，密陈给国王（`World/secret_advisory/`，**仅本国国王可读、不入史册**）。玩家国王按 H 键可查本国密陈
+- 国王的外交提示词仍注入"先阅读封臣谏言"的指引，但国王保留绝对决策权；玩家 H 键可查本国公开谏言与诏令
+- 提示词：`self_review_rules.txt` 支持热重载；`tools.json`/`agent_tools.json` 删除时自动回退内嵌最小工具集
+
+### 私有密使（封臣互通，不入史册）
+
+> 参考国王使者（`consult_king`）机制，借给所有家族领袖——封臣可给其他封臣、独立领袖、佣兵首领、乃至他国国王派私密使者。**史官与任何第三方都不可读**，不可告人的阴谋尽可放心地谈。
+
+- **`send_envoy(target, message)`**：仅家族领袖可用（封臣/独立/佣兵/国王）。落盘 `World/correspondence/{A}_and_{B}.txt`，**立即激活对方一次**回应——解决"延迟交付→未回复堆积"的问题
+- **单跳防环**：回应方（`envoy_reply` 会话）拿不到 `send_envoy`，不能顺手再派新使者——链深恒 1，绝无级联
+- **每实体对冷却**（7 游戏天）：冷却中再派会被明确告知「使者尚未归来」
+- **回复**（`reply_envoy`）不激活任何人：对方下次自省/政务审视时读到（慢一轮，符合中世纪信息传递）
+- 收信方若在押/逃亡无法激活，线程在其下次自省摘要中浮现（`BuildSelfReviewDigest` 注入未读密使）
+- **玩家收密使**：联系人带 📨 标记与未读角标；打开密使往来窗口可看线程并回复，回复写入线程（不惊动对方立即回话）；书信窗口亦只读展示密使记录
+- **与国王问询的区别**：`consult_king` 是国王↔国王、**史官可读**的公开外交记录；`send_envoy` 是任何家族领袖可用的**私有**通信，史官不可读
 
 ### 国王诏令（国内政务闭环）
 
@@ -211,8 +224,8 @@
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous（conversation 亦激活） |
 | military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops, form_army, release_prisoner, execute_prisoner | autonomous（conversation 亦激活） |
 | diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal, gift_fief, change_kingdom, create_kingdom（实验性）, submit_edict, consult_king, reply_consult | diplomacy（conversation 亦激活） |
-| file | read_file, write_file, write_chronicle（仅史官）, append_file, edit_file, delete_file, move_file, list_dir, glob, grep | letter, autonomous, conversation |
-| communication | send_letter | letter（conversation 亦激活） |
+| file | read_file, write_file, write_chronicle（仅史官）, append_file, edit_file, delete_file, move_file, list_dir, glob, grep, record_resolve | letter, autonomous, conversation, self_review |
+| communication | send_letter, send_envoy, reply_envoy, submit_advisory, submit_secret_advisory, submit_edict | letter（conversation 亦激活）；send_envoy/reply_envoy 在 self_review 激活 |
 
 **玩家发起的聊天（conversation）是全功能通道**——所有分类默认激活。理由：AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全，对话里达成的承诺（议和/出兵/换国/写信/放人）就无法兑现。能力门控照旧：国王专属工具（宣战/议和/结盟/诏令/问询）仍只有国王拿到，部队工具仍只有带兵者拿到，`change_kingdom` 仅氏族领袖可用——所以对话里每个 NPC 的可用工具由身份决定。
 
@@ -298,7 +311,8 @@ _Module/Prompts/
 ├── letter_rules.txt             # 书信规则
 ├── diplomacy_rules.txt          # 外交决策规则（玩家可编辑，热重载）
 ├── historian_rules.txt          # 史官编年史规则（玩家可编辑，热重载）
-├── advisory_rules.txt            # 封臣谏言规则（热重载）
+├── advisory_rules.txt            # 封臣谏言规则（保留，自省语境下进谏仍走此套归档）
+├── self_review_rules.txt         # 封臣自省规则（热重载）
 ├── fief_review_rules.txt         # 封地审视规则（被夺方激活，热重载）
 ├── clan_replenishment_rules.txt # 天意建族规则（家族补充，热重载）
 ├── consolidation_rules.txt      # 记忆巩固行为规则（热重载）
@@ -391,7 +405,7 @@ _Module/Prompts/
 | 政务外交场景 | URL / 模型 / API 密钥 | 国王内外政务审视（KingDiplomacy）；留空回退兜底 |
 | 外交问询场景 | URL / 模型 / API 密钥 | 国王遣使问询他国（KingConsult）；留空回退兜底 |
 | 封地审视场景 | URL / 模型 / API 密钥 | 被夺封方审视处境（FiefReview）；留空回退兜底 |
-| 封臣谏言场景 | URL / 模型 / API 密钥 | 封臣进谏（Advisory）；留空回退兜底 |
+| 封臣谏言场景 | URL / 模型 / API 密钥 | 封臣自省（self_review）/ 密使回应（envoy_reply）；留空回退兜底 |
 | 天意建族场景 | URL / 模型 / API 密钥 | 家族补充「天意」（clan_replenishment）；留空回退兜底 |
 | 史官场景 | URL / 模型 / API 密钥 | 编年史/列传/专题史（historian）；留空回退兜底 |
 | 记忆巩固场景 | URL / 模型 / API 密钥 | 记忆巩固 pass（consolidation）；留空回退兜底 |
@@ -416,17 +430,17 @@ _Module/Prompts/
 | 外交触发几率/天 | 每个国王每天触发外交审视的概率（0.1=平均十天一次，0.5=平均两天一次） | `0.1` |
 | 国王冷静期（天） | 国王每次外交激活后的冷却时间（冷却期内不被定时激活，但收到的外交提案仍会正常触发） | `3` |
 | 编年史间隔（年） | 史官编纂编年史的间隔（1=每年，3=每三年） | `1` |
-| 启用封臣谏言 | 开启后封臣按概率陆续进谏 | 开启 |
-| 封臣谏言概率/天 | 每个王国每天触发封臣进谏的概率 | `0.1` |
+| 启用封臣自省/谏言 | 开启后每天每王国有概率触发一位氏族领袖自省（封臣+佣兵+独立领袖，排除玩家和国王）。自省=处理自身事务，谏言只是一选项 | 开启 |
+| 自省/谏言概率/天 | 每个王国每天触发氏族领袖自省的概率（公平轮转，距上次自省最久者优先） | `0.1` |
 | 所有贵族立传 | 死后立传范围：所有氏族贵族 或 仅氏族领袖和国王 | 开启 |
 | 处决无惩罚 | 开启后处决贵族不承担任何政治代价（名誉不降、好感不降），玩家与 NPC 均生效 | 开启 |
 | 启用家族补充 | 在世贵族/佣兵家族总数低于阈值时激活「天意」补充新家族（**实验性，默认关闭**） | 关闭 |
 | 家族总数补充阈值 | 在世贵族/佣兵家族总数低于此值触发补充（单位：家族，原版约 80）。封臣与佣兵是动态身份，故只按总数判定——只有真正灭族才拉低计数 | `70` |
 | 家族补充冷却（游戏天） | 天意每次降下血脉后的冷却。冷却期内即使仍低于下限也不重复激活，避免"永动机"式连补 | `5` |
-| 启用记忆巩固 | 自我审视（国王政务/封地审视/外交问询/封臣进谏）激活前，若日记落后于聊天记录，先跑一次巩固——把最近往来中值得记住的决定/承诺/计策/战略补记进 decisions/diary.txt，避免照陈旧日记行事。只在日记落后时触发 | 开启 |
+| 启用记忆巩固 | 自我审视（国王政务/封地审视/外交问询/封臣自省/密使回应）激活前，若日记落后于聊天记录，先跑一次巩固——把最近往来中值得记住的决定/承诺/计策/战略补记进 decisions/diary.txt，避免照陈旧日记行事。只在日记落后时触发 | 开启 |
 | 史书字体大小 | 史书 UI 中编年史正文的字体大小 | `28` |
 | 强制开始外交 | 立即激活所有国王 Agent 进行外交审视，重置计时器（按钮） | — |
-| 强制封臣进谏 | 立即重置所有王国的封臣谏言计时器（按钮） | — |
+| 强制封臣自省 | 立即重置所有王国的封臣自省计时器（按钮） | — |
 | 对话字体大小 | 聊天窗口中对话内容的字号 | `24` |
 | 角色名字体大小 | 聊天窗口中角色名称的字号 | `22` |
 | 时间戳字体大小 | 聊天窗口中时间戳的字号 | `22` |
@@ -500,12 +514,12 @@ AIChronicle/
 │   ├── PromptManager.cs     # 提示词管理器（文件热重载、战役目录、角色 JSON 读写）
 │   ├── MemoryConsolidator.cs # 记忆巩固（diary 权威化保底）
 │   ├── AgentScheduler.cs    # 事件调度器基类（优先级队列、Tick）
-│   ├── AgentScheduler.Events.cs / Advisory.cs / Historian.cs / Fate.cs  # 事件处理/谏言/史官/天意
+│   ├── AgentScheduler.Events.cs / Advisory.cs / Historian.cs / Fate.cs  # 事件处理/封臣自省/史官/天意
 │   └── PartyBehaviorManager.cs # 部队行为状态机（PendingAction + Tick）
 ├── Entities/                # Entity 统一抽象
 │   ├── Entity.cs            # Entity 数据模型（统一玩家/NPC，附能力标签）
 │   └── EntityManager.cs     # Entity 生命周期管理、查找与缓存
-├── Tools/                   # 工具执行器（50+ 游戏工具，按领域拆 partial）
+├── Tools/                   # 工具执行器（51 个游戏工具 + 19 个文件/通信工具，按领域拆 partial）
 │   ├── ToolExecutor.cs      # 基类（工具入口 ExecuteToolCall + 共享助手）
 │   ├── ToolExecutor.Query.cs / Intel.cs / Military.cs / Social.cs / Diplomacy.cs / Fate.cs
 ├── UI/                      # 界面层
@@ -547,7 +561,17 @@ AIChronicle/
 ## 版本
 
 - 游戏版本：Bannerlord v1.4.8
-- 模组版本：**v2.2.2**
+- 模组版本：**v2.3.0**
+
+### v2.3.0 更新要点
+
+- **封臣自省（激活即自由行动）**：由「封臣谏言」泛化——激活就是激活，激活后可做写信之外的任何事，**谏言只是其中一个选项**。选择改为**公平轮转**（距上次自省最久者优先），选池放宽为**封臣 + 雇佣兵 + 独立氏族领袖**（仍排除国王本人/玩家/俘虏/逃亡）；独立领袖各自以半概率低频自省。封臣不再围着国王转，篡位/自立终于有了激活渠道
+- **一次性行动原则**：自省一次激活 = 一件自包含的事（派密使/进谏/整备/移防/处置战俘/思量立场/记决心），命令立即执行完毕、无续接激活——招兵/买粮/升级等"先到定居点再激活"的链式工具与 `send_letter` 级联已在自省 intent 中剔除（`GetExcludedToolsForIntent`，API 与提示词两处一致）
+- **私有密使**（`send_envoy` / `reply_envoy`）：任何家族领袖互通私信，落盘 `World/correspondence/`，**史官与第三方不可读**（不可告人的谋划可放心谈）；立即激活对方一次回应（单跳防环、每对 7 天冷却）；回复不惊动对方、对方下次自省时读到；玩家 O 键面板 📨 标记 + 密使往来窗口回复
+- **日记工具 `record_resolve`**：强制 `[年季节日] 类型：内容` 格式落笔日记（类型白名单：决心/决定/承诺/计策/情报/评价/结果/战略），防止日记格式破坏导致记忆检索失效
+- **自省先读日记**：`self_review_rules.txt` 要求先 `read_file decisions/diary.txt` 回顾进行中的计策/承诺；记忆巩固前置接入自省与密使回应
+- **MCM 文案**：「启用封臣谏言」「封臣谏言概率/天」「强制封臣进谏」→「启用封臣自省/谏言」「自省/谏言概率/天」「强制封臣自省」（数值开关沿用，旧配置保留）
+- **场景连接**：`self_review` / `envoy_reply` 复用「封臣谏言」场景，不新增配置组
 
 ### v2.2.2 更新要点
 

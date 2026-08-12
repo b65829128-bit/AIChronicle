@@ -65,6 +65,42 @@ namespace AIChronicle
             return "已写入。";
         }
 
+        /// <summary>日记日期前缀（与日记检索解析兼容的紧凑格式）：[1090春3] / [1089冬12]。</summary>
+        private static string GetDiaryDatePrefix()
+        {
+            var now = CampaignTime.Now;
+            var season = now.GetSeasonOfYear switch
+            {
+                CampaignTime.Seasons.Spring => "春",
+                CampaignTime.Seasons.Summer => "夏",
+                CampaignTime.Seasons.Autumn => "秋",
+                CampaignTime.Seasons.Winter => "冬",
+                _ => "?"
+            };
+            return $"[{now.GetYear}{season}{now.GetDayOfSeason + 1}]";
+        }
+
+        /// <summary>强制日记格式落笔：decisions/diary.txt 追加「[年季节日] 类型：内容」。类型白名单校验，防止日记格式破坏导致记忆检索失效。</summary>
+        public static string ExecuteRecordResolve(string type, string content)
+        {
+            if (string.IsNullOrWhiteSpace(type) || string.IsNullOrWhiteSpace(content))
+                return "[错误] 类型与内容不能为空";
+            if (string.IsNullOrEmpty(_agentDir))
+                return "[错误] 无当前实体目录";
+
+            var validTypes = new HashSet<string> { "决心", "决定", "承诺", "计策", "情报", "评价", "结果", "战略" };
+            if (!validTypes.Contains(type))
+                return "[错误] 无效的日记类型：" + type + "。可选：" + string.Join(" / ", validTypes);
+
+            var contentClean = content.Replace("\r", "").Replace("\n", " ").Trim();
+            var line = $"{GetDiaryDatePrefix()} {type}：{contentClean}";
+
+            var diaryPath = Path.Combine(_agentDir, "decisions", "diary.txt");
+            Directory.CreateDirectory(Path.GetDirectoryName(diaryPath)!);
+            SafeFileIO.AppendAllText(diaryPath, line + Environment.NewLine);
+            return "已记入日记。";
+        }
+
         public static string ExecuteGrep(string pattern, string path, int maxResults, int contextLines, bool caseSensitive)
         {
             if (string.IsNullOrEmpty(pattern))

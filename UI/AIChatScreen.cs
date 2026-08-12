@@ -35,6 +35,14 @@ namespace AIChronicle
             SubModule.RequestLetterOpen(hero);
         }
 
+        public static void RequestOpenEnvoy(Hero hero)
+        {
+            if (_layer != null)
+                return;
+
+            SubModule.RequestEnvoyOpen(hero);
+        }
+
         public static void DoOpen(Hero hero)
         {
             DoOpenWithIntent(hero, "conversation");
@@ -43,6 +51,11 @@ namespace AIChronicle
         public static void DoOpenLetter(Hero hero)
         {
             DoOpenWithIntent(hero, "letter");
+        }
+
+        public static void DoOpenEnvoy(Hero hero)
+        {
+            DoOpenWithIntent(hero, "envoy");
         }
 
         public static void OpenChancery()

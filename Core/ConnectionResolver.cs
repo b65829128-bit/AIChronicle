@@ -30,7 +30,8 @@ namespace AIChronicle
                 "diplomacy" => C(s.DiplomacyApiUrl, s.DiplomacyModel, s.DiplomacyApiKey),
                 "king_consult" => C(s.KingConsultApiUrl, s.KingConsultModel, s.KingConsultApiKey),
                 "fief_review" => C(s.FiefReviewApiUrl, s.FiefReviewModel, s.FiefReviewApiKey),
-                "advisory" => C(s.AdvisoryApiUrl, s.AdvisoryModel, s.AdvisoryApiKey),
+                // 自省与密使回应复用「封臣谏言」场景连接（自省即谏言槽位泛化，不新增配置组）
+                "advisory" or "self_review" or "envoy_reply" => C(s.AdvisoryApiUrl, s.AdvisoryModel, s.AdvisoryApiKey),
                 "clan_replenishment" => C(s.ClanReplenishmentApiUrl, s.ClanReplenishmentModel, s.ClanReplenishmentApiKey),
                 "historian" => C(s.HistorianApiUrl, s.HistorianModel, s.HistorianApiKey),
                 "consolidation" => C(s.ConsolidationApiUrl, s.ConsolidationModel, s.ConsolidationApiKey),
@@ -48,6 +49,8 @@ namespace AIChronicle
             "king_consult" => "外交问询",
             "fief_review" => "封地审视",
             "advisory" => "封臣谏言",
+            "self_review" => "封臣自省",
+            "envoy_reply" => "密使回应",
             "clan_replenishment" => "天意建族",
             "historian" => "史官",
             "consolidation" => "记忆巩固",

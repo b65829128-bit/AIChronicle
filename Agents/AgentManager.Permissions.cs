@@ -40,6 +40,7 @@ namespace AIChronicle
             {
                 if (_readableDirs.Contains(dirPart)) return true;
                 if (IsConsultAllowed(relPath)) return true;        // 外交问询：史官任何国家、参与双方国王
+                if (IsCorrespondenceAllowed(relPath)) return true; // 私有密使线程：仅参与者双方（史官不可读）
                 if (IsPublicDocAllowed(relPath)) return true;      // 公开诏令/谏言：史官任何国家、其他仅本国
                 if (IsSecretAdvisoryAllowed(relPath)) return true; // 秘密谏言：仅本国国王
                 if (isWorldPath) return true;                      // 其余世界只读文件（史料/编年史/世界名册）
@@ -71,6 +72,9 @@ namespace AIChronicle
                 return Path.Combine(_baseDir, "World", relPath);
 
             if (IsConsultAllowed(relPath))
+                return Path.Combine(_baseDir, "World", relPath);
+
+            if (IsCorrespondenceAllowed(relPath))
                 return Path.Combine(_baseDir, "World", relPath);
 
             if (IsPublicDocAllowed(relPath))
@@ -170,6 +174,30 @@ namespace AIChronicle
             var nameB = fileName.Substring(idx + sep.Length);
             return string.Equals(ownName, nameA, StringComparison.Ordinal)
                 || string.Equals(ownName, nameB, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 私有密使线程（World/correspondence/{idA}_and_{idB}.txt）的读取授权：
+        /// 仅参与双方可读（实体 ID 匹配）；史官（__historian__）与其他任何第三方均不可读。
+        /// 文件名中的实体 ID 均为 SanitizeDir 后的安全形式，与 _agentEntityId.Value 可直接比较。
+        /// </summary>
+        private static bool IsCorrespondenceAllowed(string relPath)
+        {
+            if (!relPath.StartsWith("correspondence/", StringComparison.Ordinal)) return false;
+            var fileName = Path.GetFileNameWithoutExtension(relPath); // {idA}_and_{idB}
+            if (string.IsNullOrEmpty(fileName)) return false;
+
+            var sep = "_and_";
+            var idx = fileName.IndexOf(sep, StringComparison.Ordinal);
+            if (idx <= 0) return false;
+            var idA = fileName.Substring(0, idx);
+            var idB = fileName.Substring(idx + sep.Length);
+            if (idA.Length == 0 || idB.Length == 0) return false;
+
+            var self = _agentEntityId.Value;
+            if (string.IsNullOrEmpty(self)) return false;
+            return string.Equals(self, idA, StringComparison.Ordinal)
+                || string.Equals(self, idB, StringComparison.Ordinal);
         }
 
         private static string SanitizeDir(string name)

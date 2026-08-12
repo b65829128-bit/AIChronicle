@@ -129,12 +129,12 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **书信模式** | 支持书信 intent，O 键唤起书信往来面板（统一线程列表 + 未读角标） |
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 67 个工具定义在 `tools.json`（51 个游戏工具）和 `agent_tools.json`（16 个文件/通信工具，含 `write_chronicle`/`submit_advisory`/`submit_edict`/`consult_king`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
+| **工具定义文件化** | 70 个工具定义在 `tools.json`（51 个游戏工具）和 `agent_tools.json`（19 个文件/通信工具，含 `write_chronicle`/`submit_advisory`/`submit_edict`/`consult_king`/`send_envoy`/`reply_envoy`/`record_resolve`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
 | **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁。**玩家发起的聊天（conversation）是全功能通道——全部分类默认激活**（AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全则对话里达成的承诺无法兑现；能力门控照旧，国王专属工具仍只有国王拿到） |
 | **提示词全部可编辑** | `context_template.txt`、`persona_generation.txt`、`chancery_rules.txt`、`world_info.txt`、`game_rules.txt` 等均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环，模型调用工具 → 执行 → 追加结果 → 重请求，直到模型自然停止（无轮数限制，仅保留极高安全阀防死循环） |
 | **主线程分发** | LLM 工具循环跑在后台线程，但**所有修改游戏状态的工具**经 `MainThreadExecutor` 排队到主线程 `OnApplicationTick` 执行（后台线程阻塞等待结果）；仅 `request_gold`/`request_items`/`browse_tools` 留在后台线程（前两者需主线程弹窗等待玩家，后者改本流程上下文）。背景：Bannerlord 游戏对象（MobileParty/Hero/Kingdom）是主线程独占的 |
-| **上下文隔离（AsyncLocal）** | `CurrentHero`/`CurrentIntent`/`ActivatedCategories`（AIChatClient）、`_agentEntityId`/`_targetEntityId`（AgentManager）、`_activeAgentId`/`_activeTargetId`（EntityManager）均为 `AsyncLocal`——聊天与后台信件/谏言/外交多个流程并发时上下文互不覆盖；实体缓存用 `ConcurrentDictionary`（线程安全） |
+| **上下文隔离（AsyncLocal）** | `CurrentHero`/`CurrentIntent`/`ActivatedCategories`（AIChatClient）、`_agentEntityId`/`_targetEntityId`（AgentManager）、`_activeAgentId`/`_activeTargetId`（EntityManager）均为 `AsyncLocal`——聊天与后台信件/自省/密使/外交多个流程并发时上下文互不覆盖；实体缓存用 `ConcurrentDictionary`（线程安全） |
 | **秘书处** | M 键打开，玩家的个人行政助手。固定 persona（无条件服从），不读玩家 persona。国王/封臣/平民均可使用。**工具范围严格受限**：仅查询、谏言（`submit_advisory`/`submit_secret_advisory`）、诏令与问询回复（`submit_edict`/`reply_consult`，国王）、快速加入/脱离王国（`change_kingdom`，受家族等级限制）——行军/军事/金钱物品/好感/写信一律不可用（有替代路径），且不提供 `browse_tools`（防止解锁受限分类绕过权限）。玩家可经秘书处调 `submit_advisory` 提交公开谏言（雇佣兵除外） |
 | **天意** | 虚拟实体（ID: `__fate__`，HeroRef=null，与史官并列）。家族补充系统：在世贵族/佣兵家族**总数**（封臣世家 + 雇佣兵公司，佣兵不论是否受雇都计入）低于「家族总数补充阈值」时被激活，决定新家族名称/文化/投效势力/以封臣还是佣兵身份入世（`create_clan`，能力门控仅天意可用），成员程序生成、等级 2、族长带兵、旗帜随机，入原始史料但不激活史官。只在玩家位于大地图时检测（捏脸/初始化阶段计数失真），有 MCM 冷却防连补；成员模板用 `RebelliousHeroTemplates`（`GetRandomTemplateByOccupation(Lord)` 查不到 Lord 模板、恒 null 的历史死路径已弃） |
 | **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
@@ -191,6 +191,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | `World/edict/`（国王诏令） | 只读：史官可读任何国家；其他 agent 仅本国 |
 | `World/secret_advisory/`（秘密谏言） | 只读：**仅本国国王**；本国封臣与史官不可读 |
 | `World/diplomacy/consults/`（国王外交问询） | 只读：史官可读任何国家；参与双方国王可读；第三方不可读 |
+| `World/correspondence/`（私有密使） | 只读：**仅参与者双方**（实体 ID 匹配）；史官与任何第三方不可读 |
 | 其他 NPC 的任何文件 | **禁止** |
 
 > 玩家的实体目录（`{Name}_main_hero`）含 `thread_read_state.json`（各线程已读水位，O 键未读角标依据）——仅玩家可写，Agent 在信息隔离下不可访问。
@@ -264,7 +265,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 **日记可被比它更新的聊天记录修正**：chat_logs 是系统自动写入的客观往来记录（Agent 只读、不会漏），日记是 LLM 自写的索引（可能漏记/滞后）。若 chat_logs/ 中有比日记新的往来，**以聊天记录为准**，并补记日记（旧决定被推翻则补记 `[日期] 结果：…`，只追加不改写旧条目）。
 
 **记忆巩固机制（`MemoryConsolidator.cs`，保底而非依赖自觉）**：
-- 自我审视类激活前（**国王政务 KingDiplomacy / 封地审视 FiefReview / 外交问询回应 KingConsult / 封臣进谏 Advisory**），先比较日记最新条目日期与 chat_logs 各文件最新消息日期
+- 自我审视类激活前（**国王政务 KingDiplomacy / 封地审视 FiefReview / 外交问询回应 KingConsult / 封臣自省 SelfReview / 密使回应 EnvoyReceived**），先比较日记最新条目日期与 chat_logs 各文件最新消息日期
 - 若日记落后（存在"比日记更新的往来"），跑一次**巩固 pass**：agent 自读日记 + 较新往来 → 把值得记住的决定/承诺/计策/结果/战略 `append_file` 补记进 diary。静默执行，不写 chat_logs、不弹玩家消息
 - 只在落后时触发，多数时候零成本；受 MCM「启用记忆巩固」开关控制（默认开）
 - 日期解析兼容两种写法：日记 `[1090春3]`/`[1090年冬第9日]`、聊天 `[第1090年，春季第15日]`——日记格式务必保持统一，否则程序无法可靠判断"谁更新"
@@ -313,7 +314,7 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │   ├── MemoryConsolidator.cs   ← 记忆巩固（diary 权威化保底：自我审视前检测日记落后并补记）
 │   ├── AgentScheduler.cs       ← 事件调度器基类（优先级队列、Tick、国王激活、盟约到期检测）
 │   ├── AgentScheduler.Events.cs  ← 事件处理（ProcessEvent/玩家事件/外交提案轮询）
-│   ├── AgentScheduler.Advisory.cs ← 封臣谏言系统（概率激活、权重抽选、ProcessAdvisory）
+│   ├── AgentScheduler.Advisory.cs ← 封臣自省系统（公平轮转、选池、QueueSelfReview）
 │   ├── AgentScheduler.Historian.cs ← 史官事件处理（年度编年史 + 专题）
 │   ├── AgentScheduler.Fate.cs   ← 天意建族事件处理
 │   └── PartyBehaviorManager.cs ← 部队行为管理器（PendingAction 状态机、Tick()、定时签到）
@@ -325,7 +326,7 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │   ├── ToolExecutor.Query.cs   ← 查询类工具（人物/定居点/世界/内政/技能）
 │   ├── ToolExecutor.Intel.cs   ← 军情迷雾（query_party_troops + 距离/传闻三档模糊模型）
 │   ├── ToolExecutor.Military.cs ← 行军/军事（move/raid/besiege/form_army/驻防/招募/俘虏）
-│   ├── ToolExecutor.Social.cs  ← 社交/通信（金钱物品/好感/放行/书信/谏言/诏令/问询）
+│   ├── ToolExecutor.Social.cs  ← 社交/通信（金钱物品/好感/放行/书信/谏言/诏令/问询/密使）
 │   ├── ToolExecutor.Diplomacy.cs ← 阵营变更（change_kingdom 全模式 + 家族等级限制）
 │   └── ToolExecutor.Fate.cs    ← 天意建族（create_clan + 预算成功才占用 + 随机旗帜/定居点）
 ├── UI/                         ← 界面层
@@ -363,7 +364,8 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │       ├── tools.json         ← 游戏工具定义（热重载）
 │       ├── agent_tools.json   ← Agent 文件工具定义（热重载）
 │       ├── persona_generation.txt ← NPC性格生成提示词（玩家可编辑，热重载）
-│       ├── advisory_rules.txt  ← 封臣谏言规则（热重载）
+│       ├── advisory_rules.txt  ← 封臣谏言规则（保留，自省进谏仍走此套归档，热重载）
+│       ├── self_review_rules.txt ← 封臣自省规则（热重载）
 │       ├── fief_review_rules.txt ← 封地审视规则（被夺方激活，热重载）
 │       ├── clan_replenishment_rules.txt ← 天意建族规则（家族补充，热重载）
 │       ├── consolidation_rules.txt ← 记忆巩固行为规则（热重载）
@@ -683,7 +685,7 @@ Usage:
 
 ### 当前实现
 
-所有 67 个工具（51 个游戏工具 + 16 个文件/通信工具）定义在 `tools.json`/`agent_tools.json`（热重载，不硬编码）。每次 API 请求都附带能力过滤后的工具定义。模型自行判断是否需要调用。返回的 `ChatResponse` 包含：
+所有 70 个工具（51 个游戏工具 + 19 个文件/通信工具）定义在 `tools.json`/`agent_tools.json`（热重载，不硬编码）。每次 API 请求都附带能力过滤后的工具定义。模型自行判断是否需要调用。返回的 `ChatResponse` 包含：
 - `Content`：角色扮演文本回复
 - `LearnedKnowledge`：如果模型调用了 `update_knowledge`，这里包含新认知
 - `ToolCalls`：原始工具调用数据（用于构建反馈闭环）
@@ -755,49 +757,55 @@ OnApplicationTick → AgentScheduler.Tick() → 若并发槽未满 → 取最高
 |---|---------|------|
 | 0 | YearlyChronicle / SpecialChronicle（史官） | 最高，**永不跳过**（生成不受队列门槛限制，永远先出队） |
 | 1 | KingDiplomacy（国王内外政务/提案） | 高优先，外交提案不积压；现同时处理内政（封地分配） |
-| 2 | LetterReceived | 中 |
+| 2 | LetterReceived / EnvoyReceived（来信/密使） | 中 |
 | 3 | BehaviorCheckIn / PlanCheckIn / FiefReview（签到/封地审视） | 低 |
-| 4 | Advisory（概率激活的谏言） | 最低，只在无更高优先工作时处理 |
+| 4 | SelfReview（概率激活的自省） | 最低，只在无更高优先工作时处理 |
 
 - 并发安全：每任务上下文（`CurrentHero`/agent/深度等）经 `AsyncLocal` 隔离，工具仍统一回主线程串行执行
 - `ActivationEvent.Depth` 控制级联深度（`AsyncLocal` 按任务隔离，MCM 可调默认 5）
-- 支持事件类型：`LetterReceived`（来信）、`BehaviorCheckIn`（签到）、`KingDiplomacy`（国王内外政务）、`PlanCheckIn`（计划）、`YearlyChronicle`/`SpecialChronicle`（史官）、`Advisory`（谏言）、`FiefReview`（封地审视，被夺方激活触发内政矛盾）
+- 支持事件类型：`LetterReceived`（来信）、`BehaviorCheckIn`（签到）、`KingDiplomacy`（国王内外政务）、`PlanCheckIn`（计划）、`YearlyChronicle`/`SpecialChronicle`（史官）、`SelfReview`（封臣自省）、`EnvoyReceived`（私有密使，立即激活对方一次）、`FiefReview`（封地审视，被夺方激活触发内政矛盾）
 - **检查站冷却**：签到类激活（BehaviorCheckIn/PlanCheckIn）每 agent 至少间隔 **15 真实分钟**（`PartyBehaviorManager._lastCheckInByAgent`，用真实时间而非游戏时间——游戏时间加速时游戏小时冷却无效）。防止「move/wait 到达→立刻签到→再发指令」的 token 死循环
 - **卡死保险（持久行为）**：驻防/巡逻/护送（`CheckInHours > 0`）若下发后长时间**未到达目标点**（被拦截/目标遥不可及/巡逻绕圈不进 5 单位判定圈），签到永不触发、`PendingAction` 永不移除、mod 每帧重发覆盖原版、agent 永不激活 → 静默卡死。兜底：`PendingAction.CreatedAt` 记录下发时间，超时（`2× 签到周期`，驻防 6 天/巡逻 4 天/护送 2 天）且仍未到达 → 强制触发一次 BehaviorCheckIn（提示"你一直未能到达 X，是否放弃"）并释放 PendingAction，部队回归原版 AI。正常到达时此分支永不触发，零额外成本
 - 被俘/逃亡的国王统治者现在也会被激活（仅跳过已死亡和 null 的），`BuildSelfStatus` 中会提示"你仍是王国统治者"
-- 玩家可见：左下角弹 `xxx 给 xxx 写了一封信` / `xxx 正在思考下一步行动...` / `xxx 正在处理内外政务...` / `xxx 发现自己被夺封了...`
+- 玩家可见：左下角弹 `xxx 给 xxx 写了一封信` / `xxx 正在思考下一步行动...` / `xxx 正在处理内外政务...` / `xxx 发现自己被夺封了...` / `xxx 正在独自思量自己的处境...` / `xxx 遣密使来见 yyy，yyy 正在考虑如何回应...`
 - 防递归：书信规则强调"除非必要不回信" + 深度硬上限
 - 聊天记录使用显式路径（`GetChatLogPathFor`）防线程竞态
 - **信件记忆连续性**：信件处理（`ProcessEvent`）会先 `LoadChatLogFor` 注入双方此前聊天记录，再追加信件内容——对方能记得过去见过面/聊过什么（原实现只给信件文本，导致跨信"不认得你"）
 - 外交提案感知：`LetterReceived` 处理时自动检测双方是否有待处理的外交提案（`AgentManager.GetProposalsBetween`），如有则将提案摘要注入上下文提示 Agent
 
-### 封臣谏言机制（AgentScheduler）
+### 封臣自省机制（AgentScheduler，由谏言泛化）
 
-封臣谏言是"流式、单次激活"的内部政治压力系统，替代了早期的同步"封臣大会"（当时因 48 人批量 LLM 同步激活会卡死事件队列而废弃）。**该限制已随 v1.2.0 并发架构解除**：现在批量后台事件只是排队按 `MaxAgentConcurrency`（默认 5）并发槽位消化，不再卡死队列；新增后台 Agent 事件（记忆巩固、请封、夺权等）可直接排入 AgentScheduler，用优先级和 token 预算约束频度：
+封臣自省是"流式、单次激活"的内部政治压力系统，替代了早期的同步"封臣大会"（当时因 48 人批量 LLM 同步激活会卡死事件队列而废弃）。**该限制已随 v1.2.0 并发架构解除**：现在批量后台事件只是排队按 `MaxAgentConcurrency`（默认 5）并发槽位消化，不再卡死队列；新增后台 Agent 事件（记忆巩固、请封、夺权等）可直接排入 AgentScheduler，用优先级和 token 预算约束频度。
+
+**v2.3.0 泛化**：激活就是激活，激活后可做写信之外的任何事，**谏言只是其中一个选项**——封臣不再围着国王转，而是围着自己的处境转。选择由"权重抽签"改为**公平轮转**（距上次自省最久者优先，`_lastSelfReviewDay` 按游戏日记），选池放宽为**封臣 + 雇佣兵 + 独立氏族领袖**：
 
 ```
-Tick 无事件时 → CheckAdvisoryActivations()
+Tick 无事件时 → CheckSelfReviewActivations()
     ↓
-每个王国每天 10% 概率（MCM AdvisoryProbability 可调）
+每王国每天 10% 概率（MCM AdvisoryProbability 可调）+ 独立领袖各自半概率
     ↓
-SelectAdvisoryLeader：按权重抽氏族领袖
-  权重 = 氏族Tier×3 + 影响力/50 + 封地数
-  排除：雇佣兵、俘虏、逃亡、国王本人、玩家、上轮进谏者（同一人不连续）
+SelectSelfReviewLeader：公平轮转（距上次自省最久优先）
+  排除：俘虏、逃亡、国王本人、玩家
+  独立领袖：Kingdom==null 且非 Minor/Bandit 的氏族领袖（IndependentClanLeaders）
     ↓
-ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先）
-    → 提示词：读 personal_notes.txt（可选）→ 查世界局势 → submit_advisory(content) 工具提交
-    → 工具自动写 World/advisory/{王国}_{年}.txt（时间戳头 + 姓名 + 正文）
-    → 未调工具则兜底写 response.Content，空则标"（未发表公开谏言）"
+QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先）
+    → intent="self_review"：一次激活 = 一件自包含的事
+    → 派密使 / 进谏(submit_advisory/submit_secret_advisory) / 整备 / 移防 / 处置战俘
+      / 思量立场(change_kingdom 叛变/叛逃、create_kingdom 自立) / record_resolve 记决心 / 按兵不动
 ```
 
 要点：
+- **一次性行动原则**：命令一经发出立即执行完毕，无续接激活。工具级排除（`ContextBuilder.GetExcludedToolsForIntent("self_review")`，API tools 与提示词索引共用）：招兵/买粮/升级（链式"先到定居点再激活"）、`send_letter`（级联）、`wait_at_settlement`、`query_available_troops`/`query_settlement_villages`、`update_knowledge`/`let_go`/`query_pending_proposals`、`give_item`/`request_items`、`escort_party`、`browse_tools`（固定菜单，不按需解锁分类）
+- **自省先读日记**：`self_review_rules.txt` 要求先 `read_file decisions/diary.txt` 回顾没有「结果」标记的计策/承诺/计划（仍视为进行中），`chat_logs/` 比日记新则以聊天为准；`MemoryConsolidator.EnsureDiaryCurrentAsync` 在自省前静默补记（SelfReview 已列入自我审视类）
+- **自省摘要**：`BuildSelfReviewDigest`（零 token 代码组装，注入【当前状况】易变块）——封地/部队规模/君主关系/王国战和/未读密使线程。**只提供事实摘要，不注入日记内容**（克制原则：能提醒就别注入，日记由 agent 自己 `read_file`）
 - `submit_advisory` 是 agent_tools.json 里的专用工具，归档格式由代码控制，agent 只需填内容
-- 私人笔记 `decisions/personal_notes.txt` 非强制；若 LLM 写成了别的文件名，`ProcessAdvisory` 会强制合并归位
+- 私人笔记 `decisions/personal_notes.txt` 非强制；若 LLM 写成了别的文件名，旧 `ProcessAdvisory` 的强制合并归位逻辑已随 v2.3.0 移除（自省不再强制进谏）
 - 国王外交激活（`KingDiplomacy`）的提示词自动注入"先 read_file World/advisory/ 了解封臣谏言"，但国王决策权不受限
-- **国王↔封臣闭环（诏令）**：国王政务审视时可颁布公开诏令（`submit_edict`，归档 `World/edict/{王国}_{年}.txt`，仅王国统治者可用、非国王被拒）；封臣进谏前先读国王诏令（`ProcessAdvisory` 提示词 + `advisory_rules.txt`），若国王垂询某事应在谏言中回应；诏令读取走 `IsPublicDocAllowed`（史官任何国家、其他 agent 仅本国），玩家 H 键可见本国诏令
+- **国王↔封臣闭环（诏令）**：国王政务审视时可颁布公开诏令（`submit_edict`，归档 `World/edict/{王国}_{年}.txt`，仅王国统治者可用、非国王被拒）；封臣自省进谏前先读国王诏令（`self_review_rules.txt` + `advisory_rules.txt`），若国王垂询某事应在谏言中回应；诏令读取走 `IsPublicDocAllowed`（史官任何国家、其他 agent 仅本国），玩家 H 键可见本国诏令
 - **国王外交问询（跨国王互通）**：国王可用 `consult_king` 遣使问询他国国王（`KingConsult` 事件 P1，落盘 `World/diplomacy/consults/{A}_and_{B}.txt`），对方以 `reply_consult` 答复，问询方下次政务激活拉取看到。**严格单向防环**：问询会话（intent=`"king_consult"`）中 `consult_king` 被 BuildTools 排除，链深恒 1。史官可读任何国家问询线程（`IsConsultAllowed`），参与双方国王可读，第三方不可读。每王国对 7 游戏天冷却（`TryConsult`/`RecordConsult`）
-- 事件队列积压 >3 时暂停生成新的国王外交/封臣谏言，先消化积压（Tick 中 `PendingEventCount() <= 3` 门槛）
-- **token 截断重试**：`SendMessage` 捕获 `finish_reason`（`"length"`=被 `max_tokens` 截断）。谏言/史官若被截断且未提交/未落盘 → 自动重试一次（更坚决的提示直接进谏/直接 write_file）；主动沉默（`finish_reason="stop"`）不重试。MCM「最大 Token 数」上限 65536、默认 32768（DeepSeek V4 最高支持 384K 输出，旧 8192 上限已过时），史官长编年史亦不易截断
+- **私有密使（封臣互通，不入史册）**：任何家族领袖可用 `send_envoy`/`reply_envoy`（`EnvoyReceived` 事件 P2，落盘 `World/correspondence/{idA}_and_{idB}.txt`，**史官与第三方不可读**——`IsCorrespondenceAllowed` 仅参与者实体 ID 匹配；`__historian__` 天然无权）。立即激活对方一次回应（`envoy_reply` 会话中 `send_envoy` 被 BuildTools 排除，单跳防环），回复不激活任何人、对方下次自省时读到；每实体对 7 游戏天冷却（`TryEnvoy`/`RecordEnvoy`）；收信方在押/逃亡时线程在其下次自省摘要浮现。**玩家 O 键面板**：联系人 📨 标记 + 未读角标，密使往来窗口（intent=`"envoy"`）展示线程并回复（写入线程、不惊动对方），书信窗口亦只读展示密使记录
+- 事件队列积压 >3 时暂停生成新的国王外交/封臣自省，先消化积压（Tick 中 `PendingEventCount() <= 3` 门槛）
+- **token 截断重试**：`SendMessage` 捕获 `finish_reason`（`"length"`=被 `max_tokens` 截断）。自省/史官若被截断且无输出 → 自动重试一次（更坚决的提示直接行动）；主动沉默（`finish_reason="stop"`）不重试。MCM「最大 Token 数」上限 65536、默认 32768（DeepSeek V4 最高支持 384K 输出，旧 8192 上限已过时），史官长编年史亦不易截断
 - 历史（H 键）可读本国公开谏言；史官 `_readableWorldDirs` 含 `"advisory"` 可读取
 - **玩家谏言**：秘书处（M 键）的 chancery 提示词引导使用 `submit_advisory`（玩家封臣/国王均可，雇佣兵被工具拒绝）——玩家谏言与 AI 谏言同一归档，可被史官写入编年史
 - **史官联动**：`historian_rules.txt` 和 `yearly_chronicle_prompt.txt` 引导史官可选读 `advisory/` 作为补充视角（补充事实背后的观点和史料未载细节）；原始史料仍为权威，引用须注明"某封臣当时的谏言"
@@ -972,7 +980,7 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | `create_clan` | 通用 | 天意建族（家族补充系统）：建新贵族家族（成员 3-6 人程序生成、家族等级 2、族长带兵、旗帜随机、入原始史料但不激活史官）。仅 `__fate__` 实体可用（能力门控）。**代码强制每次激活只建一族**（LLM 可能连建多族，曾致原生崩溃）；英雄创建对齐游戏叛乱建族模式（先建英雄→注册进族→置 Active）；成员模板用 `CultureObject.RebelliousHeroTemplates`（Lord 模板不在 NotableTemplates，`GetRandomTemplateByOccupation(Lord)` 恒 null 的死路径已弃）；**预算只在建族成功后才占用**（失败不消耗、可重试） |
 | `create_kingdom` | 外交 | 封臣/独立氏族领袖自立建国（**实验性功能：未经实机测试，为未来功能提前做的准备**）。门槛对齐原版 KingdomCreationModel（tier4 + 城镇/城堡≥1 + 兵≥100）；排除玩家（走原版总督对话）/国王/雇佣兵；封臣建国先叛乱脱离旧国（保封地、对旧国及其交战方宣战）再建国；文化参数精确优先再模糊匹配，不自创文化（CultureObject 是 XML 静态内容）；国号查重；史官自动入史 + 建国纪事；称王后 `EntityManager.RefreshEntity` 补 Diplomat 能力 |
 
-### 文件工具（agent_tools.json，16 个）
+### 文件工具（agent_tools.json，19 个）
 
 | 工具 | 说明 |
 |------|------|
@@ -992,6 +1000,9 @@ ProcessAdvisory（入队 P4，由有限并行槽位调度处理，最低优先�
 | `submit_edict` | 国王颁布公开诏令/垂询群臣（公开归档 `World/edict/{王国}_{年}.txt`，史官可读，仅王国统治者可用） |
 | `consult_king` | 国王遣使问询他国国王（`World/diplomacy/consults/{A}_and_{B}.txt`，激活对方回应，史官可读，仅王国统治者可用，每王国对 7 游戏天冷却） |
 | `reply_consult` | 国王回复他国外交问询（落盘到问询线程，史官可读，仅王国统治者可用） |
+| `send_envoy` | 私有密使：派使者联络其他家族领袖/他国国王（`World/correspondence/{idA}_and_{idB}.txt`，**史官与第三方不可读**，仅参与者双方；立即激活对方一次回应，单跳防环；每实体对 7 游戏天冷却。仅家族领袖可用） |
+| `reply_envoy` | 回复收到的私有密使（回写密使线程，不激活任何人，发送方下次自省/政务审视时读到） |
+| `record_resolve` | 日记落笔（`decisions/diary.txt` 强制 `[年季节日] 类型：内容` 格式，类型白名单：决心/决定/承诺/计策/情报/评价/结果/战略——防止 write_file 把日记格式写坏导致记忆检索失效） |
 
 ## 故障排查
 

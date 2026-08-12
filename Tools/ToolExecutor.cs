@@ -349,6 +349,15 @@ namespace AIChronicle
                     case "reply_consult":
                         return ExecuteReplyConsult(args["target_kingdom"]?.ToString() ?? "", args["message"]?.ToString() ?? "");
 
+                    case "send_envoy":
+                        return ExecuteSendEnvoy(args["target_entity_id"]?.ToString() ?? "", args["message"]?.ToString() ?? "");
+
+                    case "reply_envoy":
+                        return ExecuteReplyEnvoy(args["target_entity_id"]?.ToString() ?? "", args["message"]?.ToString() ?? "");
+
+                    case "record_resolve":
+                        return AgentManager.ExecuteRecordResolve(args["type"]?.ToString() ?? "", args["content"]?.ToString() ?? "");
+
                     default:
                         return $"未知工具：{name}";
                 }

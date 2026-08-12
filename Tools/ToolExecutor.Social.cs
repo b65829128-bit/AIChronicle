@@ -531,6 +531,128 @@ namespace AIChronicle
             return Path.Combine(dir, pair + ".txt");
         }
 
+        /// <summary>密使线程文件名：实体 ID 排序拼接（{idA}_and_{idB}），与 BuildPairKey 王国名版本区分（实体 ID 不含 "_and_"）。</summary>
+        private static string BuildEntityPairKey(string idA, string idB)
+        {
+            if (string.CompareOrdinal(idA, idB) <= 0)
+                return idA + "_and_" + idB;
+            return idB + "_and_" + idA;
+        }
+
+        private static string GetCorrespondenceThreadPath(string idA, string idB)
+        {
+            var pair = BuildEntityPairKey(idA, idB);
+            var dir = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "correspondence");
+            Directory.CreateDirectory(dir);
+            return Path.Combine(dir, pair + ".txt");
+        }
+
+        private static bool IsClanLeader(Hero hero)
+        {
+            return hero?.Clan != null && hero.Clan.Leader == hero;
+        }
+
+        /// <summary>私有密使（封臣/独立领袖/佣兵/国王互通）：落盘 World/correspondence/，立即激活对方一次，单跳防环，史官不可读。</summary>
+        private static string ExecuteSendEnvoy(string targetEntityId, string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return "[错误] 口信内容不能为空";
+            if (AIChatClient.CurrentHero == null)
+                return "[错误] 无当前领主";
+            if (string.IsNullOrEmpty(PromptManager.CampaignDir))
+                return "[错误] 战役目录未就绪";
+            if (string.IsNullOrWhiteSpace(targetEntityId))
+                return "[错误] 请提供接收密使的家族领袖（实体 ID 或中文名）";
+
+            var hero = AIChatClient.CurrentHero;
+            if (!IsClanLeader(hero))
+                return "[错误] 只有家族领袖才能派遣密使";
+            if (hero.IsPrisoner) return "[错误] 你正在被俘虏，无法遣使";
+            if (hero.IsFugitive) return "[错误] 你正在逃亡中，无法遣使";
+
+            var senderEntity = EntityManager.GetOrCreateEntity(hero);
+            var resolvedId = EntityManager.ResolveEntityId(targetEntityId);
+            if (resolvedId == null) return $"[错误] 未找到名为 \"{targetEntityId}\" 的实体";
+            if (resolvedId == senderEntity.Id) return "[错误] 你不能向自己派遣密使";
+
+            var recipientEntity = EntityManager.GetEntityById(resolvedId);
+            var recipientHero = recipientEntity?.HeroRef;
+            var recipientName = recipientEntity?.Name ?? resolvedId;
+            if (recipientHero == null)
+                return $"[错误] 无法解析目标 {targetEntityId} 的实体";
+            if (!IsClanLeader(recipientHero))
+                return $"[错误] {recipientName} 不是家族领袖，无法接收密使";
+            if (recipientHero.IsPrisoner) return $"[错误] {recipientName} 正在被俘虏，无法收信";
+            if (recipientHero.IsFugitive) return $"[错误] {recipientName} 正在逃亡中，无法收信";
+            if (recipientHero.IsDisabled) return $"[错误] {recipientName} 处于不可用状态，无法收信";
+
+            var pairKey = BuildEntityPairKey(senderEntity.Id, resolvedId);
+            if (!AgentScheduler.TryEnvoy(pairKey, out var daysRemaining))
+                return $"[冷却] 使者尚未从 {recipientName} 处归来，需再等 {daysRemaining} 游戏天。";
+
+            var currentTime = PromptManager.GetCurrentTimeString();
+            var name = senderEntity.Name ?? hero.Name?.ToString() ?? "?";
+            var title = senderEntity.Title ?? "?";
+
+            var threadPath = GetCorrespondenceThreadPath(senderEntity.Id, resolvedId);
+            SafeFileIO.AppendAllText(threadPath, $"[{currentTime}] {name}（{title}）遣使：{message.Trim()}\n");
+
+            AgentScheduler.RecordEnvoy(pairKey);
+
+            var recipientIsPlayer = recipientHero == Hero.MainHero;
+            if (recipientIsPlayer)
+            {
+                SubModule.MarkNpcKnown(senderEntity.Id); // 玩家 O 面板可见该联系人
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
+                    $"{name} 遣密使来见你，按 O 键书信面板查看并回复。", Colors.Cyan));
+            }
+            else
+            {
+                var framed = $"{name}（{title}）遣密使送来私人口信：\n「{message.Trim()}」\n\n这封密使往来仅你二人可知，史官与外人不会知晓。可用 reply_envoy 工具答复（可据实、可虚与委蛇、可置之不理），或先处理自己的事务。";
+                AgentScheduler.QueueEvent(new ActivationEvent
+                {
+                    Type = ActivationEventType.EnvoyReceived,
+                    AgentId = resolvedId,
+                    TargetId = senderEntity.Id,
+                    Content = framed,
+                    Depth = 1
+                });
+            }
+
+            return $"密使已遣往 {recipientName}。此往来仅你二人知晓，不会进入史册。";
+        }
+
+        /// <summary>回复私有密使：回写双方密使线程，不激活任何人（发送方下次自省/政务审视时读到）。</summary>
+        private static string ExecuteReplyEnvoy(string targetEntityId, string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return "[错误] 答复内容不能为空";
+            if (AIChatClient.CurrentHero == null)
+                return "[错误] 无当前领主";
+            if (string.IsNullOrEmpty(PromptManager.CampaignDir))
+                return "[错误] 战役目录未就绪";
+            if (string.IsNullOrWhiteSpace(targetEntityId))
+                return "[错误] 请提供密使发送方的家族领袖（实体 ID 或中文名）";
+
+            var hero = AIChatClient.CurrentHero;
+            if (!IsClanLeader(hero))
+                return "[错误] 只有家族领袖才能回复密使";
+
+            var senderEntity = EntityManager.GetOrCreateEntity(hero);
+            var resolvedId = EntityManager.ResolveEntityId(targetEntityId);
+            if (resolvedId == null) return $"[错误] 未找到名为 \"{targetEntityId}\" 的实体";
+            if (resolvedId == senderEntity.Id) return "[错误] 不能回复自己";
+
+            var currentTime = PromptManager.GetCurrentTimeString();
+            var name = senderEntity.Name ?? hero.Name?.ToString() ?? "?";
+            var title = senderEntity.Title ?? "?";
+
+            var threadPath = GetCorrespondenceThreadPath(senderEntity.Id, resolvedId);
+            SafeFileIO.AppendAllText(threadPath, $"[{currentTime}] {name}（{title}）答复：{message.Trim()}\n");
+
+            return $"答复已密送。";
+        }
+
         private static string BuildPairKey(string kingdomA, string kingdomB)
         {
             if (string.CompareOrdinal(kingdomA, kingdomB) <= 0)

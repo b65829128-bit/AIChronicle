@@ -270,5 +270,56 @@
         "description": "Your answer to the other ruler, in Chinese."
       }
     ]
+  },
+  {
+    "name": "send_envoy",
+    "category": "communication",
+    "description": "Send a secret envoy to another clan leader (a vassal, an independent lord, a mercenary captain, or a foreign king) to exchange private messages. Unlike letters, an envoy does not cascade — the recipient is woken once to answer, and the exchange stays private between you two.\n\nUsage:\n- Call this when you want to sound someone out, verify a rumor, propose a secret alliance, plot against your liege, or negotiate quietly.\n- Only clan leaders can send envoys. You cannot send an envoy to yourself.\n- target_entity_id is the recipient's entity ID or Chinese name.\n- The content is the message your envoy delivers. Write it as a private message to the other person.\n- The recipient will be woken to answer once; their answer reaches you the next time you review your own affairs. Do NOT send repeated envoys while awaiting a reply — the same envoy thread is used.\n- There is a short cooldown before you can send another envoy to the same person.\n- This correspondence is PRIVATE: the historian cannot read it, and no third party can read it. Only you and the recipient.\n- Do NOT use this to send casual pleasantries; every envoy wakes the recipient once.",
+    "parameters": [
+      {
+        "name": "target_entity_id",
+        "type": "string",
+        "description": "The entity ID or Chinese name of the recipient clan leader (e.g. \"博泰罗_CharacterObject_1664\" or \"拉盖娅\")."
+      },
+      {
+        "name": "message",
+        "type": "string",
+        "description": "The private message to deliver, in Chinese."
+      }
+    ]
+  },
+  {
+    "name": "reply_envoy",
+    "category": "communication",
+    "description": "Reply to a secret envoy you received. Your answer is delivered to the sender and recorded in your private correspondence thread with them.\n\nUsage:\n- Call this when another clan leader has sent you a private envoy and you have decided what to answer.\n- You may answer truthfully, mislead, decline to say, or propose a meeting — the choice is yours.\n- The reply does not wake anyone again; the sender will see it the next time they review their own affairs.\n- This correspondence is PRIVATE: the historian and third parties cannot read it.",
+    "parameters": [
+      {
+        "name": "target_entity_id",
+        "type": "string",
+        "description": "The entity ID or Chinese name of the clan leader who sent you the envoy."
+      },
+      {
+        "name": "message",
+        "type": "string",
+        "description": "Your answer to the sender, in Chinese."
+      }
+    ]
+  },
+  {
+    "name": "record_resolve",
+    "category": "file",
+    "description": "Record a resolve, decision, or note into your private diary (decisions/diary.txt) in the standard format. The system enforces the diary format so memory search stays reliable.\n\nUsage:\n- Call this when you reach a decision, make a commitment, form a plan or resolve, learn valuable intelligence, or change course during your self-review.\n- The type must be one of: 决心 / 决定 / 承诺 / 计策 / 情报 / 评价 / 结果 / 战略.\n- The content is a single concise sentence describing what you resolved or decided.\n- The system adds the date prefix automatically; only append, never overwrite.\n- Do NOT write '决心' items into diary via write_file/append_file — use this tool so the format stays valid.",
+    "parameters": [
+      {
+        "name": "type",
+        "type": "string",
+        "description": "Entry type: 决心 / 决定 / 承诺 / 计策 / 情报 / 评价 / 结果 / 战略."
+      },
+      {
+        "name": "content",
+        "type": "string",
+        "description": "A single concise sentence in Chinese describing the resolve or decision."
+      }
+    ]
   }
 ]

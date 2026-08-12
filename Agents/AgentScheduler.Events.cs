@@ -47,15 +47,6 @@ namespace AIChronicle
                     return;
                 }
 
-                if (evt.Type == ActivationEventType.Advisory)
-                {
-                    var vassal = EntityManager.GetEntityById(evt.AgentId);
-                    var kingdom = vassal?.HeroRef?.Clan?.Kingdom;
-                    if (vassal != null && kingdom != null)
-                        await ProcessAdvisory(vassal, kingdom);
-                    return;
-                }
-
                 var agentEntity = EntityManager.GetOrCreateEntityById(evt.AgentId);
                 var targetEntity = EntityManager.GetOrCreateEntityById(evt.TargetId);
 
@@ -101,6 +92,18 @@ namespace AIChronicle
                 {
                     MainThreadExecutor.DisplayMessage(new InformationMessage(
                         $"{targetName} 遣使问询 {agentName}，{agentName} 正在回应...",
+                        Colors.Cyan));
+                }
+                else if (evt.Type == ActivationEventType.SelfReview)
+                {
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
+                        $"{agentName} 正在独自思量自己的处境...",
+                        Colors.Cyan));
+                }
+                else if (evt.Type == ActivationEventType.EnvoyReceived)
+                {
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
+                        $"{targetName} 遣密使来见 {agentName}，{agentName} 正在考虑如何回应...",
                         Colors.Cyan));
                 }
                 else
@@ -152,7 +155,9 @@ namespace AIChronicle
                 // 静默执行，仅日记落后时触发一次便宜的巩固 pass，多数时候零成本。
                 if (evt.Type is ActivationEventType.KingDiplomacy
                     or ActivationEventType.FiefReview
-                    or ActivationEventType.KingConsult)
+                    or ActivationEventType.KingConsult
+                    or ActivationEventType.SelfReview
+                    or ActivationEventType.EnvoyReceived)
                 {
                     await MemoryConsolidator.EnsureDiaryCurrentAsync(evt.AgentId);
                 }
@@ -171,6 +176,8 @@ namespace AIChronicle
                     ActivationEventType.PlanCheckIn => "chat",
                     ActivationEventType.FiefReview => "fief_review",
                     ActivationEventType.KingConsult => "king_consult",
+                    ActivationEventType.SelfReview => "self_review",
+                    ActivationEventType.EnvoyReceived => "envoy_reply",
                     _ => "letter"
                 };
                 var response = await AIChatClient.SendMessage(

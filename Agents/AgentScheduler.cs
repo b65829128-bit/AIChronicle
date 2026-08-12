@@ -19,10 +19,11 @@ namespace AIChronicle
         PlanCheckIn,
         YearlyChronicle,
         SpecialChronicle,
-        Advisory,
+        SelfReview,
         FiefReview,
         KingConsult,
-        ClanReplenishment
+        ClanReplenishment,
+        EnvoyReceived
     }
 
     public class ActivationEvent
@@ -33,12 +34,12 @@ namespace AIChronicle
         public string Content { get; set; } = "";
         public int Depth { get; set; }
 
-        /// <summary>调度优先级：0 最高（史官，永不跳过），4 最低（概率激活的谏言）。</summary>
+        /// <summary>调度优先级：0 最高（史官，永不跳过），4 最低（概率激活的自省）。</summary>
         public int Priority => Type switch
         {
             ActivationEventType.YearlyChronicle or ActivationEventType.SpecialChronicle => 0,
             ActivationEventType.KingDiplomacy or ActivationEventType.KingConsult => 1,
-            ActivationEventType.LetterReceived => 2,
+            ActivationEventType.LetterReceived or ActivationEventType.EnvoyReceived => 2,
             ActivationEventType.BehaviorCheckIn or ActivationEventType.PlanCheckIn or ActivationEventType.FiefReview or ActivationEventType.ClanReplenishment => 3,
             _ => 4
         };
@@ -78,10 +79,13 @@ namespace AIChronicle
         private static bool _historianInitialized;
         private static int _warmupFramesHistorian = 60;
         private static readonly Random _rng = new();
-        private static readonly Dictionary<Kingdom, string> _lastAdvisorySpeaker = new();
         private static readonly Dictionary<Kingdom, CampaignTime> _lastAdvisoryCheck = new();
+        private static readonly Dictionary<string, int> _lastSelfReviewDay = new();
+        private static readonly Dictionary<string, CampaignTime> _lastIndependentReviewCheck = new();
         private static readonly Dictionary<string, CampaignTime> _lastConsultByPair = new();
+        private static readonly Dictionary<string, CampaignTime> _lastEnvoyByPair = new();
         private const double ConsultCooldownDays = 7.0;
+        private const double EnvoyCooldownDays = 7.0;
 
         public static bool IsProcessing => _inFlightCount > 0;
         public static int CurrentProcessingDepth
@@ -112,9 +116,11 @@ namespace AIChronicle
             _lastExpiryCheckDay = -1;
             _lastClanReplenishDay = -1;
             _historianInitialized = false;
-            _lastAdvisorySpeaker.Clear();
             _lastAdvisoryCheck.Clear();
+            _lastSelfReviewDay.Clear();
+            _lastIndependentReviewCheck.Clear();
             _lastConsultByPair.Clear();
+            _lastEnvoyByPair.Clear();
             lock (_diplomacyLock)
             {
                 _diplomacyReviewAgents.Clear();
@@ -148,9 +154,10 @@ namespace AIChronicle
         public static void ForceAdvisory()
         {
             _lastAdvisoryCheck.Clear();
-            _lastAdvisorySpeaker.Clear();
+            _lastSelfReviewDay.Clear();
+            _lastIndependentReviewCheck.Clear();
             MainThreadExecutor.DisplayMessage(new InformationMessage(
-                "[AI编年史] 封臣谏言计时器已重置，封臣们将在接下来的游戏日中陆续进谏。",
+                "[AI编年史] 封臣自省计时器已重置，封臣们将在接下来的游戏日中陆续自省。",
                 Colors.Cyan));
         }
 
@@ -173,6 +180,27 @@ namespace AIChronicle
         public static void RecordConsult(string pairKey)
         {
             _lastConsultByPair[pairKey] = CampaignTime.Now;
+        }
+
+        /// <summary>私有密使冷却（每实体对）：遣使后 N 游戏天才能再派，防刷。返回是否可遣，不可时给出剩余天数。</summary>
+        public static bool TryEnvoy(string pairKey, out int daysRemaining)
+        {
+            daysRemaining = 0;
+            if (_lastEnvoyByPair.TryGetValue(pairKey, out var last))
+            {
+                var elapsed = (CampaignTime.Now - last).ToDays;
+                if (elapsed < EnvoyCooldownDays)
+                {
+                    daysRemaining = (int)Math.Ceiling(EnvoyCooldownDays - elapsed);
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        public static void RecordEnvoy(string pairKey)
+        {
+            _lastEnvoyByPair[pairKey] = CampaignTime.Now;
         }
 
         /// <summary>国王政务审视时注入的外交问询回音：扫 consults/ 下含本国的对，取最后一条对方发来的问询/答复。</summary>
@@ -405,7 +433,7 @@ namespace AIChronicle
                 if (PendingEventCount() <= 3)
                 {
                     CheckKingActivations();
-                    CheckAdvisoryActivations();
+                    CheckSelfReviewActivations();
                     CheckClanReplenishment();
                 }
                 return;

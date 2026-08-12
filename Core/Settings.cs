@@ -518,8 +518,8 @@ namespace AIChronicle
 
         private bool _advisoryEnabled = true;
 
-        [SettingPropertyBool("启用封臣谏言", Order = 13, RequireRestart = false,
-            HintText = "开启后每天每王国有概率触发一位封臣进谏（仅氏族领袖，排除玩家和国王）。\n谏言公开写入 World/advisory/，国王外交激活时会阅读。\n关闭后封臣不再进谏。")]
+        [SettingPropertyBool("启用封臣自省/谏言", Order = 13, RequireRestart = false,
+            HintText = "开启后每天每王国有概率触发一位氏族领袖自省（封臣+佣兵+独立领袖，排除玩家和国王）。\n自省=处理自身事务，谏言只是其中一个选项；自省动作经 World/advisory/ 与 World/correspondence/ 落盘。\n关闭后封臣不再自省。")]
         [SettingPropertyGroup("游戏设置")]
         public bool AdvisoryEnabled
         {
@@ -536,8 +536,8 @@ namespace AIChronicle
 
         private float _advisoryProbability = 0.1f;
 
-        [SettingPropertyFloatingInteger("封臣谏言概率/天", 0.01f, 0.5f, Order = 14, RequireRestart = false,
-            HintText = "每个王国每天有独立概率触发一位封臣进谏。\n0.1=平均十天一次，0.5=平均两天一次。\n同一封臣不会连续进谏。")]
+        [SettingPropertyFloatingInteger("自省/谏言概率/天", 0.01f, 0.5f, Order = 14, RequireRestart = false,
+            HintText = "每个王国每天有独立概率触发一位氏族领袖自省（公平轮转，距上次自省最久者优先）。\n0.1=平均十天一次，0.5=平均两天一次。\n自省后可进谏、派密使、处理自身事务或按兵不动。")]
         [SettingPropertyGroup("游戏设置")]
         public float AdvisoryProbability
         {

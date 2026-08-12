@@ -198,6 +198,7 @@ namespace AIChronicle
             CopyPromptToCampaign("biography_prompt.txt");
             CopyPromptToCampaign("advisory_rules.txt");
             CopyPromptToCampaign("fief_review_rules.txt");
+            CopyPromptToCampaign("self_review_rules.txt");
             CopyPromptToCampaign("clan_replenishment_rules.txt");
             CopyPromptToCampaign("consolidation_rules.txt");
             CopyPromptToCampaign("memory_consolidation.txt");
