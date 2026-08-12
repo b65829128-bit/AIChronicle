@@ -177,6 +177,9 @@ namespace AIChronicle
             // 严格单向防环：被问询方（king_consult 会话）拿不到 consult_king，不能发起新问询，只能 reply_consult 回复
             if (CurrentIntent == "king_consult")
                 toolDefs.RemoveAll(t => t.Name == "consult_king");
+            // 秘书处排除 create_kingdom：建国是游戏内重大国体变更，玩家走原版正规流程（与总督对话建国），不经秘书处
+            if (CurrentIntent == "chancery")
+                toolDefs.RemoveAll(t => t.Name == "create_kingdom");
             // 秘书处不提供 browse_tools：防止它解锁被限制的分类（行军/军事/社交）绕过权限收窄
             if (CurrentIntent != "chancery")
                 toolDefs.Add(BrowseToolsDef);

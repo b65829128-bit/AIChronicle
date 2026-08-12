@@ -137,6 +137,8 @@ namespace AIChronicle
             if (Campaign.Current == null) return "[错误] 战役未加载。";
             var hero = AIChatClient.CurrentHero;
             if (hero == null) return "[错误] 无当前领主";
+            // 排除玩家：建国是重大国体变更，玩家走原版正规流程（与总督对话建国），此工具仅限 NPC 封臣/氏族领袖使用。
+            if (hero == Hero.MainHero) return "[错误] 建国请走游戏内正规流程——与任意总督对话，选择建国。此工具仅限 NPC 封臣/氏族领袖使用。";
             if (hero.Clan == null) return "[错误] 你不属于任何氏族";
             if (hero.Clan.Leader != hero) return "[错误] 只有氏族领袖才能建国";
             var clan = hero.Clan;

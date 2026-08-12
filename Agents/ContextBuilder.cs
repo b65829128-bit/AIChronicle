@@ -285,6 +285,11 @@ namespace AIChronicle
                 GetRequiredCapability(t.Name) == null || agent.HasCapability(GetRequiredCapability(t.Name)!.Value)
             ).ToList();
 
+            // 秘书处排除 create_kingdom（玩家建国走原版正规流程），与 AIChatClient.BuildTools 的排除保持一致——
+            // 否则提示词文本列出该工具、API tools 却不含，模型会尝试调用一个不存在的工具。
+            if (intent == "chancery")
+                capabilityTools = capabilityTools.Where(t => t.Name != "create_kingdom").ToList();
+
             var activatedSet = AIChatClient.ActivatedCategories;
             var activeCategories = capabilityTools
                 .Where(t => activatedSet.Contains(t.Category))
