@@ -715,6 +715,24 @@ namespace AIChronicle
             }
         }
 
+        private bool _disableClanDiscontinuation = true;
+
+        [SettingPropertyBool("独立家族永不失踪", Order = 21, RequireRestart = false,
+            HintText = "开启：无王国的独立家族（灭国幸存者、自愿离国者、丢光封地者）不再被原版 28 天计时器自动灭族，永久保留——契合模组「封臣自省 / 玩家劝降」，这些独立氏族正是自省与劝降的主要对象。\n关闭：恢复原版行为，独立家族 28 天不加入势力即从游戏中灭族（仅剩百科）。")]
+        [SettingPropertyGroup("游戏设置")]
+        public bool DisableClanDiscontinuation
+        {
+            get => _disableClanDiscontinuation;
+            set
+            {
+                if (_disableClanDiscontinuation != value)
+                {
+                    _disableClanDiscontinuation = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private int _maxTokens = 32768;
 
         [SettingPropertyInteger("最大 Token 数", 50, 65536, Order = 5, RequireRestart = false,

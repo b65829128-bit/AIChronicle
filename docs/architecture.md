@@ -433,7 +433,8 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │   ├── LordChatBehavior.cs     ← 对话中插入聊天选项，战役 ID 管理
 │   ├── DiplomacyBanPatch.cs    ← 拦截原版外交（禁止原版外交开关）
 │   ├── FiefAssignmentPatch.cs  ← 攻城后册封由 Agent 主导
-│   └── ExecutionNoPenaltyPatch.cs ← 处决无惩罚
+│   ├── ExecutionNoPenaltyPatch.cs ← 处决无惩罚
+│   └── ClanDiscontinuationPatch.cs ← 独立家族永续（禁用原版 28 天灭族，MCM 可开关）
 ├── docs/                       ← AI 参考文档（架构/子系统/工具清单/调试/Harmony）
 ├── AGENTS.md                  ← 常驻开发指令（本文件）
 ├── README.md                  ← 开源主入口（英文简介，指向 README_MOD.md / AGENTS.md）

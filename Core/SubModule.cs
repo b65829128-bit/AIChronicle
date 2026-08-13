@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -182,6 +182,18 @@ namespace AIChronicle
                         execHarmony.Patch(relM,
                             prefix: new HarmonyMethod(typeof(ExecutionNoPenaltyPatch).GetMethod(nameof(ExecutionNoPenaltyPatch.GetRelationChangeForExecutingHeroPrefix), BindingFlags.Static | BindingFlags.Public)));
                 }
+            }
+
+            // 独立家族永续：禁用原版「无王国独立家族 28 天后自动灭族」（FactionDiscontinuationCampaignBehavior）。
+            // 灭国幸存者/自愿离国者/丢光封地者都永久保留——契合封臣自省与玩家劝降。手动注册防 PatchAll 静默跳过。
+            var clanPersistHarmony = new Harmony("AIChronicle.ClanDiscontinuation");
+            var fdcType = Type.GetType("TaleWorlds.CampaignSystem.CampaignBehaviors.FactionDiscontinuationCampaignBehavior, TaleWorlds.CampaignSystem");
+            if (fdcType != null)
+            {
+                var discontinueM = fdcType.GetMethod("DiscontinueClan", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (discontinueM != null)
+                    clanPersistHarmony.Patch(discontinueM,
+                        prefix: new HarmonyMethod(typeof(ClanDiscontinuationPatch).GetMethod(nameof(ClanDiscontinuationPatch.DiscontinueClanPrefix), BindingFlags.Static | BindingFlags.Public)));
             }
         }
 
