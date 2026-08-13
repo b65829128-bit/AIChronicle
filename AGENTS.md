@@ -145,7 +145,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 >
 > **上下文模板结构（缓存优化）**：`context_template.txt` 以 `<!--VOLATILE-->` 标记分界。标记前为**稳定前缀**（身份/persona/世界背景/游戏规则/工具清单/行为守则）→ system 消息；标记后为**易变块**（当前时间/自身状态/对对方认知/目标/客观关系/内政报告）→ 单独作为【当前状况】**system 消息**插在历史之后、当前 user 消息之前。目的：让 system+历史构成逐字节稳定的前缀，最大化 DeepSeek 前缀缓存命中（命中输入 0.02元/M vs 未命中 1元/M，价差 50 倍）。该优化参考 DeepSeek 官方上下文缓存文档与 [DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)（面向 DeepSeek 的 coding agent）。`ContextBuilder` 相应提供 `BuildStable`/`BuildVolatile`（合并 `Build` 保留兼容）。**史官 intent 例外**：不拆易变块，走合并 `Build()` 保持单一 system 消息——文笔是模组核心，结构与旧版一致。旧版模板（无标记）整体按稳定处理，行为不变。
 >
-> **易变块必须用 system 角色，不得用 user**（v2.0.2 修复的回归）：v1.4.0 曾把【当前状况】作为 `user` 消息插在玩家消息前——模型会把这条系统情境当成"对方说的话"，导致回复引用对话中不存在的"请教/答复"等幻觉（如"我等着您的答复""您过谦了"）。改回 `system` 角色后模型明确这是系统注入的情境，缓存优化保留。`AIChatClient` 有 400 兜底：若端点拒绝"非开头位置的 system"（兼容性问题），自动回退为 user 角色并重建请求（`_volatileSystemSupported` 标志，会话内持久）。
+> **易变块必须用 system 角色，不得用 user**（v2.0.2 修复的回归）：v1.4.0 曾把【当前状况】作为 `user` 消息插在玩家消息前——模型会把这条系统情境当成"对方说的话"，导致回复引用对话中不存在的"请教/答复"等幻觉（如"我等着您的答复""您过谦了"）。改回 `system` 角色后模型明确这是系统注入的情境，缓存优化保留。易变块**固定为 system 角色**（OpenAI 兼容协议允许中间 system，不再运行时探测回退——厂商差异见下文 Provider 抽象层）。
 >
 > **已知边界情况（待解决）**：如果玩家在战役副本自定义了某文件（副本时间戳更新），之后基础目录又修改了（基础更晚）→ newer-wins 会覆盖副本，玩家自定义丢失。当前对开发期是期望行为；未来如需保护战役自定义，需引入"用户修改标记"机制（如哈希比对或 .custom 标记文件）。
 >
@@ -172,6 +172,38 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 - **测试**：`AIChatClient.TestConnection(scenario)` 按场景生效配置测试（原始请求，不依赖战役上下文，主菜单可用）；每个场景组在 MCM 有「测试此场景」按钮
 - **统一 max_tokens**：全模组最大 Token 数只由 MCM「最大 Token 数」控制（`settings.MaxTokens`），含 persona 生成与连接测试，禁止各处硬编码
 - **v2.0.0 初版**：设置 Id/FolderName 已改为 `AIChronicle_v1`/`AIChronicle`，旧的 MCM 配置会重置一次（需重填 API Key）
+
+### LLM 厂商兼容（Provider 抽象层）
+
+> ⚠️ **架构铁律：厂商差异声明化，禁止运行时探测。** 这是从 MiniMax 兼容踩坑中总结出的硬约束——见下文「屎山教训」。
+
+本模组面向多家 LLM 厂商（DeepSeek / MiniMax / Qwen / GLM / 豆包 等），但**不在业务代码里写 `if 厂商` 特判**，而是参考 [opencode](https://opencode.ai/docs/providers/) 的做法——opencode 用 AI SDK 的 provider 抽象 + `@ai-sdk/openai-compatible` 通用适配器，75+ 厂商里绝大多数（DeepSeek/MiniMax/Ollama 等）**共用一个 OpenAI 兼容适配器**，差异用配置声明，不靠运行时探测。
+
+对应地，本模组抽象出 **`ILLMProvider` 层**（`Core/LLM/`）：
+
+| 文件 | 职责 |
+|------|------|
+| `LLMProvider.cs` | 接口 `ILLMProvider` + 能力声明 `LLMCapabilities` + 统一数据结构（请求 / 归一化流块） |
+| `OpenAICompatibleProvider.cs` | 通用实现：标准 OpenAI 协议 + 宽容解析（空 `choices:[]`、内联 `<think>` 剥离等，任何 OpenAI 兼容端点都可能有） |
+| `DeepSeekProvider.cs` | OpenAI 兼容 + DeepSeek 扩展（`reasoning_content` 回传、`prompt_cache_hit_tokens` 缓存字段、`reasoning_effort` 参数） |
+
+**核心原则：**
+
+1. **厂商差异 = 能力声明，不是运行时探测。** 每个 provider 静态声明自己的能力（是否支持 `reasoning_effort`、reasoning 字段名、缓存字段名、thinking 开关方式），由 MCM「接口类型」下拉显式选择。**禁止**"先发错参数再看 400 回退"的探测式兼容。
+2. **OpenAI 兼容是通用底座。** MiniMax/Qwen/GLM/豆包/DeepSeek 全都讲 OpenAI 兼容协议，共用一个 `OpenAICompatibleProvider`。DeepSeek 只是"OpenAI 兼容 + 少量扩展字段"，单独一个 `DeepSeekProvider` 打开这些扩展，而非重写协议。
+3. **宽容解析内置在通用层。** 空 `choices:[]`、内联 `<think>` 标签剥离、`[DONE]` 结束等，是 OpenAI 兼容端点的常见行为，由通用 provider 无条件宽容处理（对 DeepSeek 是 no-op），**不是厂商特判**。
+
+**扩展方式**：新增厂商 = 先判断它是不是 OpenAI 兼容——是则直接配 URL/模型（无需改码）；不是（如 Anthropic 的 Messages API）才新增一个 provider 实现。**绝不在 `AIChatClient`/`AgentManager` 的业务逻辑里加厂商 `if`。**
+
+#### 屎山教训（为什么禁止运行时探测）
+
+早期为兼容 MiniMax 曾在业务代码里加运行时探测标志（`_streamUsageSupported`/`_reasoningEffortSupported`/`_volatileSystemSupported`）+ 400 回退重试 + 散落的 `StripThinkTags`/空 `choices` 特判。这是错误方向：
+
+- 每遇到一个厂商差异就加一个标志/回退，差异越积越多，`SendMessage` 变成 if-else 泥潭；
+- 运行时探测靠"故意发错参数再捕获 400"来摸端点能力，脆弱且难测；
+- 厂商能力应当是**配置时一次性声明**的静态事实，而不是每次请求时试探。
+
+重构后，厂商差异全部收敛到 `Core/LLM/` 的 provider 实现里，业务代码（`AIChatClient.SendMessage` 多轮循环）只面对统一的请求/流解析接口，不感知厂商。
 
 ### 信息隔离规则（硬约束）
 
@@ -301,7 +333,11 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │   ├── SafeFileIO.cs           ← 带重试的文件 IO（并发读写同一文件时避免"文件正被使用"异常）
 │   ├── MainThreadExecutor.cs   ← 主线程分发器（后台线程的工具执行排队回主线程，防跨线程崩溃）
 │   ├── TtsService.cs           ← 语音合成门面（ITtsProvider 接口 + 合成/磁盘缓存/播放/打断）
-│   └── EdgeTtsProvider.cs      ← Edge TTS 免费引擎（手写 WebSocket 客户端 EdgeWsClient，可设浏览器 UA）
+│   ├── EdgeTtsProvider.cs      ← Edge TTS 免费引擎（手写 WebSocket 客户端 EdgeWsClient，可设浏览器 UA）
+│   └── LLM/                    ← LLM 厂商兼容层（Provider 抽象，声明式厂商差异）
+│       ├── LLMProvider.cs      ← ILLMProvider 接口 + 能力声明 LLMCapabilities + 统一数据结构
+│       ├── OpenAICompatibleProvider.cs ← 通用 OpenAI 兼容实现（宽容解析：空 choices/内联 think）
+│       └── DeepSeekProvider.cs ← DeepSeek 扩展（reasoning 回传 / 缓存字段 / reasoning_effort）
 ├── Agents/                     ← Agent 核心：上下文、调度、记忆
 │   ├── AgentManager.cs         ← Agent 管理器基类（NPC 文件系统、路径权限、persona 生成）
 │   ├── AgentManager.Files.cs   ← 文件工具执行（read/write/edit/delete/move/glob/grep/list）
@@ -739,7 +775,7 @@ Usage:
 - 逐行解析 `data:` 前缀的 SSE 事件
 - 文本增量（delta）累积成完整回复
 - `reasoning_content` delta 跨 chunk 累积（DeepSeek 默认思考模式开启，思维链内容需捕获并在工具调用轮次中回传）
-- **思考强度（reasoning_effort）**：MCM「思考强度」可调（low/high/max），默认 `low`——思考按输出价计费，是成本大头。**史官固定 high**（文笔核心，且不发送该参数、用 API 默认值以兼容）；其余 intent 发送 MCM 设置值。部分模型/端点不支持该参数（400 时自动回退去掉它）。
+- **思考强度（reasoning_effort）**：MCM「思考强度」可调（low/high/max），默认 `low`——思考按输出价计费，是成本大头。**史官固定 high**（文笔核心，且不发送该参数、用 API 默认值以兼容）；其余 intent 发送 MCM 设置值。**是否写入请求由 provider 能力声明决定**（`SupportsReasoningEffort`）——DeepSeek 发、OpenAI 兼容端点（MiniMax/Qwen/GLM 等）不发，不做运行时 400 探测。
 - tool_calls delta 跨 chunk 累积（DeepSeek 协议中 tool_call 分多次 delta 传输）
 
 ### 信件激活机制（AgentScheduler）
@@ -907,7 +943,7 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 
 3. **dnSpy 调试**：打开 `C:\Users\<用户名>\Tools\dnSpy\dnSpy-net-win64\dnSpy.exe`，附加到 Bannerlord 进程，可在任意游戏方法上设断点
 
-4. **DebugLogger 调试日志**（推荐优先）：战役目录 `debug_logs/debug_*.log` 记录每次 LLM 调用的轮次/推理长度/工具名；**最终轮无文本时记录思维链摘录**（600 字）；请求结束时记录**缓存命中统计**（`LLM 完成 ... 缓存命中=X 未命中=Y 命中率=Z%`，来自 `stream_options.include_usage` 的 `usage.prompt_cache_hit_tokens`/`prompt_cache_miss_tokens`）。排查"Agent 为什么这么干/没干"首选此日志，排查"缓存是否生效"也看它。受 MCM「调试日志」开关控制（默认开）。注意：`SendMessage` 返回的 `Content` 若回退到"（已通过工具处理完毕）"表示 Agent 调了工具但没输出结语（如国王评估后决定不行动）；若端点拒绝 `stream_options` 会回退为无 usage 请求并记日志（功能不受影响）
+4. **DebugLogger 调试日志**（推荐优先）：战役目录 `debug_logs/debug_*.log` 记录每次 LLM 调用的轮次/推理长度/工具名；**最终轮无文本时记录思维链摘录**（600 字）；请求结束时记录**缓存命中统计**（`LLM 完成 ... 缓存命中=X 未命中=Y 命中率=Z%`，来自 provider 按能力声明的缓存字段解析，DeepSeek 为 `usage.prompt_cache_hit_tokens`/`prompt_cache_miss_tokens`）。排查"Agent 为什么这么干/没干"首选此日志，排查"缓存是否生效"也看它。受 MCM「调试日志」开关控制（默认开）。注意：`SendMessage` 返回的 `Content` 若回退到"（已通过工具处理完毕）"表示 Agent 调了工具但没输出结语（如国王评估后决定不行动）。
 
 ## 注意事项
 

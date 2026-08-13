@@ -367,64 +367,40 @@ namespace AIChronicle
                 .Replace("{native_traits}", nativeTraits)
                 .Replace("{custom_traits}", customTraits);
 
-            // 修复：原 max_tokens=1200 且不发 reasoning_effort——DeepSeek 默认思考强度为 high，
-            // 思考 token 计入 max_tokens，思考一多正文就会被截断（persona 生成出过半句）。
-            // 人格生成是模板跟随的机械任务：low 思考即可；max_tokens 用 MCM「最大 Token 数」统一控制。
-            var payload = new JObject
+            var provider = LLMProviders.Create(settings.ProviderType);
+
+            // persona 是模板跟随的机械任务，low 思考即可（DeepSeek 默认 high 会把正文挤掉）。
+            // reasoning_effort 是否写入请求由 provider 能力声明决定——DeepSeek 发、OpenAI 兼容端点不发。
+            var request = provider.BuildRequest(new LLMRequest
             {
-                ["model"] = conn.Model,
-                ["messages"] = new JArray(new JObject { ["role"] = "user", ["content"] = prompt }),
-                ["max_tokens"] = settings.MaxTokens,
-                ["temperature"] = 0.7f
-            };
-            // reasoning_effort 仅在端点支持时发送：DeepSeek 需要（防默认 high 思考截断 persona），
-            // MiniMax 等端点拒绝该参数（400/422）——复用 SendMessage 的探测结果，避免反复踩坑。
-            if (AIChatClient.ReasoningEffortSupported)
-                payload["reasoning_effort"] = "low";
+                Url = conn.Url,
+                Model = conn.Model,
+                ApiKey = conn.ApiKey,
+                Messages = new List<JToken> { new JObject { ["role"] = "user", ["content"] = prompt } },
+                MaxTokens = settings.MaxTokens,
+                Temperature = 0.7f,
+                Stream = false,
+                ReasoningEffort = "low"
+            });
 
             var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
             try
             {
-                var response = await _http.SendAsync(BuildPersonaRequest(payload, conn), cts.Token);
-                var status = (int)response.StatusCode;
-                if (status == 400 || status == 422)
-                {
-                    // 参数不被接受：最可能是 reasoning_effort，去掉后重试一次，并记住该端点不支持
-                    var reason = await response.Content.ReadAsStringAsync();
-                    DebugLogger.Log($"persona 生成参数被拒 agent={name} 状态码={status} 响应={DebugLogger.Truncate(reason, 200)}");
-                    if (payload.ContainsKey("reasoning_effort"))
-                    {
-                        payload.Remove("reasoning_effort");
-                        AIChatClient.MarkReasoningEffortUnsupported();
-                    }
-                    response = await _http.SendAsync(BuildPersonaRequest(payload, conn), cts.Token);
-                }
+                var response = await _http.SendAsync(request, cts.Token);
                 response.EnsureSuccessStatusCode();
 
                 var body = await response.Content.ReadAsStringAsync();
-                var result = JObject.Parse(body);
-                var content = result["choices"]?[0]?["message"]?["content"]?.ToString()?.Trim() ?? "";
-                // 剥离内联思考标签（MiniMax 会把 <think> 写进 content；DeepSeek 无此标签，为 no-op）
-                var stripped = AIChatClient.StripThinkTags(content);
-                if (string.IsNullOrEmpty(stripped))
-                    DebugLogger.Log($"persona 生成返回空 agent={name} contentLen={(content?.Length ?? 0)}");
-                return stripped;
+                // 内联思考标签剥离已由 provider.ParseNonStreamResponse 内置处理
+                var content = provider.ParseNonStreamResponse(body).Content;
+                if (string.IsNullOrEmpty(content))
+                    DebugLogger.Log($"persona 生成返回空 agent={name}");
+                return content;
             }
             catch (Exception ex)
             {
                 DebugLogger.Log($"persona 生成失败 agent={name}：{ex.Message}");
                 return "";
             }
-        }
-
-        private static HttpRequestMessage BuildPersonaRequest(JObject payload, ConnectionInfo conn)
-        {
-            var request = new HttpRequestMessage(HttpMethod.Post, conn.Url)
-            {
-                Content = new StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
-            };
-            request.Headers.Add("Authorization", "Bearer " + conn.ApiKey);
-            return request;
         }
 
         private static string LoadPersonaGenerationPrompt()

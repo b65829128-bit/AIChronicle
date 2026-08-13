@@ -4,10 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
@@ -42,20 +40,10 @@ namespace AIChronicle
         private static readonly AsyncLocal<string?> _currentIntent = new();
         private static readonly AsyncLocal<HashSet<string>?> _activatedCategories = new();
 
-        // 流式 usage（缓存命中统计）支持探测：部分兼容端点不接受 stream_options.include_usage，遇 400 自动回退
-        private static bool _streamUsageSupported = true;
-        // reasoning_effort 支持探测：部分模型/端点不接受该参数，遇 400 自动回退
-        private static bool _reasoningEffortSupported = true;
-
         // 历史截断的头部锚点条数：超限时保留"最早 AnchorCount 条 + 最近 (limit-AnchorCount) 条"，
         // 头部锚点固定 → 超限后跨轮次的 system+历史前缀仍字节级稳定，DeepSeek 前缀缓存持续命中。
         // 旧滑动窗口实现（保留最近 N 条）在超限后每轮整个历史右移一位 → 每轮缓存全 miss。
         private const int TrimAnchorCount = 3;
-
-        // 易变块【当前状况】的角色：system 优先。v1.4.0 曾把它作为 user 消息插在玩家消息前——
-        // 模型会把这条系统情境当成"对方说的话"，导致角色混淆（回复引用对话中不存在的"请教/答复"）。
-        // system 角色让模型明确知道这是系统注入的情境；若端点拒绝"非开头位置的 system"（400），回退为 user。
-        private static bool _volatileSystemSupported = true;
 
         internal static Hero? CurrentHero
         {
@@ -152,24 +140,6 @@ namespace AIChronicle
         {
             _unlockedCategories.Clear();
         }
-
-        /// <summary>
-        /// 剥离模型内联输出到 content 的思考标签（如 MiniMax 的 &lt;think&gt;...&lt;/think&gt;、&lt;thinking&gt;）。
-        /// DeepSeek 用独立的 reasoning_content 字段、content 不含此标签，本方法对其为 no-op，不影响既有兼容性。
-        /// </summary>
-        internal static string StripThinkTags(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return text;
-            var result = Regex.Replace(text, @"<think[^>]*>[\s\S]*?</think>", "", RegexOptions.IgnoreCase);
-            result = Regex.Replace(result, @"<thinking[^>]*>[\s\S]*?</thinking>", "", RegexOptions.IgnoreCase);
-            return result.Trim();
-        }
-
-        /// <summary>端点是否接受 reasoning_effort 参数（DeepSeek 支持；MiniMax 等拒绝，遇 400/422 会被 MarkReasoningEffortUnsupported 关闭）。</summary>
-        internal static bool ReasoningEffortSupported => _reasoningEffortSupported;
-
-        /// <summary>标记端点不支持 reasoning_effort（遇 400/422 时调用），后续请求不再发送该参数。</summary>
-        internal static void MarkReasoningEffortUnsupported() => _reasoningEffortSupported = false;
 
         private static ToolDef BrowseToolsDef => new()
         {
@@ -335,6 +305,8 @@ namespace AIChronicle
             var settings = MySettings.Instance!;
             // 场景专属连接：本 intent 的 URL/Model/APIKey（留空字段回退到全局兜底）
             var conn = ConnectionResolver.Resolve(intent);
+            // 厂商差异声明化：按 MCM「接口类型」选 provider，请求构建/流解析全部委托给它，业务逻辑不感知厂商
+            var provider = LLMProviders.Create(settings.ProviderType);
 
             // 史官系统：文笔是模组核心，保持"单一 system 消息"结构与旧版一致（情境内容在 system 尾部），
             // 不拆易变块——绝对保真。史官内容几乎静态（仅时间变化，位于尾部），缓存收益仍远高于改前。
@@ -401,13 +373,13 @@ namespace AIChronicle
                     + (vTargetId ?? "对方") + ".txt 查看完整记录，自然地表现得你记得或想起了即可。）";
             }
 
-            var volatileRole = _volatileSystemSupported ? "system" : "user";
+            const string volatileRole = "system";
 
             // 构建消息序列：system(稳定前缀) + 历史 + volatile(易变块) + 当前 user 消息。
-            // volatile 优先作为 system 角色（明确"系统情境"而非对方话语）；400 时回退 user 并重建。
-            List<object> BuildMessageList()
+            // volatile 固定为 system 角色（明确"系统情境"而非对方话语）。
+            List<JToken> BuildMessageList()
             {
-                var list = new List<object> { new { role = "system", content = systemPrompt } };
+                var list = new List<JToken> { new JObject { ["role"] = "system", ["content"] = systemPrompt } };
                 var lastHistoryRole = "";
 
                 foreach (var entry in trimmedHistory)
@@ -416,11 +388,11 @@ namespace AIChronicle
                     {
                         if (includeTools)
                         {
-                            list.Add(new
+                            list.Add(new JObject
                             {
-                                role = "tool",
-                                tool_call_id = entry.ToolCallId ?? "",
-                                content = entry.Content
+                                ["role"] = "tool",
+                                ["tool_call_id"] = entry.ToolCallId ?? "",
+                                ["content"] = entry.Content
                             });
                         }
                     }
@@ -428,59 +400,41 @@ namespace AIChronicle
                     {
                         if (includeTools)
                         {
-                            if (!string.IsNullOrEmpty(entry.ReasoningContent))
+                            var msg = new JObject
                             {
-                                list.Add(new JObject
+                                ["role"] = entry.Role,
+                                ["content"] = entry.Content,
+                                ["tool_calls"] = new JArray(entry.ToolCalls.Select(tc => new JObject
                                 {
-                                    ["role"] = entry.Role,
-                                    ["content"] = entry.Content,
-                                    ["tool_calls"] = new JArray(entry.ToolCalls.Select(tc => new JObject
+                                    ["id"] = tc.Id,
+                                    ["type"] = "function",
+                                    ["function"] = new JObject
                                     {
-                                        ["id"] = tc.Id,
-                                        ["type"] = "function",
-                                        ["function"] = new JObject
-                                        {
-                                            ["name"] = tc.Name,
-                                            ["arguments"] = tc.Arguments
-                                        }
-                                    })),
-                                    ["reasoning_content"] = entry.ReasoningContent
-                                });
-                            }
-                            else
-                            {
-                                list.Add(new
-                                {
-                                    role = entry.Role,
-                                    content = entry.Content,
-                                    tool_calls = entry.ToolCalls.Select(tc => new
-                                    {
-                                        id = tc.Id,
-                                        type = "function",
-                                        function = new
-                                        {
-                                            name = tc.Name,
-                                            arguments = tc.Arguments
-                                        }
-                                    })
-                                });
-                            }
+                                        ["name"] = tc.Name,
+                                        ["arguments"] = tc.Arguments
+                                    }
+                                }))
+                            };
+                            // reasoning 回传：仅当 provider 声明支持（DeepSeek 需要续接跨轮思考，其他端点回传易 400）
+                            if (provider.Capabilities.ReturnReasoningInAssistant && !string.IsNullOrEmpty(entry.ReasoningContent))
+                                msg["reasoning_content"] = entry.ReasoningContent;
+                            list.Add(msg);
                         }
                         else
                         {
-                            list.Add(new { role = entry.Role, content = entry.Content });
+                            list.Add(new JObject { ["role"] = entry.Role, ["content"] = entry.Content });
                         }
                     }
                     else
                     {
-                        list.Add(new { role = entry.Role, content = entry.Content });
+                        list.Add(new JObject { ["role"] = entry.Role, ["content"] = entry.Content });
                     }
                     lastHistoryRole = entry.Role;
                 }
 
                 if (!string.IsNullOrEmpty(volatileBlock))
                 {
-                    var ctxMsg = new { role = volatileRole, content = volatileBlock };
+                    var ctxMsg = new JObject { ["role"] = volatileRole, ["content"] = volatileBlock };
                     if (lastHistoryRole == "user" && list.Count >= 2)
                         list.Insert(list.Count - 1, ctxMsg);
                     else
@@ -518,74 +472,29 @@ namespace AIChronicle
 
             for (int round = 0; round < MaxSafetyRounds; round++)
             {
-                JObject BuildPayload(bool withUsage, bool withEffort)
+                // 构建请求：全部厂商差异（参数/字段名）由 provider 依据能力声明处理
+                var request = provider.BuildRequest(new LLMRequest
                 {
-                    var p = new JObject
-                    {
-                        ["model"] = conn.Model,
-                        ["messages"] = JToken.FromObject(messageList),
-                        ["max_tokens"] = settings.MaxTokens,
-                        ["temperature"] = settings.Temperature,
-                        ["stream"] = true
-                    };
-                    if (includeTools)
-                    {
-                        p["tools"] = JToken.FromObject(BuildTools());
-                        p["tool_choice"] = "auto";
-                    }
-                    if (withUsage)
-                        p["stream_options"] = new JObject { ["include_usage"] = true };
-                    if (withEffort && reasoningEffort != null)
-                        p["reasoning_effort"] = reasoningEffort;
-                    return p;
-                }
-
-                var withUsage = _streamUsageSupported;
-                var withEffort = _reasoningEffortSupported && reasoningEffort != null;
-                var payload = BuildPayload(withUsage, withEffort);
-                var json = JsonConvert.SerializeObject(payload);
-                var request = new HttpRequestMessage(HttpMethod.Post, conn.Url)
-                {
-                    Content = new StringContent(json, Encoding.UTF8, "application/json")
-                };
-                request.Headers.Add("Authorization", $"Bearer {conn.ApiKey}");
+                    Url = conn.Url,
+                    Model = conn.Model,
+                    ApiKey = conn.ApiKey,
+                    Messages = messageList,
+                    MaxTokens = settings.MaxTokens,
+                    Temperature = settings.Temperature,
+                    Stream = true,
+                    IncludeTools = includeTools,
+                    Tools = includeTools ? JToken.FromObject(BuildTools()) : null,
+                    ReasoningEffort = reasoningEffort
+                });
 
                 var cts = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
                 var httpResponse = await _client.SendAsync(
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
                     cts.Token);
-
-                // 安全网：端点若拒绝 stream_options / reasoning_effort / 非开头位置的 system（400），
-                // 逐项回退重试一次：先回退易变块角色为 user（重建消息序列），再回退为无 usage/无 effort 请求。
-                if (httpResponse.StatusCode == System.Net.HttpStatusCode.BadRequest
-                    && (withUsage || withEffort || _volatileSystemSupported))
-                {
-                    if (_volatileSystemSupported)
-                    {
-                        _volatileSystemSupported = false;
-                        volatileRole = "user";
-                        messageList = BuildMessageList();
-                        DebugLogger.Log($"端点拒绝中间 system（400），本会话易变块回退为 user 角色 intent={intent}");
-                    }
-                    _streamUsageSupported = false;
-                    _reasoningEffortSupported = false;
-                    DebugLogger.Log($"端点拒绝 400，本会话回退为无 usage/无 reasoning_effort 请求 intent={intent}");
-                    var fallbackPayload = BuildPayload(false, false);
-                    var fallbackJson = JsonConvert.SerializeObject(fallbackPayload);
-                    var fallbackRequest = new HttpRequestMessage(HttpMethod.Post, conn.Url)
-                    {
-                        Content = new StringContent(fallbackJson, Encoding.UTF8, "application/json")
-                    };
-                    fallbackRequest.Headers.Add("Authorization", $"Bearer {conn.ApiKey}");
-                    httpResponse = await _client.SendAsync(
-                        fallbackRequest,
-                        HttpCompletionOption.ResponseHeadersRead,
-                        cts.Token);
-                }
                 httpResponse.EnsureSuccessStatusCode();
 
-                var roundToolCalls = new List<JToken>();
+                var roundToolCalls = new List<JObject>();
                 var roundText = "";
                 var roundReasoning = "";
                 var roundFinishReason = "";
@@ -623,79 +532,46 @@ namespace AIChronicle
                     var data = line.Substring(6);
                     if (data == "[DONE]") break;
 
-                    JObject chunk;
-                    try { chunk = JObject.Parse(data); }
-                    catch { continue; }
+                    // 单行解析委托给 provider：reasoning/缓存字段名、空 choices 等厂商差异已归一化
+                    var chunk = provider.ParseStreamLine(data);
+                    if (chunk == null) continue;
 
-                    // 缓存命中统计：DeepSeek 每个流式 chunk 都带 usage（正常块为 null，仅流末尾独立帧为对象）。
-                    // 注意不能写 `if (usage != null)`——"usage":null 时返回的是值为 Null 的 JValue（引用非空），
-                    // 对 JValue 做索引会抛 InvalidOperationException。用 `is JObject` 才能只匹配真正的 usage 对象。
-                    var usage = chunk["usage"];
-                    if (usage is JObject usageObj)
+                    totalCacheHit += chunk.CacheHit;
+                    totalCacheMiss += chunk.CacheMiss;
+                    if (!string.IsNullOrEmpty(chunk.FinishReason))
+                        roundFinishReason = chunk.FinishReason;
+                    if (!string.IsNullOrEmpty(chunk.Text))
+                        roundText += chunk.Text;
+                    if (!string.IsNullOrEmpty(chunk.Reasoning))
+                        roundReasoning += chunk.Reasoning;
+
+                    foreach (var dtc in chunk.ToolCalls)
                     {
-                        totalCacheHit += usageObj["prompt_cache_hit_tokens"]?.ToObject<long>() ?? 0;
-                        totalCacheMiss += usageObj["prompt_cache_miss_tokens"]?.ToObject<long>() ?? 0;
-                    }
+                        var idx = dtc.Index < 0 ? 0 : dtc.Index;
+                        while (roundToolCalls.Count <= idx)
+                            roundToolCalls.Add(new JObject());
 
-                    // 修复：部分端点（MiniMax 等）的 SSE 末尾 usage 帧返回 "choices":[]（空数组），
-                    // `chunk["choices"]?[0]` 的 ? 只防 null 不防空数组，索引空 JArray 会抛越界异常。
-                    // 改为显式判空后取 [0]。
-                    var choicesArr = chunk["choices"] as JArray;
-                    if (choicesArr == null || choicesArr.Count == 0) continue;
-                    var choices = choicesArr[0];
-
-                    var delta = choices["delta"];
-                    if (delta == null) continue;
-
-                    // 捕获 finish_reason：最后一帧非空（"stop"/"length"等），用于判断是否被 max_tokens 截断
-                    var fr = choices["finish_reason"]?.ToString();
-                    if (!string.IsNullOrEmpty(fr))
-                        roundFinishReason = fr;
-
-                    var deltaContent = delta["content"]?.ToString();
-                    if (deltaContent != null)
-                    {
-                        roundText += deltaContent;
-                    }
-
-                    var deltaReasoning = delta["reasoning_content"]?.ToString();
-                    if (deltaReasoning != null)
-                    {
-                        roundReasoning += deltaReasoning;
-                    }
-
-                    var deltaToolCalls = delta["tool_calls"];
-                    if (deltaToolCalls != null)
-                    {
-                        foreach (var dtc in deltaToolCalls)
+                        var existing = roundToolCalls[idx];
+                        if (!string.IsNullOrEmpty(dtc.Name))
                         {
-                            var idx = dtc["index"]?.ToObject<int>() ?? 0;
-                            while (roundToolCalls.Count <= idx)
-                                roundToolCalls.Add(new JObject());
-
-                            var existing = (JObject)roundToolCalls[idx];
-                            var funcDelta = dtc["function"];
-                            if (funcDelta?["name"] != null)
+                            existing["id"] = dtc.Id;
+                            existing["type"] = "function";
+                            existing["function"] = new JObject
                             {
-                                existing["id"] = dtc["id"];
-                                existing["type"] = "function";
-                                existing["function"] = new JObject
-                                {
-                                    ["name"] = funcDelta["name"]!.ToString(),
-                                    ["arguments"] = funcDelta["arguments"]?.ToString() ?? ""
-                                };
-                            }
-                            else if (funcDelta?["arguments"] != null)
-                            {
-                                var func = existing["function"] as JObject;
-                                if (func != null)
-                                    func["arguments"] = (func["arguments"]?.ToString() ?? "") + funcDelta["arguments"]!.ToString();
-                            }
-                            if (dtc["index"] == null)
-                            {
-                                existing["id"] = dtc["id"];
-                                existing["type"] = "function";
-                            }
+                                ["name"] = dtc.Name,
+                                ["arguments"] = dtc.Arguments
+                            };
+                        }
+                        else if (!string.IsNullOrEmpty(dtc.Arguments))
+                        {
+                            var func = existing["function"] as JObject;
+                            if (func != null)
+                                func["arguments"] = (func["arguments"]?.ToString() ?? "") + dtc.Arguments;
+                        }
+                        if (dtc.Index < 0)
+                        {
+                            existing["id"] = dtc.Id;
+                            existing["type"] = "function";
                         }
                     }
                 }
@@ -716,9 +592,8 @@ namespace AIChronicle
                     DebugLogger.Log($"LLM 流读取超时 intent={intent} agent={hero?.Name?.ToString() ?? "?"} round={round} textLen={roundText.Length}");
                 }
 
-                // MiniMax 等模型把思考内容以 <think>...</think> 内联在 content 里（DeepSeek 用独立 reasoning_content）。
-                // 统一剥离，保证正文干净；对 DeepSeek 是 no-op。
-                roundText = StripThinkTags(roundText);
+                // 内联思考标签剥离（如 MiniMax 把 <think> 写进 content；DeepSeek 用独立 reasoning_content，为 no-op）。
+                roundText = LLMText.StripThinkTags(roundText);
 
                 lastReasoning = roundReasoning;
                 lastFinishReason = roundFinishReason;
@@ -764,14 +639,14 @@ namespace AIChronicle
                     };
                 }
 
-                var roundToolCallsObj = new JArray(roundToolCalls);
                 var assistantMsg = new JObject
                 {
                     ["role"] = "assistant",
                     ["content"] = roundText,
-                    ["tool_calls"] = roundToolCallsObj
+                    ["tool_calls"] = new JArray(roundToolCalls)
                 };
-                if (!string.IsNullOrEmpty(roundReasoning))
+                // reasoning 回传仅当 provider 声明支持（DeepSeek 续接跨轮思考；其他端点回传易 400）
+                if (provider.Capabilities.ReturnReasoningInAssistant && !string.IsNullOrEmpty(roundReasoning))
                     assistantMsg["reasoning_content"] = roundReasoning;
                 messageList.Add(assistantMsg);
 
@@ -789,13 +664,13 @@ namespace AIChronicle
                         try { var args = JObject.Parse(argsStr); learnedKnowledge = args["knowledge"]?.ToString(); }
                         catch { }
                         toolResults[callId] = "已记录。";
-                        messageList.Add(new { role = "tool", tool_call_id = callId, content = "已记录。" });
+                        messageList.Add(new JObject { ["role"] = "tool", ["tool_call_id"] = callId, ["content"] = "已记录。" });
                     }
                     else
                     {
                         var toolResult = ToolExecutor.ExecuteToolCall(funcName, argsStr);
                         toolResults[callId] = toolResult;
-                        messageList.Add(new { role = "tool", tool_call_id = callId, content = toolResult });
+                        messageList.Add(new JObject { ["role"] = "tool", ["tool_call_id"] = callId, ["content"] = toolResult });
                     }
                 }
             }
@@ -819,34 +694,29 @@ namespace AIChronicle
         public static async Task<string> TestFunctionCalling(ConnectionInfo conn)
         {
             var settings = MySettings.Instance!;
-            var payload = new
-            {
-                model = conn.Model,
-                messages = new[]
-                {
-                    new { role = "user", content = "我叫炎瑰。现在请用一句话跟我打招呼并介绍你自己，同时调用 update_knowledge 函数记录你对我的认知。" }
-                },
-                tools = BuildTools(),
-                temperature = 0.7f,
-                max_tokens = settings.MaxTokens
-            };
+            var provider = LLMProviders.Create(settings.ProviderType);
 
-            var json = JsonConvert.SerializeObject(payload);
-            var request = new HttpRequestMessage(HttpMethod.Post, conn.Url)
+            var request = provider.BuildRequest(new LLMRequest
             {
-                Content = new StringContent(json, Encoding.UTF8, "application/json")
-            };
-            request.Headers.Add("Authorization", $"Bearer {conn.ApiKey}");
+                Url = conn.Url,
+                Model = conn.Model,
+                ApiKey = conn.ApiKey,
+                Messages = new List<JToken> { new JObject { ["role"] = "user", ["content"] = "我叫炎瑰。现在请用一句话跟我打招呼并介绍你自己，同时调用 update_knowledge 函数记录你对我的认知。" } },
+                MaxTokens = settings.MaxTokens,
+                Temperature = 0.7f,
+                Stream = false,
+                IncludeTools = true,
+                Tools = JToken.FromObject(BuildTools())
+            });
 
             var cts = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
             var response = await _client.SendAsync(request, cts.Token);
             response.EnsureSuccessStatusCode();
 
             var responseBody = await response.Content.ReadAsStringAsync();
-            var result = JObject.Parse(responseBody);
-            var message = result["choices"]?[0]?["message"];
+            var result = provider.ParseNonStreamResponse(responseBody);
 
-            var toolCalls = message?["tool_calls"];
+            var toolCalls = result.ToolCalls;
             if (toolCalls == null || !toolCalls.Any())
                 return "模型不支持 function calling，或该模型未启用此功能。";
 
@@ -878,30 +748,24 @@ namespace AIChronicle
             try
             {
                 var settings = MySettings.Instance!;
-                var payload = new JObject
-                {
-                    ["model"] = conn.Model,
-                    ["messages"] = new JArray(new JObject
-                    {
-                        ["role"] = "user",
-                        ["content"] = "你好，请用一句话介绍卡拉迪亚大陆。"
-                    }),
-                    ["max_tokens"] = settings.MaxTokens,
-                    ["temperature"] = 0.7f
-                };
+                var provider = LLMProviders.Create(settings.ProviderType);
 
-                var json = JsonConvert.SerializeObject(payload);
-                var request = new HttpRequestMessage(HttpMethod.Post, conn.Url)
+                var request = provider.BuildRequest(new LLMRequest
                 {
-                    Content = new StringContent(json, Encoding.UTF8, "application/json")
-                };
-                request.Headers.Add("Authorization", $"Bearer {conn.ApiKey}");
+                    Url = conn.Url,
+                    Model = conn.Model,
+                    ApiKey = conn.ApiKey,
+                    Messages = new List<JToken> { new JObject { ["role"] = "user", ["content"] = "你好，请用一句话介绍卡拉迪亚大陆。" } },
+                    MaxTokens = settings.MaxTokens,
+                    Temperature = 0.7f,
+                    Stream = false
+                });
 
                 var cts = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
                 var response = await _client.SendAsync(request, cts.Token);
                 response.EnsureSuccessStatusCode();
                 var body = await response.Content.ReadAsStringAsync();
-                var reply = JObject.Parse(body)["choices"]?[0]?["message"]?["content"]?.ToString() ?? "";
+                var reply = provider.ParseNonStreamResponse(body).Content;
 
                 InformationManager.DisplayMessage(new InformationMessage(
                     $"[AI编年史] [{name}] 连接成功！回复：{reply}",
