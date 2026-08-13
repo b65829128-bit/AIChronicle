@@ -305,8 +305,8 @@ namespace AIChronicle
             var settings = MySettings.Instance!;
             // 场景专属连接：本 intent 的 URL/Model/APIKey（留空字段回退到全局兜底）
             var conn = ConnectionResolver.Resolve(intent);
-            // 厂商差异声明化：按 MCM「接口类型」选 provider，请求构建/流解析全部委托给它，业务逻辑不感知厂商
-            var provider = LLMProviders.Create(settings.ProviderType);
+            // 厂商差异声明化：provider 从本场景生效连接信息取（接口类型逐字段兜底到全局）
+            var provider = LLMProviders.Create(conn.ProviderKind);
 
             // 史官系统：文笔是模组核心，保持"单一 system 消息"结构与旧版一致（情境内容在 system 尾部），
             // 不拆易变块——绝对保真。史官内容几乎静态（仅时间变化，位于尾部），缓存收益仍远高于改前。
@@ -697,7 +697,7 @@ namespace AIChronicle
         public static async Task<string> TestFunctionCalling(ConnectionInfo conn)
         {
             var settings = MySettings.Instance!;
-            var provider = LLMProviders.Create(settings.ProviderType);
+            var provider = LLMProviders.Create(conn.ProviderKind);
 
             var request = provider.BuildRequest(new LLMRequest
             {
@@ -751,7 +751,7 @@ namespace AIChronicle
             try
             {
                 var settings = MySettings.Instance!;
-                var provider = LLMProviders.Create(settings.ProviderType);
+                var provider = LLMProviders.Create(conn.ProviderKind);
 
                 var request = provider.BuildRequest(new LLMRequest
                 {

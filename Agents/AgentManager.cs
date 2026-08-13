@@ -367,7 +367,7 @@ namespace AIChronicle
                 .Replace("{native_traits}", nativeTraits)
                 .Replace("{custom_traits}", customTraits);
 
-            var provider = LLMProviders.Create(settings.ProviderType);
+            var provider = LLMProviders.Create(conn.ProviderKind);
 
             // persona 是模板跟随的机械任务，low 思考即可（DeepSeek 默认 high 会把正文挤掉）。
             // reasoning_effort 是否写入请求由 provider 能力声明决定——DeepSeek 发、OpenAI 兼容端点不发。

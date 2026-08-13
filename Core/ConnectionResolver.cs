@@ -2,13 +2,13 @@ using System;
 
 namespace AIChronicle
 {
-    /// <summary>场景生效连接信息（URL / Model / APIKey）。</summary>
-    public readonly record struct ConnectionInfo(string Url, string Model, string ApiKey);
+    /// <summary>场景生效连接信息（URL / Model / APIKey / 接口类型）。</summary>
+    public readonly record struct ConnectionInfo(string Url, string Model, string ApiKey, LLMProviderKind ProviderKind);
 
     /// <summary>
-    /// 场景连接解析器：把 intent（场景）映射到生效的 URL/Model/APIKey。
+    /// 场景连接解析器：把 intent（场景）映射到生效的 URL/Model/APIKey/接口类型。
     /// 每个字段独立兜底——场景配置里留空的字段回退到全局「连接设置（兜底）」，逐字段判定。
-    /// 全局兜底没配也能单独给某个场景配（例如只给史官配高规格模型，其余走兜底）。
+    /// 接口类型同样是逐字段兜底：场景「接口类型」留空/跟随兜底 → 用全局兜底的接口类型。
     /// </summary>
     public static class ConnectionResolver
     {
@@ -18,26 +18,27 @@ namespace AIChronicle
             var s = MySettings.Instance!;
 
             // 逐字段兜底：场景字段留空 → 用全局兜底对应字段
-            ConnectionInfo C(string url, string model, string key) => new(
+            ConnectionInfo C(string url, string model, string key, string providerType) => new(
                 string.IsNullOrWhiteSpace(url) ? s.ApiUrl : url,
                 string.IsNullOrWhiteSpace(model) ? s.Model : model,
-                string.IsNullOrWhiteSpace(key) ? s.ApiKey : key);
+                string.IsNullOrWhiteSpace(key) ? s.ApiKey : key,
+                s.ResolveProviderKind(providerType));
 
             return intent switch
             {
                 // 对话与书信共享一个场景（两者本就同属 chat_logs 单一线程）
-                "conversation" or "letter" => C(s.ChatApiUrl, s.ChatModel, s.ChatApiKey),
-                "diplomacy" => C(s.DiplomacyApiUrl, s.DiplomacyModel, s.DiplomacyApiKey),
-                "king_consult" => C(s.KingConsultApiUrl, s.KingConsultModel, s.KingConsultApiKey),
-                "fief_review" => C(s.FiefReviewApiUrl, s.FiefReviewModel, s.FiefReviewApiKey),
+                "conversation" or "letter" => C(s.ChatApiUrl, s.ChatModel, s.ChatApiKey, s.ChatProviderType.SelectedValue),
+                "diplomacy" => C(s.DiplomacyApiUrl, s.DiplomacyModel, s.DiplomacyApiKey, s.DiplomacyProviderType.SelectedValue),
+                "king_consult" => C(s.KingConsultApiUrl, s.KingConsultModel, s.KingConsultApiKey, s.KingConsultProviderType.SelectedValue),
+                "fief_review" => C(s.FiefReviewApiUrl, s.FiefReviewModel, s.FiefReviewApiKey, s.FiefReviewProviderType.SelectedValue),
                 // 自省与密使回应复用「封臣谏言」场景连接（自省即谏言槽位泛化，不新增配置组）
-                "advisory" or "self_review" or "envoy_reply" => C(s.AdvisoryApiUrl, s.AdvisoryModel, s.AdvisoryApiKey),
-                "clan_replenishment" => C(s.ClanReplenishmentApiUrl, s.ClanReplenishmentModel, s.ClanReplenishmentApiKey),
-                "historian" => C(s.HistorianApiUrl, s.HistorianModel, s.HistorianApiKey),
-                "consolidation" => C(s.ConsolidationApiUrl, s.ConsolidationModel, s.ConsolidationApiKey),
-                "chat" => C(s.CheckInApiUrl, s.CheckInModel, s.CheckInApiKey),
-                "chancery" => C(s.ChanceryApiUrl, s.ChanceryModel, s.ChanceryApiKey),
-                _ => new ConnectionInfo(s.ApiUrl, s.Model, s.ApiKey)
+                "advisory" or "self_review" or "envoy_reply" => C(s.AdvisoryApiUrl, s.AdvisoryModel, s.AdvisoryApiKey, s.AdvisoryProviderType.SelectedValue),
+                "clan_replenishment" => C(s.ClanReplenishmentApiUrl, s.ClanReplenishmentModel, s.ClanReplenishmentApiKey, s.ClanReplenishmentProviderType.SelectedValue),
+                "historian" => C(s.HistorianApiUrl, s.HistorianModel, s.HistorianApiKey, s.HistorianProviderType.SelectedValue),
+                "consolidation" => C(s.ConsolidationApiUrl, s.ConsolidationModel, s.ConsolidationApiKey, s.ConsolidationProviderType.SelectedValue),
+                "chat" => C(s.CheckInApiUrl, s.CheckInModel, s.CheckInApiKey, s.CheckInProviderType.SelectedValue),
+                "chancery" => C(s.ChanceryApiUrl, s.ChanceryModel, s.ChanceryApiKey, s.ChanceryProviderType.SelectedValue),
+                _ => new ConnectionInfo(s.ApiUrl, s.Model, s.ApiKey, s.ProviderType)
             };
         }
 

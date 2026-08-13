@@ -163,12 +163,12 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 > 历史：早期架构曾有「前台模型」概念（第二次调用把 Agent 上下文变成自然对话），已在单模型架构演进中移除——当前角色扮演就是 Agent 模型本身输出的内容，不存在单独的对话润色调用。
 
-### 场景连接配置（每场景独立 URL/模型/密钥）
+### 场景连接配置（每场景独立 URL/模型/密钥/接口类型）
 
-每个 intent（场景）可以配置独立的 API URL / 模型 / API 密钥，**逐字段兜底**到全局「连接设置（兜底）」——场景字段留空就用兜底的对应字段，懒得配置时只需填兜底三件套。
+每个 intent（场景）可以配置独立的 API URL / 模型 / API 密钥 / 接口类型，**逐字段兜底**到全局「连接设置（兜底）」——场景字段留空就用兜底的对应字段，懒得配置时只需填兜底三件套。
 
-- **`ConnectionResolver.cs`**：`Resolve(intent)` 返回生效的 `ConnectionInfo(Url, Model, ApiKey)`。场景映射见 `ConnectionResolver.Resolve` 的 switch（对话与书信合并一个场景，因为两者同属 chat_logs 单一线程）
-- **消费点**：`AIChatClient.SendMessage` 按 `intent` 解析连接；`AgentManager` persona 生成走「对话与书信」场景；`AgentScheduler` 天意建族/史官门控与 `LordChatBehavior` 聊天入口判断均用对应场景的生效密钥
+- **`ConnectionResolver.cs`**：`Resolve(intent)` 返回生效的 `ConnectionInfo(Url, Model, ApiKey, ProviderKind)`。场景映射见 `ConnectionResolver.Resolve` 的 switch（对话与书信合并一个场景，因为两者同属 chat_logs 单一线程）。接口类型同样逐字段兜底：场景「接口类型」下拉选「跟随兜底」（默认）→ 用全局兜底接口类型
+- **消费点**：`AIChatClient.SendMessage` 按 `intent` 解析连接并 `LLMProviders.Create(conn.ProviderKind)` 建 provider；`AgentManager` persona 生成走「对话与书信」场景；`AgentScheduler` 天意建族/史官门控与 `LordChatBehavior` 聊天入口判断均用对应场景的生效密钥
 - **测试**：`AIChatClient.TestConnection(scenario)` 按场景生效配置测试（原始请求，不依赖战役上下文，主菜单可用）；每个场景组在 MCM 有「测试此场景」按钮
 - **统一 max_tokens**：全模组最大 Token 数只由 MCM「最大 Token 数」控制（`settings.MaxTokens`），含 persona 生成与连接测试，禁止各处硬编码
 - **v2.0.0 初版**：设置 Id/FolderName 已改为 `AIChronicle_v1`/`AIChronicle`，旧的 MCM 配置会重置一次（需重填 API Key）
@@ -329,8 +329,8 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 ├── Core/                       ← 引擎层：入口、设置、基础设施
 │   ├── SubModule.cs            ← 模组入口，生命周期回调
 │   ├── Settings.cs             ← MCM 设置基类（连接兜底 + 游戏设置）
-│   ├── Settings.Scenarios.cs   ← MCM 十个场景连接配置组（URL/模型/密钥 + 测试按钮）
-│   ├── ConnectionResolver.cs   ← 场景连接解析器（intent → 生效 URL/模型/密钥，逐字段兜底到全局连接设置）
+│   ├── Settings.Scenarios.cs   ← MCM 十个场景连接配置组（URL/模型/密钥/接口类型 + 测试按钮）
+│   ├── ConnectionResolver.cs   ← 场景连接解析器（intent → 生效 URL/模型/密钥/接口类型，逐字段兜底到全局连接设置）
 │   ├── DebugLogger.cs          ← 调试日志（LLM 调用摘要/思维链摘录 → 战役 debug_logs/）
 │   ├── SafeFileIO.cs           ← 带重试的文件 IO（并发读写同一文件时避免"文件正被使用"异常）
 │   ├── MainThreadExecutor.cs   ← 主线程分发器（后台线程的工具执行排队回主线程，防跨线程崩溃）

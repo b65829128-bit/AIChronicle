@@ -63,7 +63,25 @@ namespace AIChronicle
             }
         }
 
-        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+        private MCM.Common.Dropdown<string> _chatProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+
+        [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
+            HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖（例如史官用 DeepSeek、其余用便宜模型）。")]
+        [SettingPropertyGroup("对话与书信场景", GroupOrder = 1)]
+        public MCM.Common.Dropdown<string> ChatProviderType
+        {
+            get => _chatProviderType;
+            set
+            {
+                if (_chatProviderType != value)
+                {
+                    _chatProviderType = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 5,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("对话与书信场景", GroupOrder = 1)]
         public Action ChatTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("conversation"); };
@@ -122,7 +140,25 @@ namespace AIChronicle
             }
         }
 
-        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+        private MCM.Common.Dropdown<string> _diplomacyProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+
+        [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
+            HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
+        [SettingPropertyGroup("政务外交场景", GroupOrder = 2)]
+        public MCM.Common.Dropdown<string> DiplomacyProviderType
+        {
+            get => _diplomacyProviderType;
+            set
+            {
+                if (_diplomacyProviderType != value)
+                {
+                    _diplomacyProviderType = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 5,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("政务外交场景", GroupOrder = 2)]
         public Action DiplomacyTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("diplomacy"); };
@@ -181,7 +217,25 @@ namespace AIChronicle
             }
         }
 
-        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+        private MCM.Common.Dropdown<string> _kingConsultProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+
+        [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
+            HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
+        [SettingPropertyGroup("外交问询场景", GroupOrder = 3)]
+        public MCM.Common.Dropdown<string> KingConsultProviderType
+        {
+            get => _kingConsultProviderType;
+            set
+            {
+                if (_kingConsultProviderType != value)
+                {
+                    _kingConsultProviderType = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 5,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("外交问询场景", GroupOrder = 3)]
         public Action KingConsultTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("king_consult"); };
@@ -240,7 +294,25 @@ namespace AIChronicle
             }
         }
 
-        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+        private MCM.Common.Dropdown<string> _fiefReviewProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+
+        [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
+            HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
+        [SettingPropertyGroup("封地审视场景", GroupOrder = 4)]
+        public MCM.Common.Dropdown<string> FiefReviewProviderType
+        {
+            get => _fiefReviewProviderType;
+            set
+            {
+                if (_fiefReviewProviderType != value)
+                {
+                    _fiefReviewProviderType = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 5,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("封地审视场景", GroupOrder = 4)]
         public Action FiefReviewTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("fief_review"); };
@@ -299,7 +371,25 @@ namespace AIChronicle
             }
         }
 
-        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+        private MCM.Common.Dropdown<string> _advisoryProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+
+        [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
+            HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
+        [SettingPropertyGroup("封臣谏言场景", GroupOrder = 5)]
+        public MCM.Common.Dropdown<string> AdvisoryProviderType
+        {
+            get => _advisoryProviderType;
+            set
+            {
+                if (_advisoryProviderType != value)
+                {
+                    _advisoryProviderType = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 5,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("封臣谏言场景", GroupOrder = 5)]
         public Action AdvisoryTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("advisory"); };
@@ -358,7 +448,25 @@ namespace AIChronicle
             }
         }
 
-        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+        private MCM.Common.Dropdown<string> _clanReplenishmentProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+
+        [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
+            HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
+        [SettingPropertyGroup("天意建族场景", GroupOrder = 6)]
+        public MCM.Common.Dropdown<string> ClanReplenishmentProviderType
+        {
+            get => _clanReplenishmentProviderType;
+            set
+            {
+                if (_clanReplenishmentProviderType != value)
+                {
+                    _clanReplenishmentProviderType = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 5,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("天意建族场景", GroupOrder = 6)]
         public Action ClanReplenishmentTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("clan_replenishment"); };
@@ -417,7 +525,25 @@ namespace AIChronicle
             }
         }
 
-        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+        private MCM.Common.Dropdown<string> _historianProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+
+        [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
+            HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖（史官文笔核心，可单独配 DeepSeek）。")]
+        [SettingPropertyGroup("史官场景", GroupOrder = 7)]
+        public MCM.Common.Dropdown<string> HistorianProviderType
+        {
+            get => _historianProviderType;
+            set
+            {
+                if (_historianProviderType != value)
+                {
+                    _historianProviderType = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 5,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("史官场景", GroupOrder = 7)]
         public Action HistorianTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("historian"); };
@@ -476,7 +602,25 @@ namespace AIChronicle
             }
         }
 
-        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+        private MCM.Common.Dropdown<string> _consolidationProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+
+        [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
+            HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
+        [SettingPropertyGroup("记忆巩固场景", GroupOrder = 8)]
+        public MCM.Common.Dropdown<string> ConsolidationProviderType
+        {
+            get => _consolidationProviderType;
+            set
+            {
+                if (_consolidationProviderType != value)
+                {
+                    _consolidationProviderType = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 5,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("记忆巩固场景", GroupOrder = 8)]
         public Action ConsolidationTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("consolidation"); };
@@ -535,7 +679,25 @@ namespace AIChronicle
             }
         }
 
-        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+        private MCM.Common.Dropdown<string> _checkInProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+
+        [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
+            HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
+        [SettingPropertyGroup("签到场景", GroupOrder = 9)]
+        public MCM.Common.Dropdown<string> CheckInProviderType
+        {
+            get => _checkInProviderType;
+            set
+            {
+                if (_checkInProviderType != value)
+                {
+                    _checkInProviderType = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 5,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("签到场景", GroupOrder = 9)]
         public Action CheckInTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("chat"); };
@@ -594,7 +756,25 @@ namespace AIChronicle
             }
         }
 
-        [SettingPropertyButton("测试", Content = "测试此场景", Order = 4,
+        private MCM.Common.Dropdown<string> _chanceryProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+
+        [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
+            HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
+        [SettingPropertyGroup("秘书处场景", GroupOrder = 10)]
+        public MCM.Common.Dropdown<string> ChanceryProviderType
+        {
+            get => _chanceryProviderType;
+            set
+            {
+                if (_chanceryProviderType != value)
+                {
+                    _chanceryProviderType = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 5,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("秘书处场景", GroupOrder = 10)]
         public Action ChanceryTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("chancery"); };

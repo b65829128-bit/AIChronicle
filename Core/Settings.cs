@@ -96,6 +96,16 @@ namespace AIChronicle
             _ => LLMProviderKind.OpenAICompatible
         };
 
+        /// <summary>把场景「接口类型」下拉值解析为枚举；「跟随兜底」或空 → 全局 ProviderType（逐字段兜底）。</summary>
+        public LLMProviderKind ResolveProviderKind(string sceneValue) => sceneValue switch
+        {
+            "DeepSeek" => LLMProviderKind.DeepSeek,
+            "GLM" => LLMProviderKind.GLM,
+            "MiMo" => LLMProviderKind.MiMo,
+            "OpenAI 兼容" => LLMProviderKind.OpenAICompatible,
+            _ => ProviderType
+        };
+
         // ============ 场景专属连接配置 ============
         // 每个场景一组 URL/Model/APIKey（留空=逐字段回退到「连接设置（兜底）」）+ 测试按钮。
         // 懒得配置时只需填全局兜底三件套即可。
