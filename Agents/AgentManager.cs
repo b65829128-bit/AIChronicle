@@ -379,19 +379,34 @@ namespace AIChronicle
                 Messages = new List<JToken> { new JObject { ["role"] = "user", ["content"] = prompt } },
                 MaxTokens = settings.MaxTokens,
                 Temperature = 0.7f,
-                Stream = false,
+                Stream = true,
                 ReasoningEffort = "low"
             });
 
             var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
             try
             {
-                var response = await _http.SendAsync(request, cts.Token);
+                // 流式读取：ResponseHeadersRead 只等响应头、body 边收边读，避免非流式"等完整 body"超时
+                //（MiniMax 思考模型生成 persona 可能超过 60 秒）。
+                var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
                 response.EnsureSuccessStatusCode();
 
-                var body = await response.Content.ReadAsStringAsync();
-                // 内联思考标签剥离已由 provider.ParseNonStreamResponse 内置处理
-                var content = provider.ParseNonStreamResponse(body).Content;
+                var text = new StringBuilder();
+                using var stream = await response.Content.ReadAsStreamAsync();
+                using var reader = new StreamReader(stream, Encoding.UTF8);
+                while (!reader.EndOfStream)
+                {
+                    var line = await reader.ReadLineAsync();
+                    if (string.IsNullOrEmpty(line)) continue;
+                    if (!line.StartsWith("data: ")) continue;
+                    var data = line.Substring(6);
+                    if (data == "[DONE]") break;
+                    var chunk = provider.ParseStreamLine(data);
+                    if (chunk != null && !string.IsNullOrEmpty(chunk.Text))
+                        text.Append(chunk.Text);
+                }
+
+                var content = LLMText.StripThinkTags(text.ToString());
                 if (string.IsNullOrEmpty(content))
                     DebugLogger.Log($"persona 生成返回空 agent={name}");
                 return content;
