@@ -98,6 +98,10 @@ namespace AIChronicle
                 {
                     // 旗帜随机生成（贵族家族中央单徽章样式），而非复制别的家族的——每个新世家都有自己的纹章
                     clan.Banner = Banner.CreateRandomClanBanner();
+                    // 从纹章提取阵营底色：Color/Color2 是建国/入国时旗帜底色与图标色的来源。
+                    // 缺省时保持 0（透明），建国后旗帜会被刷成同色透明 → 纯白无图案（与 ExecuteCreateKingdom 同款修复）。
+                    clan.Color = clan.Banner.GetPrimaryColor();
+                    clan.Color2 = clan.Banner.GetFirstIconColor();
                 }
                 catch { }
                 clan.SetInitialHomeSettlement(homeSettlement);

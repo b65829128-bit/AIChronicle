@@ -202,6 +202,16 @@ namespace AIChronicle
                 if (clan.Kingdom != null)
                     ChangeKingdomAction.ApplyByLeaveWithRebellionAgainstKingdom(clan);
 
+                // 建国前从氏族纹章提取真实底色：原版封臣氏族的 Color/Color2 是默认占位值 0xFFCCC3AB（浅米黄，肉眼近白）且两者相同，
+                // CreateKingdom 会把它用作新王国的 Primary/SecondaryBannerColor，再经 UpdateBannerColorsAccordingToKingdom
+                // 把旗帜背景与图标刷成同一米黄色 → 图案不可见（"纯白旗"）。改用纹章实际主色/图标色保证对比。
+                var clanBanner = clan.Banner;
+                if (clanBanner != null)
+                {
+                    clan.Color = clanBanner.GetPrimaryColor();
+                    clan.Color2 = clanBanner.GetFirstIconColor();
+                }
+
                 // 建国：新建王国、本族为统治氏族、施加文化默认政策、对无邦交势力宣战。
                 // 原版玩家建国同款公开 API（KingdomManager.CreateKingdom 接受任意氏族为 founder），
                 // kingdom_created / clan_changed_kingdom / war_declared 均由 HistoryRecorder 自动入史。
