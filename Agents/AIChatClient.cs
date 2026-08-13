@@ -467,8 +467,9 @@ namespace AIChronicle
                 : (settings.ReasoningEffort?.SelectedValue ?? "low");
 
             // MiniMax 等端点的 SSE 连接可能中途断开（IOException "read operation failed"）。
-            // 仅当第一轮读流失败且尚未执行任何工具时，安全重试一次（避免重复工具副作用）。
-            var streamRetried = false;
+            // 读流失败时本 round 尚未执行任何工具（工具在读完流之后才执行），重试该 round 的请求是安全的；
+            // 用 lastRetriedRound 限制每个 round 至多重试一次，防病态端点导致死循环。
+            int lastRetriedRound = -1;
 
             for (int round = 0; round < MaxSafetyRounds; round++)
             {
@@ -521,7 +522,7 @@ namespace AIChronicle
                         }
                         line = await readTask;
                     }
-                    catch (IOException) when (round == 0 && allToolCalls.Count == 0 && !streamRetried)
+                    catch (IOException) when (round != lastRetriedRound)
                     {
                         streamFailed = true;
                         break;
@@ -578,9 +579,9 @@ namespace AIChronicle
 
                 if (streamFailed)
                 {
-                    // 读流失败（连接中断）：本轮尚未执行工具、也无副作用，回退 round 重发一次完整请求。
-                    streamRetried = true;
-                    DebugLogger.Log($"LLM 读流失败，重试一次 intent={intent} agent={hero?.Name?.ToString() ?? "?"} round={round}");
+                    // 读流失败（连接中断）：本 round 工具尚未执行、无副作用，回退重发一次该 round 的完整请求。
+                    lastRetriedRound = round;
+                    DebugLogger.Log($"LLM 读流失败，重试一轮 intent={intent} agent={hero?.Name?.ToString() ?? "?"} round={round}");
                     round--;
                     continue;
                 }
