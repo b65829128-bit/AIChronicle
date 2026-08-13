@@ -29,7 +29,10 @@ namespace AIChronicle
         /// <summary>是否发送 stream_options.include_usage（OpenAI 标准，绝大多数端点支持）。</summary>
         public bool SupportsStreamOptionsUsage { get; init; } = true;
 
-        /// <summary>额外的请求体参数（厂商特有参数，如 GLM 的 clear_thinking），构建请求时浅合并到 payload。</summary>
+        /// <summary>是否用 max_completion_tokens 而非 max_tokens 作为最大输出参数（MiMo 等新协议端点）。</summary>
+        public bool UsesMaxCompletionTokens { get; init; }
+
+        /// <summary>额外的请求体参数（厂商特有参数，如 GLM 的 clear_thinking、MiMo 的 thinking），构建请求时浅合并到 payload。</summary>
         public JObject? ExtraBodyParams { get; init; }
     }
 
@@ -100,6 +103,7 @@ namespace AIChronicle
         OpenAICompatible = 0,
         DeepSeek = 1,
         GLM = 2,
+        MiMo = 3,
     }
 
     /// <summary>Provider 工厂：按接口类型返回对应实现。新增厂商（非 OpenAI 兼容）在此扩展。</summary>
@@ -109,6 +113,7 @@ namespace AIChronicle
         {
             LLMProviderKind.DeepSeek => new DeepSeekProvider(),
             LLMProviderKind.GLM => new GLMProvider(),
+            LLMProviderKind.MiMo => new MiMoProvider(),
             _ => new OpenAICompatibleProvider()
         };
     }

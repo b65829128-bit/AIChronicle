@@ -69,10 +69,10 @@ namespace AIChronicle
             }
         }
 
-        private MCM.Common.Dropdown<string> _llmProviderType = new(new[] { "OpenAI 兼容", "DeepSeek", "GLM" }, 1);
+        private MCM.Common.Dropdown<string> _llmProviderType = new(new[] { "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 1);
 
         [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
-            HintText = "LLM 厂商接口方言。OpenAI 兼容 = 通用（MiniMax / Qwen / 豆包 等）；DeepSeek = OpenAI 兼容 + reasoning/缓存扩展；GLM = 智谱（reasoning 回传 + clear_thinking）。\n厂商差异靠此声明式选择，不做运行时探测。")]
+            HintText = "LLM 厂商接口方言。OpenAI 兼容 = 通用（MiniMax / Qwen / 豆包 等）；DeepSeek = reasoning/缓存扩展；GLM = 智谱（clear_thinking）；MiMo = 小米（thinking 开关 + max_completion_tokens）。\n厂商差异靠此声明式选择，不做运行时探测。")]
         [SettingPropertyGroup("连接设置（兜底）")]
         public MCM.Common.Dropdown<string> LLMProviderType
         {
@@ -92,6 +92,7 @@ namespace AIChronicle
         {
             "DeepSeek" => LLMProviderKind.DeepSeek,
             "GLM" => LLMProviderKind.GLM,
+            "MiMo" => LLMProviderKind.MiMo,
             _ => LLMProviderKind.OpenAICompatible
         };
 

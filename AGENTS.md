@@ -186,6 +186,8 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | `LLMProvider.cs` | 接口 `ILLMProvider` + 能力声明 `LLMCapabilities` + 统一数据结构（请求 / 归一化流块） |
 | `OpenAICompatibleProvider.cs` | 通用实现：标准 OpenAI 协议 + 宽容解析（空 `choices:[]`、内联 `<think>` 剥离等，任何 OpenAI 兼容端点都可能有） |
 | `DeepSeekProvider.cs` | OpenAI 兼容 + DeepSeek 扩展（`reasoning_content` 回传、`prompt_cache_hit_tokens` 缓存字段、`reasoning_effort` 参数） |
+| `GLMProvider.cs` | 继承 DeepSeek + `clear_thinking: false`（保留式思考）；缓存字段嵌套不做统计 |
+| `MiMoProvider.cs` | 继承 DeepSeek + `thinking` 开关 + `max_completion_tokens`；多轮工具调用必须回传 reasoning（否则 400） |
 
 **核心原则：**
 
@@ -337,7 +339,9 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │   └── LLM/                    ← LLM 厂商兼容层（Provider 抽象，声明式厂商差异）
 │       ├── LLMProvider.cs      ← ILLMProvider 接口 + 能力声明 LLMCapabilities + 统一数据结构
 │       ├── OpenAICompatibleProvider.cs ← 通用 OpenAI 兼容实现（宽容解析：空 choices/内联 think）
-│       └── DeepSeekProvider.cs ← DeepSeek 扩展（reasoning 回传 / 缓存字段 / reasoning_effort）
+│       ├── DeepSeekProvider.cs ← DeepSeek 扩展（reasoning 回传 / 缓存字段 / reasoning_effort）
+│       ├── GLMProvider.cs      ← 智谱（clear_thinking 保留式思考）
+│       └── MiMoProvider.cs     ← 小米（thinking 开关 / max_completion_tokens）
 ├── Agents/                     ← Agent 核心：上下文、调度、记忆
 │   ├── AgentManager.cs         ← Agent 管理器基类（NPC 文件系统、路径权限、persona 生成）
 │   ├── AgentManager.Files.cs   ← 文件工具执行（read/write/edit/delete/move/glob/grep/list）

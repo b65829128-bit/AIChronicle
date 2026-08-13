@@ -30,10 +30,13 @@ namespace AIChronicle
             {
                 ["model"] = request.Model,
                 ["messages"] = new JArray(request.Messages),
-                ["max_tokens"] = request.MaxTokens,
                 ["temperature"] = request.Temperature,
                 ["stream"] = request.Stream
             };
+            if (Capabilities.UsesMaxCompletionTokens)
+                payload["max_completion_tokens"] = request.MaxTokens;
+            else
+                payload["max_tokens"] = request.MaxTokens;
             if (request.IncludeTools && request.Tools != null)
             {
                 payload["tools"] = request.Tools;

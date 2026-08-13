@@ -391,7 +391,7 @@ _Module/Prompts/
 | API 地址（兜底） | 全局兜底 LLM API 端点。各场景留空的字段回退到这里 | `https://api.deepseek.com/v1/chat/completions` |
 | 模型名称（兜底） | 全局兜底模型名称。各场景留空的字段回退到这里 | `deepseek-v4-flash` |
 | API 密钥（兜底） | 全局兜底 API 密钥。各场景留空的字段回退到这里 | 空（需自行填入） |
-| 接口类型 | 厂商接口方言（声明式，不做运行时探测）。「OpenAI 兼容」= 通用（MiniMax / Qwen / GLM / 豆包 等）；「DeepSeek」= OpenAI 兼容 + reasoning/缓存扩展 | `DeepSeek` |
+| 接口类型 | 厂商接口方言（声明式，不做运行时探测）。「OpenAI 兼容」= 通用（MiniMax / Qwen / 豆包 等）；「DeepSeek」= reasoning/缓存扩展；「GLM」= 智谱；「MiMo」= 小米 | `DeepSeek` |
 | 最大 Token 数 | **全模组统一**的 AI 单次回复 token 上限（含 persona 生成、连接测试）。DeepSeek V4 最高 384K 输出；默认 32768 足够长编年史/长思考，特殊场景可上调至 65536 | `32768` |
 | 回复创造性 | Temperature 值，越低越稳定保守 | `0.8` |
 | 思考强度 (reasoning_effort) | AI 思考强度（成本大头，见下）。史官固定 high 不受此设置影响；部分模型不支持该参数则不生效 | `low` |
