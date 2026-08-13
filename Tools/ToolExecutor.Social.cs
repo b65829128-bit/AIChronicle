@@ -65,43 +65,62 @@ namespace AIChronicle
             return $"已赠予{target.Name} {amount} 金币。{AIChatClient.CurrentHero.Name} 剩余 {AIChatClient.CurrentHero.Gold} 金币。";
         }
 
+        /// <summary>request_gold/request_items 的主线程解析结果：错误 / 已直接完成 / 需玩家弹窗确认。</summary>
+        private sealed class RequestResolution
+        {
+            public string? ErrorMessage;
+            public string? DoneMessage;
+
+            public static RequestResolution Error(string msg) => new() { ErrorMessage = msg };
+            public static RequestResolution Done(string msg) => new() { DoneMessage = msg };
+            public static RequestResolution Popup() => new();
+        }
+
         private static string ExecuteRequestGold(int amount, string? targetEntityId)
         {
-            if (AIChatClient.CurrentHero == null)
+            var currentHero = AIChatClient.CurrentHero;
+            if (currentHero == null)
                 return "[错误] 无当前领主";
-
-            var target = ResolveTargetHero(targetEntityId);
-            if (target == null)
-                return $"[错误] 未找到目标实体：{targetEntityId}";
 
             if (amount <= 0)
                 return "[错误] 金币数额必须大于 0";
 
-            if (target.Gold < amount)
-                return $"[错误] {target.Name} 只有 {target.Gold} 金币，不足以支付 {amount} 金币";
-
-            if (target != Hero.MainHero)
+            // 解析目标与金币校验在主线程执行（游戏对象主线程独占）。目标是 NPC 时直接划转完成。
+            // 之前 ResolveTargetHero（枚举 Hero.AllAliveHeroes）与读 target.Gold 都在后台线程触碰游戏对象，属主线程独占违规。
+            var resolution = MainThreadExecutor.RunOnMainThread(() =>
             {
-                var currentHero = AIChatClient.CurrentHero;
-                MainThreadExecutor.RunOnMainThread(() => GiveGoldAction.ApplyBetweenCharacters(target, currentHero, amount));
-                return $"{target.Name} 支付了 {amount} 金币。";
-            }
+                var target = ResolveTargetHero(targetEntityId);
+                if (target == null)
+                    return RequestResolution.Error("[错误] 未找到目标实体：" + targetEntityId);
+                if (target.Gold < amount)
+                    return RequestResolution.Error($"[错误] {target.Name} 只有 {target.Gold} 金币，不足以支付 {amount} 金币");
 
+                if (target != Hero.MainHero)
+                {
+                    GiveGoldAction.ApplyBetweenCharacters(target, currentHero, amount);
+                    return RequestResolution.Done($"{target.Name} 支付了 {amount} 金币。");
+                }
+                return RequestResolution.Popup();
+            });
+
+            if (resolution.ErrorMessage != null) return resolution.ErrorMessage;
+            if (resolution.DoneMessage != null) return resolution.DoneMessage;
+
+            // 目标是玩家：弹窗等待（弹窗带倒计时，超时自动按拒绝处理，见 CheckPendingInquiry）
             using var mre = new ManualResetEventSlim(false);
             var inquiry = new AIChatClient.PendingInquiry
             {
-                Hero = AIChatClient.CurrentHero,
+                Hero = currentHero,
                 Amount = amount,
                 Event = mre,
                 Result = false
             };
             AIChatClient.SetPendingInquiry(inquiry);
 
-            mre.Wait(TimeSpan.FromSeconds(30));
+            mre.Wait(TimeSpan.FromSeconds(AIChatClient.PendingInquiry.PopupWaitSeconds));
 
             if (inquiry.Result)
             {
-                var currentHero = AIChatClient.CurrentHero;
                 MainThreadExecutor.RunOnMainThread(() => GiveGoldAction.ApplyBetweenCharacters(Hero.MainHero, currentHero, amount));
                 return $"对方同意支付 {amount} 金币。";
             }
@@ -168,90 +187,96 @@ namespace AIChronicle
 
         private static string ExecuteRequestItems(string targetEntityId, string itemName, int count)
         {
-            if (AIChatClient.CurrentHero == null)
+            var currentHero = AIChatClient.CurrentHero;
+            if (currentHero == null)
                 return "[错误] 无当前领主";
             if (string.IsNullOrEmpty(itemName) || count <= 0)
                 return "[错误] 请指定物品名称和数量";
 
-            var hero = AIChatClient.CurrentHero;
-            var myParty = hero.PartyBelongedTo;
-            if (myParty == null)
-                return $"[错误] {hero.Name} 没有带领部队";
-
-            var target = ResolveTargetHero(targetEntityId);
-            if (target == null)
-                return $"[错误] 未找到目标实体：{targetEntityId}";
-            if (target == hero)
-                return "[错误] 不能向自己要物品";
-
-            if (target != Hero.MainHero)
+            // 解析目标/部队/物品校验在主线程执行（游戏对象主线程独占）。目标是 NPC 时直接划转完成。
+            var resolution = MainThreadExecutor.RunOnMainThread(() =>
             {
-                var targetParty = target.PartyBelongedTo;
-                if (targetParty == null)
-                    return $"[错误] {target.Name} 没有带领部队";
+                var myParty = currentHero.PartyBelongedTo;
+                if (myParty == null)
+                    return RequestResolution.Error($"[错误] {currentHero.Name} 没有带领部队");
 
-                foreach (var ie in targetParty.ItemRoster)
+                var target = ResolveTargetHero(targetEntityId);
+                if (target == null)
+                    return RequestResolution.Error("[错误] 未找到目标实体：" + targetEntityId);
+                if (target == currentHero)
+                    return RequestResolution.Error("[错误] 不能向自己要物品");
+
+                if (target != Hero.MainHero)
+                {
+                    var targetParty = target.PartyBelongedTo;
+                    if (targetParty == null)
+                        return RequestResolution.Error($"[错误] {target.Name} 没有带领部队");
+
+                    foreach (var ie in targetParty.ItemRoster)
+                    {
+                        var item = ie.EquipmentElement.Item;
+                        if (item == null) continue;
+                        var name = item.Name?.ToString() ?? "";
+                        if (!name.Contains(itemName) && !itemName.Contains(name)) continue;
+                        if (ie.Amount < count)
+                            return RequestResolution.Error($"[错误] {target.Name} 只有 {ie.Amount} 个 {name}");
+
+                        targetParty.ItemRoster.AddToCounts(item, -count);
+                        myParty.ItemRoster.AddToCounts(item, count);
+                        return RequestResolution.Done($"{target.Name} 给出了 {count} 个 {name}。");
+                    }
+                    return RequestResolution.Error($"[未找到] {target.Name} 身上没有 \"{itemName}\"。");
+                }
+
+                // 玩家目标：只检查"对方（玩家）"是否持有该物品——原实现还检查请求方自己的部队，
+                // 导致物品在请求方背包时 hasItem=true 弹出确认框，但回调只搜玩家背包 → 假成功。
+                var hasItem = false;
+                foreach (var ie in target.PartyBelongedTo?.ItemRoster ?? Enumerable.Empty<ItemRosterElement>())
                 {
                     var item = ie.EquipmentElement.Item;
                     if (item == null) continue;
                     var name = item.Name?.ToString() ?? "";
-                    if (!name.Contains(itemName) && !itemName.Contains(name)) continue;
-                    if (ie.Amount < count)
-                        return $"[错误] {target.Name} 只有 {ie.Amount} 个 {name}";
-
-                    MainThreadExecutor.RunOnMainThread(() =>
-                    {
-                        targetParty.ItemRoster.AddToCounts(item, -count);
-                        myParty.ItemRoster.AddToCounts(item, count);
-                    });
-                    return $"{target.Name} 给出了 {count} 个 {name}。";
-                }
-                return $"[未找到] {target.Name} 身上没有 \"{itemName}\"。";
-            }
-
-            // 修复：只检查"对方（玩家）"是否持有该物品——原实现还检查请求方自己的部队，
-            // 导致物品在请求方背包时 hasItem=true 弹出确认框，但回调只搜玩家背包 → 假成功。
-            var hasItem = false;
-            foreach (var ie in target.PartyBelongedTo?.ItemRoster ?? Enumerable.Empty<ItemRosterElement>())
-            {
-                var item = ie.EquipmentElement.Item;
-                if (item == null) continue;
-                var name = item.Name?.ToString() ?? "";
-                if (name.Contains(itemName) || itemName.Contains(name))
-                {
-                    hasItem = true;
-                    break;
-                }
-            }
-            if (!hasItem)
-            {
-                var eq = target.BattleEquipment;
-                var eqSlots = new[] { EquipmentIndex.Weapon0, EquipmentIndex.Weapon1, EquipmentIndex.Weapon2, EquipmentIndex.Weapon3,
-                    EquipmentIndex.Head, EquipmentIndex.Body, EquipmentIndex.Leg, EquipmentIndex.Gloves, EquipmentIndex.Cape };
-                foreach (var slot in eqSlots)
-                {
-                    var elem = eq.GetEquipmentFromSlot(slot);
-                    if (elem.Item != null && (elem.Item.Name?.ToString() ?? "").Contains(itemName))
+                    if (name.Contains(itemName) || itemName.Contains(name))
                     {
                         hasItem = true;
                         break;
                     }
                 }
-            }
-            if (!hasItem)
-                return $"[错误] 对方身上没有 \"{itemName}\"。";
+                if (!hasItem)
+                {
+                    var eq = target.BattleEquipment;
+                    var eqSlots = new[] { EquipmentIndex.Weapon0, EquipmentIndex.Weapon1, EquipmentIndex.Weapon2, EquipmentIndex.Weapon3,
+                        EquipmentIndex.Head, EquipmentIndex.Body, EquipmentIndex.Leg, EquipmentIndex.Gloves, EquipmentIndex.Cape };
+                    foreach (var slot in eqSlots)
+                    {
+                        var elem = eq.GetEquipmentFromSlot(slot);
+                        if (elem.Item != null && (elem.Item.Name?.ToString() ?? "").Contains(itemName))
+                        {
+                            hasItem = true;
+                            break;
+                        }
+                    }
+                }
+                if (!hasItem)
+                    return RequestResolution.Error("[错误] 对方身上没有 \"" + itemName + "\"。");
+                return RequestResolution.Popup();
+            });
 
+            if (resolution.ErrorMessage != null) return resolution.ErrorMessage;
+            if (resolution.DoneMessage != null) return resolution.DoneMessage;
+
+            // 目标是玩家：弹窗等待（弹窗带倒计时，超时自动按拒绝处理）
             using var mre = new ManualResetEventSlim(false);
             var inquiry = new AIChatClient.PendingInquiry
             {
-                Hero = hero,
+                Hero = currentHero,
                 ItemName = itemName,
                 ItemCount = count,
                 Event = mre,
                 Result = false
             };
             AIChatClient.SetPendingInquiry(inquiry);
-            mre.Wait(TimeSpan.FromSeconds(30));
+            mre.Wait(TimeSpan.FromSeconds(AIChatClient.PendingInquiry.PopupWaitSeconds));
 
             if (inquiry.Result)
                 return $"对方同意了，{itemName} 已转移给你。";

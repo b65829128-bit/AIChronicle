@@ -41,9 +41,9 @@
   - 持续性任务（驻防/巡逻/护送）到达目标后启动定时签到：到时 Agent 自动激活，可自行决定是否继续、转去做别的事、或向阵营领袖汇报
   - Agent 可以调用 `change_relation` 修改对任意人物的好感度（单次上限在 MCM 中设置，默认 +-5），可指定目标实体
   - Agent 可以调用 `give_gold` 赠予任意人物金币（直接转账），可指定目标实体
-  - Agent 可以调用 `request_gold` 向任意人物索要金币（向玩家索要时弹出确认框）
+  - Agent 可以调用 `request_gold` 向任意人物索要金币（向玩家索要时弹出确认框，60 秒倒计时，超时视为拒绝）
 - Agent 可以调用 `give_item` 将自己物品/装备交给任意人物（直接转账）
-- Agent 可以调用 `request_items` 向任意人物索要物品（向玩家索要时弹出确认框）
+- Agent 可以调用 `request_items` 向任意人物索要物品（向玩家索要时弹出确认框，60 秒倒计时，超时视为拒绝）
 - Agent 可以调用 `let_go` 在遭遇战中放玩家一马（仅当 NPC 兵力占优时可用，设置冷却期避免立即追击）——玩家被强敌擒获时，投降/应战对话中会出现【AI 聊天】选项，可谈判让 agent 放行；放行后对话自动结束、玩家获释
 - **对话即全功能通道**：AI 聊天时其可用工具由身份与能力决定——国王可当场宣战/议和/结盟/颁诏，氏族领袖可当场换国/出兵/驻防/招募，被擒的敌方家族领袖也可在谈判中履行"加入某国"的承诺（先 `change_kingdom` 离旧国、再 `join_kingdom` 投效）。对话中谈成的协议都能立刻兑现，不会"口头答应却做不到"
 - **已知限制：** `request_gold` 和 `request_items` 向 NPC 索要时直接划转，NPC 不会经过 LLM 决策——未来应改为异步事件，让 NPC Agent 自行判断是否给
@@ -279,7 +279,7 @@ Agent 任何时候都可以调 `browse_tools("military")` 解锁某类工具，�
 ### 物品交易
 
 - Agent 可以调用 `give_item(目标, 物品名, 数量)` 将自己物品栏或装备栏中的东西给任意人物
-- Agent 可以调用 `request_items(目标, 物品名, 数量)` 向任意人物索要物品（NPC 直接划转，玩家弹确认框）
+- Agent 可以调用 `request_items(目标, 物品名, 数量)` 向任意人物索要物品（NPC 直接划转，玩家弹确认框，60 秒倒计时，超时视为拒绝）
 - 已知限制：`request_gold` 和 `request_items` 向 NPC 索要时直接划转，NPC 不经过 LLM 决策
 
 ### 记忆权威化与记忆巩固
@@ -366,7 +366,7 @@ _Module/Prompts/
 - **Agent 系统**：每个 NPC 有独立文件系统，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`list_dir`/`glob`/`grep`/`send_letter` 工具管理记忆
 - **信息隔离**：Agent 只能操作自己目录下的文件 + World/ 目录，不能读取其他 NPC 的信息
 - **解耦存储**：聊天记录（`chat_logs/`）、对 Entity 认知（`knowledge/`）、NPC 性格（`persona.txt`）全部独立文件，Agent 按需精确读取
-- **LLM 生成 persona**：首次对话时自动调用 LLM 为 NPC 生成结构化 persona（玩家角色除外，使用静态占位文本）。生成使用 `reasoning_effort=low`，max_tokens 由 MCM「最大 Token 数」统一控制（机械任务不需要深度思考，防止思考占满 token 导致正文截断）；加载时若检测到 persona.txt 缺失标准段落标记（被截断的残缺文件）会自动重新生成
+- **LLM 生成 persona**：首次对话时自动调用 LLM 为 NPC 生成结构化 persona（玩家角色除外，使用静态占位文本）。生成使用 `reasoning_effort=low`，max_tokens 由 MCM「最大 Token 数」统一控制（机械任务不需要深度思考，防止思考占满 token 导致正文截断）；加载时若检测到 persona.txt 缺失标准段落标记（被截断的残缺文件）会自动重新生成。**人格与身份解耦**：persona 以「你」自述、只刻画长期稳定内核，生成时不注入家族/所属王国/头衔（这些会随婚嫁、阵营变更、自立、禅让而变化，由系统动态告知）；文化仅作说话气质底色；百科描述仅作背景素材、不得锚定当前身份。存量 persona 不受影响，仅新生成生效
 - **ContextBuilder**：根据交互双方动态组装提示词，通过 `context_template.txt` 模板注入 persona 和能力信息；输出拆分为稳定前缀（system）+ 易变块（【当前状况】system 消息），史官 intent 例外（合并为单一 system）
 - **世界信息系统**：卡拉迪亚大陆介绍，每个战役可独立编辑
 - **系统提示词**：控制 AI 行为风格的核心提示，每个战役独立
@@ -394,7 +394,7 @@ _Module/Prompts/
 | 最大 Token 数 | **全模组统一**的 AI 单次回复 token 上限（含 persona 生成、连接测试）。DeepSeek V4 最高 384K 输出；默认 32768 足够长编年史/长思考，特殊场景可上调至 65536 | `32768` |
 | 回复创造性 | Temperature 值，越低越稳定保守 | `0.8` |
 | 思考强度 (reasoning_effort) | AI 思考强度（成本大头，见下）。史官固定 high 不受此设置影响；部分模型不支持该参数则不生效 | `low` |
-| API 超时（秒） | 请求超时时间 | `30` |
+| API 超时（秒） | 请求超时时间（含流式响应的整段超时；已不再受 30 秒硬上限限制） | `60` |
 | Test Connection | 测试兜底连接（含 function calling 支持检测） | — |
 
 **场景连接配置**（懒人可只填上面兜底三件套，各场景留空即全用兜底）：

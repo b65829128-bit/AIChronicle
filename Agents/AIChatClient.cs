@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -29,7 +30,10 @@ namespace AIChronicle
 
     public static class AIChatClient
     {
-        private static readonly HttpClient _client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        // Timeout 设为 Infinite：请求超时统一由各调用点的 CancellationTokenSource(settings.TimeoutSeconds) 控制。
+        // 之前硬编码 30s，SSE 流式响应（思考模型一轮常超 30s）会被 HttpClient 的整请求超时强制掐断，
+        // 且与 MCM「API 超时（秒）」配置脱节——即使调到 120s，30s 时仍被 HttpClient 先砍掉。
+        private static readonly HttpClient _client = new HttpClient { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
 
         // 并发修复：聊天与后台事件（信件/谏言/外交）可同时跑 SendMessage，
         // 静态字段会被互相覆盖导致工具作用到错误的 NPC。改用 AsyncLocal，
@@ -79,6 +83,13 @@ namespace AIChronicle
             public int ItemCount;
             public ManualResetEventSlim Event = new(false);
             public bool Result;
+
+            /// <summary>弹窗倒计时（秒）：超时自动按「拒绝」处理并关闭弹窗（玩家可见剩余时间）。
+            /// 修复此前后台 30s 超时后弹窗仍开着、玩家点「同意」却被静默忽略的竞态。</summary>
+            public const float PopupExpireSeconds = 60f;
+
+            /// <summary>后台线程等待玩家决定的秒数（&gt; 弹窗倒计时，兜底防弹窗因游戏暂停等未触发超时回调）。</summary>
+            public const int PopupWaitSeconds = 70;
         }
 
         // 修复：并发索要/请求改为队列逐个弹出——原单槽位在并发时后写覆盖先写，导致一次请求被静默吞掉
@@ -141,6 +152,24 @@ namespace AIChronicle
         {
             _unlockedCategories.Clear();
         }
+
+        /// <summary>
+        /// 剥离模型内联输出到 content 的思考标签（如 MiniMax 的 &lt;think&gt;...&lt;/think&gt;、&lt;thinking&gt;）。
+        /// DeepSeek 用独立的 reasoning_content 字段、content 不含此标签，本方法对其为 no-op，不影响既有兼容性。
+        /// </summary>
+        internal static string StripThinkTags(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            var result = Regex.Replace(text, @"<think[^>]*>[\s\S]*?</think>", "", RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, @"<thinking[^>]*>[\s\S]*?</thinking>", "", RegexOptions.IgnoreCase);
+            return result.Trim();
+        }
+
+        /// <summary>端点是否接受 reasoning_effort 参数（DeepSeek 支持；MiniMax 等拒绝，遇 400/422 会被 MarkReasoningEffortUnsupported 关闭）。</summary>
+        internal static bool ReasoningEffortSupported => _reasoningEffortSupported;
+
+        /// <summary>标记端点不支持 reasoning_effort（遇 400/422 时调用），后续请求不再发送该参数。</summary>
+        internal static void MarkReasoningEffortUnsupported() => _reasoningEffortSupported = false;
 
         private static ToolDef BrowseToolsDef => new()
         {
@@ -236,6 +265,9 @@ namespace AIChronicle
                     $"{hero.Name} 向你要 {amount} 金币。\n你当前拥有 {Hero.MainHero.Gold} 金币。",
                     true, true, "同意", "拒绝",
                     () => { inquiry.Result = true; TrySignalInquiry(inquiry); },
+                    () => { inquiry.Result = false; TrySignalInquiry(inquiry); },
+                    "",
+                    PendingInquiry.PopupExpireSeconds,
                     () => { inquiry.Result = false; TrySignalInquiry(inquiry); }),
                     pauseGameActiveState: true,
                     prioritize: true);
@@ -270,6 +302,9 @@ namespace AIChronicle
                         inquiry.Result = true;
                         TrySignalInquiry(inquiry);
                     },
+                    () => { inquiry.Result = false; TrySignalInquiry(inquiry); },
+                    "",
+                    PendingInquiry.PopupExpireSeconds,
                     () => { inquiry.Result = false; TrySignalInquiry(inquiry); }),
                     pauseGameActiveState: true,
                     prioritize: true);
@@ -477,6 +512,10 @@ namespace AIChronicle
                 ? null
                 : (settings.ReasoningEffort?.SelectedValue ?? "low");
 
+            // MiniMax 等端点的 SSE 连接可能中途断开（IOException "read operation failed"）。
+            // 仅当第一轮读流失败且尚未执行任何工具时，安全重试一次（避免重复工具副作用）。
+            var streamRetried = false;
+
             for (int round = 0; round < MaxSafetyRounds; round++)
             {
                 JObject BuildPayload(bool withUsage, bool withEffort)
@@ -558,16 +597,26 @@ namespace AIChronicle
                 // 放宽到 TimeoutSeconds×3（至少 60s）：慢的思考模型可能长时间不吐新块，不能被误杀。
                 var readTimeout = TimeSpan.FromSeconds(Math.Max(settings.TimeoutSeconds * 3, 60));
                 var streamTimedOut = false;
+                var streamFailed = false;
 
                 while (!reader.EndOfStream)
                 {
-                    var readTask = reader.ReadLineAsync();
-                    if (await Task.WhenAny(readTask, Task.Delay(readTimeout)) != readTask)
+                    string line = "";
+                    try
                     {
-                        streamTimedOut = true;
+                        var readTask = reader.ReadLineAsync();
+                        if (await Task.WhenAny(readTask, Task.Delay(readTimeout)) != readTask)
+                        {
+                            streamTimedOut = true;
+                            break;
+                        }
+                        line = await readTask;
+                    }
+                    catch (IOException) when (round == 0 && allToolCalls.Count == 0 && !streamRetried)
+                    {
+                        streamFailed = true;
                         break;
                     }
-                    var line = await readTask;
                     if (string.IsNullOrEmpty(line)) continue;
                     if (!line.StartsWith("data: ")) continue;
 
@@ -588,8 +637,12 @@ namespace AIChronicle
                         totalCacheMiss += usageObj["prompt_cache_miss_tokens"]?.ToObject<long>() ?? 0;
                     }
 
-                    var choices = chunk["choices"]?[0];
-                    if (choices == null) continue;
+                    // 修复：部分端点（MiniMax 等）的 SSE 末尾 usage 帧返回 "choices":[]（空数组），
+                    // `chunk["choices"]?[0]` 的 ? 只防 null 不防空数组，索引空 JArray 会抛越界异常。
+                    // 改为显式判空后取 [0]。
+                    var choicesArr = chunk["choices"] as JArray;
+                    if (choicesArr == null || choicesArr.Count == 0) continue;
+                    var choices = choicesArr[0];
 
                     var delta = choices["delta"];
                     if (delta == null) continue;
@@ -647,12 +700,25 @@ namespace AIChronicle
                     }
                 }
 
+                if (streamFailed)
+                {
+                    // 读流失败（连接中断）：本轮尚未执行工具、也无副作用，回退 round 重发一次完整请求。
+                    streamRetried = true;
+                    DebugLogger.Log($"LLM 读流失败，重试一次 intent={intent} agent={hero?.Name?.ToString() ?? "?"} round={round}");
+                    round--;
+                    continue;
+                }
+
                 if (streamTimedOut)
                 {
                     // 流读取超时：丢弃本轮的半成品工具调用（可能是不完整的 JSON），把已累积文本作为最终回复返回
                     roundToolCalls.Clear();
                     DebugLogger.Log($"LLM 流读取超时 intent={intent} agent={hero?.Name?.ToString() ?? "?"} round={round} textLen={roundText.Length}");
                 }
+
+                // MiniMax 等模型把思考内容以 <think>...</think> 内联在 content 里（DeepSeek 用独立 reasoning_content）。
+                // 统一剥离，保证正文干净；对 DeepSeek 是 no-op。
+                roundText = StripThinkTags(roundText);
 
                 lastReasoning = roundReasoning;
                 lastFinishReason = roundFinishReason;

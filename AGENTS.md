@@ -942,7 +942,7 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 | `update_knowledge` | 认知 | 记录关于对方的新认知 |
 | `change_relation` | 关系 | 修改对任意人物的好感度（支持 target_entity_id） |
 | `give_gold` | 经济 | 赠予任意人物金币（支持 target_entity_id） |
-| `request_gold` | 经济 | 向任意人物索要金币（玩家需确认，NPC 自动划转） |
+| `request_gold` | 经济 | 向任意人物索要金币（玩家需确认，弹窗 60 秒倒计时超时视为拒绝，NPC 自动划转） |
 | `move_to_settlement` | 行军 | 部队行军到城镇/城堡/村庄（支持 activate:true 参数自动唤醒） |
 | `wait_at_settlement` | 行军 | 在定居点停留指定时长（支持 activate:true 参数到期自动唤醒） |
 | `raid_settlement` | 军事 | 劫掠村庄 |
@@ -973,7 +973,7 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 | `upgrade_troops` | 军事 | 升级兵种（检查经验/金币/装备/perk） |
 | `buy_food` | 行军 | 在定居点买粮到够吃 N 天（自动挑最便宜的） |
 | `give_item` | 社交 | 将自己物品/装备交给任意人物 |
-| `request_items` | 社交 | 向任意人物索要物品（NPC 直接划转，玩家弹确认框） |
+| `request_items` | 社交 | 向任意人物索要物品（NPC 直接划转，玩家弹确认框，60 秒倒计时超时视为拒绝） |
 | `let_go` | 社交 | 遭遇战中放走玩家（仅当己方兵力占优时可用，含冷却期） |
 | `release_prisoner` | 军事 | 释放自己部队中的俘虏（贵族英雄→逃亡者回领地，普通士兵→移除；支持按名单个释放或 all 全放） |
 | `execute_prisoner` | 军事 | 处决自己部队中的贵族俘虏（仅限贵族；受 MCM「处决无惩罚」控制，默认开=无惩罚） |

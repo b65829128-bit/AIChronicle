@@ -732,7 +732,7 @@ namespace AIChronicle
             }
         }
 
-        private int _timeout = 30;
+        private int _timeout = 60;
 
         [SettingPropertyInteger("API 超时（秒）", 10, 120, Order = 7, RequireRestart = false,
             HintText = "API 请求超时时间，网络慢时可调大。")]

@@ -20,7 +20,8 @@ namespace AIChronicle
         private static readonly AsyncLocal<string> _agentEntityId = new();
         private static readonly AsyncLocal<string> _targetEntityId = new();
         private static string _agentDir => Path.Combine(_baseDir, _agentEntityId.Value ?? "");
-        private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
+        // 同 AIChatClient：超时交给调用点 cts 控制，避免 30s 硬上限掐断慢请求（persona 生成等）。
+        private static readonly HttpClient _http = new() { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
         // 线程安全：persona 生成在后台线程并发执行（多个 Agent 任务同时掷性格维度），
         // System.Random 非线程安全，必须按线程隔离。
         private static readonly ThreadLocal<Random> _rng = new(() => new Random(Guid.NewGuid().GetHashCode()));
@@ -341,6 +342,10 @@ namespace AIChronicle
         /// 截断自愈：加载时检测到残缺 → 触发重新生成（重新生成失败会写回完整的 fallback，不会死循环）。</summary>
         private static bool IsCompletePersona(string text)
         {
+            // 思考内容混入正文（如 MiniMax 内联 <think>）视为残缺，触发重新生成——否则 think 块内
+            // 若恰好出现三段标记会被误判为完整，坏文件一直被复用。
+            if (text.IndexOf("<think", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
             return text.Contains("[MOTIVATION]")
                 && text.Contains("[TRAITS]")
                 && text.Contains("[SPEECH_STYLE]");
@@ -370,24 +375,46 @@ namespace AIChronicle
                 ["model"] = conn.Model,
                 ["messages"] = new JArray(new JObject { ["role"] = "user", ["content"] = prompt }),
                 ["max_tokens"] = settings.MaxTokens,
-                ["temperature"] = 0.7f,
-                ["reasoning_effort"] = "low"
+                ["temperature"] = 0.7f
             };
+            // reasoning_effort 仅在端点支持时发送：DeepSeek 需要（防默认 high 思考截断 persona），
+            // MiniMax 等端点拒绝该参数（400/422）——复用 SendMessage 的探测结果，避免反复踩坑。
+            if (AIChatClient.ReasoningEffortSupported)
+                payload["reasoning_effort"] = "low";
 
             var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
-            var response = await _http.SendAsync(BuildPersonaRequest(payload, conn), cts.Token);
-
-            // 端点若不接受 reasoning_effort（400）→ 去掉该参数重试一次
-            if ((int)response.StatusCode == 400)
+            try
             {
-                payload.Remove("reasoning_effort");
-                response = await _http.SendAsync(BuildPersonaRequest(payload, conn), cts.Token);
-            }
-            response.EnsureSuccessStatusCode();
+                var response = await _http.SendAsync(BuildPersonaRequest(payload, conn), cts.Token);
+                var status = (int)response.StatusCode;
+                if (status == 400 || status == 422)
+                {
+                    // 参数不被接受：最可能是 reasoning_effort，去掉后重试一次，并记住该端点不支持
+                    var reason = await response.Content.ReadAsStringAsync();
+                    DebugLogger.Log($"persona 生成参数被拒 agent={name} 状态码={status} 响应={DebugLogger.Truncate(reason, 200)}");
+                    if (payload.ContainsKey("reasoning_effort"))
+                    {
+                        payload.Remove("reasoning_effort");
+                        AIChatClient.MarkReasoningEffortUnsupported();
+                    }
+                    response = await _http.SendAsync(BuildPersonaRequest(payload, conn), cts.Token);
+                }
+                response.EnsureSuccessStatusCode();
 
-            var body = await response.Content.ReadAsStringAsync();
-            var result = JObject.Parse(body);
-            return result["choices"]?[0]?["message"]?["content"]?.ToString()?.Trim() ?? "";
+                var body = await response.Content.ReadAsStringAsync();
+                var result = JObject.Parse(body);
+                var content = result["choices"]?[0]?["message"]?["content"]?.ToString()?.Trim() ?? "";
+                // 剥离内联思考标签（MiniMax 会把 <think> 写进 content；DeepSeek 无此标签，为 no-op）
+                var stripped = AIChatClient.StripThinkTags(content);
+                if (string.IsNullOrEmpty(stripped))
+                    DebugLogger.Log($"persona 生成返回空 agent={name} contentLen={(content?.Length ?? 0)}");
+                return stripped;
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"persona 生成失败 agent={name}：{ex.Message}");
+                return "";
+            }
         }
 
         private static HttpRequestMessage BuildPersonaRequest(JObject payload, ConnectionInfo conn)
@@ -497,8 +524,6 @@ namespace AIChronicle
             var agentDir = GetAgentDirPath(agentId);
             var name = hero.Name?.ToString() ?? "未知领主";
             var culture = hero.Culture?.Name?.ToString() ?? "未知";
-            var clan = hero.Clan?.Name?.ToString() ?? "";
-            var kingdom = hero.Clan?.Kingdom?.Name?.ToString() ?? "";
             var isFemale = hero.IsFemale ? "女" : "男";
             var encyclopedia = hero.EncyclopediaText?.ToString() ?? "";
 
@@ -506,9 +531,8 @@ namespace AIChronicle
             basicInfo.AppendLine($"姓名：{name}");
             basicInfo.AppendLine($"性别：{isFemale}");
             basicInfo.AppendLine($"文化：{culture}");
-            basicInfo.AppendLine($"家族：{clan}");
-            if (!string.IsNullOrEmpty(kingdom))
-                basicInfo.AppendLine($"所属王国：{kingdom}");
+            // 身份克制：不注入家族/所属王国/头衔——身份在游戏中会随阵营变更、自立、禅让、婚嫁而变化，
+            // 由 ContextBuilder 动态提供；百科描述保留作背景素材，但提示词要求不得锚定当前身份。
             if (!string.IsNullOrEmpty(encyclopedia))
                 basicInfo.AppendLine($"百科描述：{encyclopedia}");
 
@@ -516,18 +540,22 @@ namespace AIChronicle
             var nativeTraits = BuildNativeTraitsText(hero);
             var customTraits = BuildCustomTraitsText(meta);
 
-            try
+            string persona = "";
+            for (int attempt = 0; attempt < 2 && string.IsNullOrEmpty(persona); attempt++)
             {
-                var persona = GeneratePersonaViaLLM(basicInfo.ToString(), name, nativeTraits, customTraits).Result;
-                if (!string.IsNullOrEmpty(persona))
+                try
                 {
-                    var p = Path.Combine(agentDir, "persona.txt");
-                    Directory.CreateDirectory(agentDir);
-                    File.WriteAllText(p, persona, Encoding.UTF8);
-                    return persona;
+                    persona = GeneratePersonaViaLLM(basicInfo.ToString(), name, nativeTraits, customTraits).Result;
                 }
+                catch { }
             }
-            catch { }
+            if (!string.IsNullOrEmpty(persona))
+            {
+                var p = Path.Combine(agentDir, "persona.txt");
+                Directory.CreateDirectory(agentDir);
+                File.WriteAllText(p, persona, Encoding.UTF8);
+                return persona;
+            }
 
             var fallback = $"[MOTIVATION]\n{basicInfo}\n[TRAITS]\n- 未知\n\n[SPEECH_STYLE]\n使用中世纪贵族的正式口吻。";
             var fallbackPath = Path.Combine(agentDir, "persona.txt");
