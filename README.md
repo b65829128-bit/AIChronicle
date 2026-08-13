@@ -126,7 +126,7 @@ AIChronicle/
 ├── HistoryRecorder.cs      # Records raw history events
 ├── MemoryConsolidator.cs   # Diary consolidation
 ├── _Module/Prompts/        # All prompt files & tool definitions (hot-reloadable)
-└── ... (see AGENTS.md for the full map)
+└── ... (see docs/architecture.md for the full map)
 ```
 
 ## For AI Agents (and Contributors)

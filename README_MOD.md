@@ -535,9 +535,9 @@ AIChronicle/
 │   ├── DiplomacyBanPatch.cs # Harmony 补丁，禁止原版 AI 外交（MCM 可开关）
 │   ├── FiefAssignmentPatch.cs # 攻城后册封由 Agent 主导
 │   └── ExecutionNoPenaltyPatch.cs # 处决无惩罚
-├── AGENTS.md                # AI 开发工作流文档
+├── AGENTS.md                # AI 开发工作流文档（常驻指令 + docs/ 索引）
 ├── README_MOD.md            # 本文件（功能说明）
-├── CLAUDE.md                # Claude Code 入口文档（指向 AGENTS.md / README_MOD.md）
+├── docs/                    # AI 参考文档（架构/子系统/工具清单/调试/Harmony）
 ├── _Module/
 │   ├── SubModule.xml     # 模组元数据
 │   ├── GUI/Prefabs/
