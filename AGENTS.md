@@ -745,16 +745,8 @@ Usage:
 
 ### 扩展方向（未来）
 
-基于同一套 `tools` 机制可以扩展：
-- ~~领主决定去某个领地 → `travel_to(settlement)`~~ （已实现为 `move_to_settlement` + `wait_at_settlement`）
-- ~~给玩家物品/金钱 → `give_item(item, amount)`~~ （已实现为 `give_gold` + `request_gold`，支持 target_entity_id）
-- ~~改变对目标的态度 → `change_relation(delta)`~~ （已实现，支持 target_entity_id）
-- ~~领主军事行动 → 劫掠/围攻/追击/驻防/巡逻/护送/绕行~~ （已全部实现为 7 个部队 AI 工具 + 中断恢复 + 定时签到）
-- ~~文件编辑 → `write_file`/`edit_file`/`delete_file`/`glob`~~ （已实现，chat_logs 和 persona.txt 为只读保护）
-- ~~发起外交/王国级动作~~ → `declare_war` / `propose_peace` / `propose_alliance` / `propose_trade` / `gift_fief`（已全部实现）
-- 物品交易 → `give_item` / `give_item` / `request_items`（已全部实现）
-- ~~氏族阵营切换~~ → `change_kingdom`（已实现，支持离国/加入/叛逃/雇佣兵四种模式）
-- ~~NPC 自立建国~~ → `create_kingdom`（已实现，**实验性功能：未经实机测试，为未来功能提前做的准备**）<br>
+基于同一套 `tools` 机制，真正的待办（未实现）：
+- **NPC 自立建国 → `create_kingdom`**（已实现，**实验性功能：未经实机测试，为未来功能提前做的准备**）<br>
   封臣/独立氏族领袖自立建国。实现要点：
   - **API 无阻碍**：`Campaign.Current.KingdomManager.CreateKingdom(name, informalName, culture, founderClan, ...)` 是公开方法、接受任意氏族为 founder（原版玩家建国 GovernorCampaignBehavior 逐字调用）；`Kingdom.CreateKingdom(string)` 静态工厂在反编译源码里。旧笔记里的"构造函数不在源码 / DefaultKingdomCreationModel 硬编码玩家"两个阻碍均不成立（后者只是玩家 UI 门槛，本工具自己做运行时校验）。
   - **门槛对齐原版**：读 `Campaign.Current.Models.KingdomCreationModel`（tier4 + 城镇/城堡≥1 + 兵≥100[守军+野战健康数]）。
