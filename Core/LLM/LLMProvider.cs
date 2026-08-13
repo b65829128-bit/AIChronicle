@@ -28,6 +28,9 @@ namespace AIChronicle
 
         /// <summary>是否发送 stream_options.include_usage（OpenAI 标准，绝大多数端点支持）。</summary>
         public bool SupportsStreamOptionsUsage { get; init; } = true;
+
+        /// <summary>额外的请求体参数（厂商特有参数，如 GLM 的 clear_thinking），构建请求时浅合并到 payload。</summary>
+        public JObject? ExtraBodyParams { get; init; }
     }
 
     /// <summary>归一化的流式增量块。provider 负责把厂商差异解析成这个统一结构，业务代码不感知厂商。</summary>
@@ -96,6 +99,7 @@ namespace AIChronicle
     {
         OpenAICompatible = 0,
         DeepSeek = 1,
+        GLM = 2,
     }
 
     /// <summary>Provider 工厂：按接口类型返回对应实现。新增厂商（非 OpenAI 兼容）在此扩展。</summary>
@@ -104,6 +108,7 @@ namespace AIChronicle
         public static ILLMProvider Create(LLMProviderKind type) => type switch
         {
             LLMProviderKind.DeepSeek => new DeepSeekProvider(),
+            LLMProviderKind.GLM => new GLMProvider(),
             _ => new OpenAICompatibleProvider()
         };
     }

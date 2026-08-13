@@ -44,6 +44,13 @@ namespace AIChronicle
             if (Capabilities.SupportsReasoningEffort && !string.IsNullOrEmpty(request.ReasoningEffort))
                 payload["reasoning_effort"] = request.ReasoningEffort;
 
+            // 厂商特有的额外请求体参数（声明式，如 GLM 的 clear_thinking）
+            if (Capabilities.ExtraBodyParams != null)
+            {
+                foreach (var kv in Capabilities.ExtraBodyParams)
+                    payload[kv.Key] = kv.Value;
+            }
+
             var http = new HttpRequestMessage(HttpMethod.Post, request.Url)
             {
                 Content = new StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
