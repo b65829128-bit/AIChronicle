@@ -415,9 +415,10 @@ namespace AIChronicle
                                     }
                                 }))
                             };
-                            // reasoning 回传：仅当 provider 声明支持（DeepSeek 需要续接跨轮思考，其他端点回传易 400）
+                            // reasoning 回传：仅当 provider 声明支持（DeepSeek 需要续接跨轮思考，其他端点回传易 400）；
+                            // 字段名从能力声明取，与捕获字段一致
                             if (provider.Capabilities.ReturnReasoningInAssistant && !string.IsNullOrEmpty(entry.ReasoningContent))
-                                msg["reasoning_content"] = entry.ReasoningContent;
+                                msg[provider.Capabilities.ReasoningContentField] = entry.ReasoningContent;
                             list.Add(msg);
                         }
                         else
@@ -646,9 +647,10 @@ namespace AIChronicle
                     ["content"] = roundText,
                     ["tool_calls"] = new JArray(roundToolCalls)
                 };
-                // reasoning 回传仅当 provider 声明支持（DeepSeek 续接跨轮思考；其他端点回传易 400）
+                // reasoning 回传仅当 provider 声明支持（DeepSeek 续接跨轮思考；其他端点回传易 400）；
+                // 字段名从能力声明取，与捕获字段一致
                 if (provider.Capabilities.ReturnReasoningInAssistant && !string.IsNullOrEmpty(roundReasoning))
-                    assistantMsg["reasoning_content"] = roundReasoning;
+                    assistantMsg[provider.Capabilities.ReasoningContentField] = roundReasoning;
                 messageList.Add(assistantMsg);
 
                 foreach (var rt in roundToolCalls)
