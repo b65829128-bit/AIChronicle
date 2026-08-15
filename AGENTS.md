@@ -112,6 +112,8 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1
 
 > ⚠️ **`_Module/` 目录（含 `Prompts/`、`GUI/`、`SubModule.xml`）也在 build 时拷到游戏 Modules。纯提示词改动也必须 build 才生效**——只改项目里的 `.txt`/`.json` 不 build，游戏里一直是旧版。
 
+> ⚠️ **构建后校验部署的 `SubModule.xml` 非空**：`Bannerlord.BuildResources` 的 `ReplaceFileText` 步骤会用「截断再重写」的方式回写 `Modules/AIChronicle/SubModule.xml`（非原子），偶发情况下（与其他进程读取撞上）会把它写成 0 字节，导致启动器报 `Root element is missing`。构建完成后确认该文件约 2KB、非空；若为 0 字节，直接把 `_Module/SubModule.xml` 复制过去覆盖即可。
+
 ## 5. Harmony 两个致命坑（必读）
 
 1. **`PatchAll()` 静默跳过未初始化类型**：`harmony.PatchAll()` 在 `OnSubModuleLoad` 时执行，此时 `TaleWorlds.CampaignSystem.CampaignBehaviors` 命名空间下的类（如 `KingdomDecisionProposalBehavior`）尚未初始化，`[HarmonyPatch]` 属性会**静默跳过**（不生效也不报错）。**解决**：这类补丁在 `OnGameStart` 中用 `Type.GetType("FullName, Assembly")` + `harmony.Patch(...)` **手动注册**。

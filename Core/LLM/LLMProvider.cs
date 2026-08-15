@@ -23,8 +23,11 @@ namespace AIChronicle
         /// <summary>usage 对象中缓存命中 token 的字段名（如 DeepSeek 的 "prompt_cache_hit_tokens"）；空 = 无缓存统计。</summary>
         public string CacheHitField { get; init; } = "";
 
-        /// <summary>usage 对象中缓存未命中 token 的字段名；空 = 无缓存统计。</summary>
+        /// <summary>usage 对象中缓存未命中 token 的字段名；空 = 无缓存统计或由「总输入 - 命中」推算。</summary>
         public string CacheMissField { get; init; } = "";
+
+        /// <summary>usage 对象中输入 token 总数的字段名（支持点分嵌套路径）。仅当端点只报告缓存命中而不报告未命中（如 Qwen）时使用：未命中 = 总数 - 命中。</summary>
+        public string PromptTokensField { get; init; } = "";
 
         /// <summary>是否发送 stream_options.include_usage（OpenAI 标准，绝大多数端点支持）。</summary>
         public bool SupportsStreamOptionsUsage { get; init; } = true;
@@ -45,6 +48,8 @@ namespace AIChronicle
         public string FinishReason = "";
         public long CacheHit;
         public long CacheMiss;
+        /// <summary>末尾帧的原始 usage JSON（用于诊断缓存字段是否真的返回，如 Qwen 的 prompt_tokens_details.cached_tokens）。</summary>
+        public string RawUsageJson = "";
     }
 
     /// <summary>流式工具调用的一条增量（业务代码按 Index 跨 chunk 累积）。</summary>
@@ -104,6 +109,7 @@ namespace AIChronicle
         DeepSeek = 1,
         GLM = 2,
         MiMo = 3,
+        Qwen = 4,
     }
 
     /// <summary>Provider 工厂：按接口类型返回对应实现。新增厂商（非 OpenAI 兼容）在此扩展。</summary>
@@ -114,6 +120,7 @@ namespace AIChronicle
             LLMProviderKind.DeepSeek => new DeepSeekProvider(),
             LLMProviderKind.GLM => new GLMProvider(),
             LLMProviderKind.MiMo => new MiMoProvider(),
+            LLMProviderKind.Qwen => new QwenProvider(),
             _ => new OpenAICompatibleProvider()
         };
     }

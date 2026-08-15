@@ -177,6 +177,7 @@
 - **自省 = 处理自身事务**（intent `self_review`）：一次激活只做一件**自包含**的事——派密使、进谏/密陈、整备军队、移防自保、处置战俘、思量立场（叛变/叛逃/自立）、`record_resolve` 记决心，或按兵不动
 - **一次性行动原则**：命令一经发出立即执行完毕，无后续激活续接——因此**不支持**招兵/买粮/升级等"先到定居点、到达后再行动"的链式（工具已剔除），也不支持 `send_letter`（级联烧钱）
 - **自省前先读日记**：提示词要求先 `read_file decisions/diary.txt` 回顾那些没有「结果」标记的计策/承诺/计划（仍视为进行中），`chat_logs/` 比日记新则以聊天为准；记忆巩固（`MemoryConsolidator`）在自省前静默补记
+- **自省时留意国王诏令（仅封臣）**：封臣自省摘要会提示国王今年是否颁布过诏令（附最近一条发布时间），引导其进谏前 `read_file` 读本国当年诏令；无当年诏令则不提示，避免反复读往年陈旧诏令
 - **公开谏言**（`submit_advisory`）：自省时若认为国王该知道某件事，可进谏——归档 `World/advisory/{王国}_{年}.txt`（时间戳+姓名+头衔，按年封存），史官可读、可入编年史
 - **秘密谏言**（`submit_secret_advisory`）：不适合被历史记录或旁人知晓的事，密陈给国王（`World/secret_advisory/`，**仅本国国王可读、不入史册**）。玩家国王按 H 键可查本国密陈
 - 国王的外交提示词仍注入"先阅读封臣谏言"的指引，但国王保留绝对决策权；玩家 H 键可查本国公开谏言与诏令
@@ -199,7 +200,7 @@
 - 国王 Agent 政务审视时，可向国内颁布**公开诏令**（`submit_edict` 工具）：宣示治国方针、回应群臣谏言、或向封臣垂询政务
 - 诏令公开归档到 `World/edict/{王国}_{年份}.txt`（带时间戳、姓名、头衔，按年分文件封存），**只有王国统治者可颁布**——非国王调用会被系统拒绝
 - **史官可读任何国家的诏令**（作为补充视角，与谏言相互印证）；本国封臣/国王可读本国诏令，**他国人员不可读**；**玩家 H 键可查看本国诏令**（「国王诏令 · 王国 · 第X年」）
-- **闭环**：封臣进谏前先读国王的公开诏令，了解王上的旨意与垂询；若国王在诏令中垂询某事，封臣应在谏言中回应——国王诏令与封臣谏言构成国内政务的往来闭环
+- **闭环**：封臣进谏前先读国王的公开诏令，了解王上的旨意与垂询；若国王在诏令中垂询某事，封臣应在谏言中回应——国王诏令与封臣谏言构成国内政务的往来闭环（封臣自省时由系统提示读当年诏令——仅封臣、当年有诏令才提示）
 - **政务激活时国王不再写信**：`send_letter` 回归"仅私人通信"（回信仍可用），外交审视期间禁止主动写信——向国内发声用诏令，外交动作用对应 function
 
 ### 国王外交问询（跨国外交有限沟通）
@@ -397,10 +398,10 @@ _Module/Prompts/
 | API 地址（兜底） | 全局兜底 LLM API 端点。各场景留空的字段回退到这里 | `https://api.deepseek.com/v1/chat/completions` |
 | 模型名称（兜底） | 全局兜底模型名称。各场景留空的字段回退到这里 | `deepseek-v4-flash` |
 | API 密钥（兜底） | 全局兜底 API 密钥。各场景留空的字段回退到这里 | 空（需自行填入） |
-| 接口类型 | 厂商接口方言（声明式，不做运行时探测）。「OpenAI 兼容」= 通用（MiniMax / Qwen / 豆包 等）；「DeepSeek」= reasoning/缓存扩展；「GLM」= 智谱；「MiMo」= 小米 | `DeepSeek` |
+| 接口类型 | 厂商接口方言（声明式，不做运行时探测）。「OpenAI 兼容」= 通用（MiniMax / 豆包 等）；「DeepSeek」= reasoning/缓存扩展；「GLM」= 智谱；「MiMo」= 小米；「Qwen（百炼）」= 通义千问（思考全开 + 嵌套缓存统计），推荐配 `qwen3.7-flash` | `DeepSeek` |
 | 最大 Token 数 | **全模组统一**的 AI 单次回复 token 上限（含 persona 生成、连接测试）。DeepSeek V4 最高 384K 输出；默认 32768 足够长编年史/长思考，特殊场景可上调至 65536 | `32768` |
 | 回复创造性 | Temperature 值，越低越稳定保守 | `0.8` |
-| 思考强度 (reasoning_effort) | AI 思考强度（成本大头，见下）。史官固定 high 不受此设置影响；部分模型不支持该参数则不生效 | `low` |
+| 思考强度 (reasoning_effort) | AI 思考强度（成本大头，见下）。DeepSeek/GLM 发 `reasoning_effort`；Qwen（百炼）映射为 `thinking_budget`（思考长度上限：low=4096 / high=16384 / max=262144）。史官固定 high 不受此设置影响；部分模型不支持该参数则不生效 | `low` |
 | API 超时（秒） | 请求超时时间（含流式响应的整段超时；已不再受 30 秒硬上限限制） | `60` |
 | Test Connection | 测试兜底连接（含 function calling 支持检测） | — |
 
@@ -477,10 +478,13 @@ _Module/Prompts/
 | 后端 | URL |
 |------|-----|
 | DeepSeek | `https://api.deepseek.com/v1/chat/completions` |
+| 阿里云百炼（Qwen，推荐 `qwen3.7-flash`） | `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions` |
 | OpenAI | `https://api.openai.com/v1/chat/completions` |
 | 本地 Ollama | `http://localhost:11434/v1/chat/completions` |
 | 其他兼容接口 | 自定义 |
 
+> **Qwen（百炼）成本提示**：`qwen3.7-flash` 输入 0.2 元/M、输出 0.8 元/M（请求输入 ≤32K 档），上下文缓存命中按输入价 20%（0.04 元/M）计费——比 DeepSeek v4-flash 便宜一个数量级（尤其思考输出）。接口类型选「Qwen（百炼）」可自动开启思考模式并统计缓存命中（调试日志）。新模型另有 100 万 token 免费额度（开通起 90 天内有效）。
+> 
 > 注意：如果使用非 DeepSeek 的后端，请确保 Model 名称与你的 API 提供商匹配（如 `gpt-4o`、`qwen-plus` 等）。
 > 
 > **重要：** AI 认知更新依赖 **function calling** 机制。请确保你的模型支持 `tools` / `function calling`。点击「测试连接」按钮会自动检测此能力。
@@ -513,7 +517,14 @@ AIChronicle/
 │   ├── SafeFileIO.cs        # 带重试的文件 IO（并发读写同一文件时避免"文件正被使用"异常）
 │   ├── MainThreadExecutor.cs # 主线程分发器（后台线程工具执行回主线程，防跨线程崩溃）
 │   ├── TtsService.cs        # 语音合成门面（ITtsProvider 接口 + 合成/缓存/播放/打断）
-│   └── EdgeTtsProvider.cs   # Edge TTS 免费引擎实现（手写 WebSocket 客户端，可设浏览器 UA）
+│   ├── EdgeTtsProvider.cs   # Edge TTS 免费引擎实现（手写 WebSocket 客户端，可设浏览器 UA）
+│   └── LLM/                 # LLM 厂商兼容层（Provider 抽象，声明式厂商差异）
+│       ├── LLMProvider.cs   # ILLMProvider 接口 + 能力声明 LLMCapabilities + 统一数据结构
+│       ├── OpenAICompatibleProvider.cs # 通用 OpenAI 兼容实现（宽容解析：空 choices/内联 think）
+│       ├── DeepSeekProvider.cs # DeepSeek 扩展（reasoning 回传 / 缓存字段 / reasoning_effort）
+│       ├── GLMProvider.cs   # 智谱（clear_thinking 保留式思考）
+│       ├── MiMoProvider.cs  # 小米（thinking 开关 / max_completion_tokens）
+│       └── QwenProvider.cs  # 阿里云百炼 Qwen（enable_thinking 思考全开 + 嵌套缓存统计）
 ├── Agents/                  # Agent 核心：上下文、调度、记忆
 │   ├── AgentManager.cs      # Agent 管理器基类（NPC 文件系统、路径权限、persona 生成）
 │   ├── AgentManager.Files.cs / Threads.cs / Proposals.cs / Permissions.cs  # 文件工具/书信水位/外交提案/权限模型
@@ -584,6 +595,7 @@ AIChronicle/
 - **军团感知修复**：`query_party_troops` 全量报告新增军团段（隶属/军团长/全军合计兵力/成员名单），近距与远方侦察附军团隶属，自省基准状态 `BuildSelfStatus` 也带全军兵力——AI 身处军团时不再误以为只带本部人马（此前曾以 200 本部 vs 300 守军做围攻决策）
 - **激活完成声明**：国王政务/封臣自省/夺封审视/问询回应/密使回应等激活补上**结束提示**（绿色，与开始的青色区分）——「xxx 已处理完内外政务」「xxx 已完成对自己的审视」等，玩家不再困惑"只有开始没有结束"
 - **场景连接**：`self_review` / `envoy_reply` 复用「封臣谏言」场景，不新增配置组
+- **新增「Qwen（百炼）」接口类型**：`QwenProvider`（OpenAI 兼容 + `enable_thinking` 思考全开 + `prompt_tokens_details.cached_tokens` 嵌套缓存统计）。推荐配 `qwen3.7-flash`（输入 0.2 元/M、输出 0.8 元/M，缓存命中 0.04 元/M）——DeepSeek v4-flash 自 2026-08-17 起峰谷定价（高峰输出 9 元/M），Qwen 输出价仅其 1/11。多轮工具调用不回传 reasoning（Qwen 无需回传，回传反而按输入计费）
 
 ### v2.2.2 更新要点
 

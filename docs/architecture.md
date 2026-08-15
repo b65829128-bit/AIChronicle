@@ -87,6 +87,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | `DeepSeekProvider.cs` | OpenAI 兼容 + DeepSeek 扩展（`reasoning_content` 回传、`prompt_cache_hit_tokens` 缓存字段、`reasoning_effort` 参数） |
 | `GLMProvider.cs` | 继承 DeepSeek + `clear_thinking: false`（保留式思考）；缓存字段嵌套不做统计 |
 | `MiMoProvider.cs` | 继承 DeepSeek + `thinking` 开关 + `max_completion_tokens`；多轮工具调用必须回传 reasoning（否则 400） |
+| `QwenProvider.cs` | 继承 OpenAICompatible + `enable_thinking: true`（思考全开，v2.3.0 用户决策）+ 嵌套缓存统计（`usage.prompt_tokens_details.cached_tokens`，未命中=总数-命中推算）；多轮不回传 reasoning（Qwen `preserve_thinking` 默认 false，回传反而按输入计费）。**思考量用 `thinking_budget`（长度上限）控制**：Qwen 无 `reasoning_effort`，按官方档位映射 MCM 思考强度——low=4096 / high=16384(medium) / max=262144(xhigh)，史官(null)按 high 档 |
 
 **核心原则：**
 
@@ -94,7 +95,9 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 2. **OpenAI 兼容是通用底座。** MiniMax/Qwen/GLM/豆包/DeepSeek 全都讲 OpenAI 兼容协议，共用一个 `OpenAICompatibleProvider`。DeepSeek 只是"OpenAI 兼容 + 少量扩展字段"，单独一个 `DeepSeekProvider` 打开这些扩展，而非重写协议。
 3. **宽容解析内置在通用层。** 空 `choices:[]`、内联 `<think>` 标签剥离、`[DONE]` 结束等，是 OpenAI 兼容端点的常见行为，由通用 provider 无条件宽容处理（对 DeepSeek 是 no-op），**不是厂商特判**。
 
-**扩展方式**：新增厂商 = 先判断它是不是 OpenAI 兼容——是则直接配 URL/模型（无需改码）；不是（如 Anthropic 的 Messages API）才新增一个 provider 实现。**绝不在 `AIChatClient`/`AgentManager` 的业务逻辑里加厂商 `if`。**
+**扩展方式**：新增厂商 = 先判断它是不是 OpenAI 兼容——是则直接配 URL/模型（无需改码）；不是（如 Anthropic 的 Messages API）才新增一个 provider 实现。**绝不在 `AIChatClient`/`AgentManager` 的业务逻辑里加厂商 `if`。**（Qwen/百炼即是 OpenAI 兼容：通用层可直接用，`QwenProvider` 仅为其打开思考开关与缓存统计两项声明式扩展。）
+
+> **缓存统计字段差异**：DeepSeek 用平铺字段 `prompt_cache_hit_tokens`/`prompt_cache_miss_tokens`；Qwen 用嵌套字段 `usage.prompt_tokens_details.cached_tokens`（只报命中不报未命中，未命中 = `prompt_tokens - cached_tokens` 推算）。`LLMCapabilities` 相应支持 `PromptTokensField`（点分嵌套路径），`CacheMissField` 留空时自动走推算分支。调试日志的命中率统计对两类端点统一生效。
 
 ### 屎山教训（为什么禁止运行时探测）
 
@@ -394,7 +397,8 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │       ├── OpenAICompatibleProvider.cs ← 通用 OpenAI 兼容实现（宽容解析：空 choices/内联 think）
 │       ├── DeepSeekProvider.cs ← DeepSeek 扩展（reasoning 回传 / 缓存字段 / reasoning_effort）
 │       ├── GLMProvider.cs      ← 智谱（clear_thinking 保留式思考）
-│       └── MiMoProvider.cs     ← 小米（thinking 开关 / max_completion_tokens）
+│       ├── MiMoProvider.cs     ← 小米（thinking 开关 / max_completion_tokens）
+│       └── QwenProvider.cs     ← 阿里云百炼 Qwen（enable_thinking 思考全开 / 嵌套缓存统计）
 ├── Agents/                     ← Agent 核心：上下文、调度、记忆
 │   ├── AgentManager.cs         ← Agent 管理器基类（NPC 文件系统、路径权限、persona 生成）
 │   ├── AgentManager.Files.cs   ← 文件工具执行（read/write/edit/delete/move/glob/grep/list）

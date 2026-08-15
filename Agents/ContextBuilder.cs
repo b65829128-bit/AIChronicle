@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
 using TaleWorlds.CampaignSystem.Party;
@@ -648,7 +649,7 @@ namespace AIChronicle
                 + "- 经营家族：整备军队、移防自保、处置战俘\n"
                 + "- 经营关系：向某人示好、馈赠，或疏远\n"
                 + "- 互通消息：派密使联络某位家族领袖或某国国王（向自家王上进言用进谏，不派使者）\n"
-                + "- 进谏或密陈：若你认为国王该知道某件事\n"
+                + "- 进谏或密陈：若你认为国王该知道某件事；进谏前先留意国王近期有无新诏令（系统若提示今年有诏令，先 read_file 阅读 edict/ 下本国当年的诏令）\n"
                 + "- 思量立场：是否满足于现状，是否该另谋出路（可考虑叛变、叛逃，乃至自立建国）\n"
                 + "- 立下决心：用 record_resolve 记入日记\n\n"
                 + "注意：你这次的命令一经发出便会立即执行完毕，不会有后续的询问来请你「下一步怎么办」。所以此刻只做一件当场就能完成的事；需要「先到某处、到达后再行动」的事，留到下次自省时再定夺。\n\n"
@@ -710,6 +711,11 @@ namespace AIChronicle
                     int rel = 0;
                     try { rel = CharacterRelationManager.GetHeroRelation(hero, ruler); } catch { }
                     sb.AppendLine($"你是 {kingdom.Name} 的封臣，君主是 {rulerName}，你们的关系 {rel} 点。");
+
+                    // 国王诏令提示（仅封臣）：当年有诏令才提醒，附最近一条时间，避免反复读往年陈旧诏令。
+                    var edictNote = BuildEdictNote(hero, kingdom);
+                    if (edictNote.Length > 0)
+                        sb.AppendLine(edictNote);
                 }
             }
             else
@@ -746,6 +752,49 @@ namespace AIChronicle
             catch { }
 
             return sb.ToString().TrimEnd();
+        }
+
+        /// <summary>
+        /// 国王诏令提示（仅封臣调用）：当年（edict/{王国}_{年}.txt）存在且非空时返回一句提示，
+        /// 并附最近一条诏令的发布时间，引导封臣进谏前读王上最新旨意；无当年诏令则返回空串——
+        /// 往年陈旧诏令一律不提醒，避免封臣每次自省都机械读旧诏令。
+        /// </summary>
+        private static string BuildEdictNote(Hero hero, Kingdom kingdom)
+        {
+            if (hero == null || kingdom == null) return "";
+            if (string.IsNullOrEmpty(PromptManager.CampaignDir)) return "";
+
+            try
+            {
+                var kingdomName = kingdom.Name?.ToString();
+                if (string.IsNullOrEmpty(kingdomName)) return "";
+
+                var currentYear = CampaignTime.Now.GetYear;
+                var edictFile = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "edict",
+                    $"{kingdomName}_{currentYear}.txt");
+                if (!File.Exists(edictFile)) return "";
+
+                var lines = SafeFileIO.ReadAllLines(edictFile);
+                if (lines.Length == 0) return "";
+
+                // 从后往前找最近一条诏令的 header（形如 "[第1089年，夏季第12日，下午] 名字（头衔）诏令："），提取日期部分。
+                string? latestDate = null;
+                for (var i = lines.Length - 1; i >= 0; i--)
+                {
+                    if (string.IsNullOrWhiteSpace(lines[i])) continue;
+                    var m = Regex.Match(lines[i], @"第\d+年，[春夏秋冬]季第\d+日");
+                    if (m.Success)
+                    {
+                        latestDate = m.Value;
+                        break;
+                    }
+                }
+
+                return latestDate != null
+                    ? $"国王今年颁布过诏令（最近一条发于 {latestDate}），进谏前可 read_file edict/{kingdomName}_{currentYear}.txt 了解王上旨意与垂询。"
+                    : $"国王今年颁布过诏令，进谏前可 read_file edict/{kingdomName}_{currentYear}.txt 了解王上旨意与垂询。";
+            }
+            catch { return ""; }
         }
 
         /// <summary>扫描 World/correspondence/ 下含自己的线程，列出对方最新发来的密使消息（供自省时看到并决定是否回复）。</summary>

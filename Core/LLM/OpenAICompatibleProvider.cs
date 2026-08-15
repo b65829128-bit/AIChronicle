@@ -54,6 +54,8 @@ namespace AIChronicle
                     payload[kv.Key] = kv.Value;
             }
 
+            ApplyDynamicBodyParams(payload, request);
+
             var http = new HttpRequestMessage(HttpMethod.Post, request.Url)
             {
                 Content = new StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
@@ -75,8 +77,18 @@ namespace AIChronicle
             // 缓存统计：usage 可能为 null（普通帧）或对象（末尾帧）；字段名由能力声明决定。
             if (root["usage"] is JObject usageObj && !string.IsNullOrEmpty(cap.CacheHitField))
             {
-                result.CacheHit = usageObj[cap.CacheHitField]?.ToObject<long>() ?? 0;
-                result.CacheMiss = usageObj[cap.CacheMissField]?.ToObject<long>() ?? 0;
+                result.RawUsageJson = usageObj.ToString(Formatting.None);
+                result.CacheHit = GetUsageLong(usageObj, cap.CacheHitField);
+                if (!string.IsNullOrEmpty(cap.CacheMissField))
+                {
+                    result.CacheMiss = GetUsageLong(usageObj, cap.CacheMissField);
+                }
+                else if (!string.IsNullOrEmpty(cap.PromptTokensField))
+                {
+                    // 端点只报告总输入与缓存命中（如 Qwen 的 prompt_tokens + cached_tokens）→ 未命中 = 总输入 - 命中。
+                    var total = GetUsageLong(usageObj, cap.PromptTokensField);
+                    result.CacheMiss = total > result.CacheHit ? total - result.CacheHit : 0;
+                }
             }
 
             // 宽容：末尾 usage 帧可能返回 "choices":[]（空数组），直接跳过。
@@ -117,6 +129,24 @@ namespace AIChronicle
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 每请求动态参数钩子（默认无操作）。厂商如需按请求字段决定额外请求体参数
+        /// （如 Qwen 按 MCM 思考强度映射 thinking_budget），覆写此方法即可，避免动静态能力声明。
+        /// </summary>
+        protected virtual void ApplyDynamicBodyParams(JObject payload, LLMRequest request) { }
+
+        /// <summary>按点分路径读取 usage 嵌套字段（如 "prompt_tokens_details.cached_tokens"），缺失返回 0。</summary>
+        private static long GetUsageLong(JObject usage, string dottedPath)        {
+            JToken? cur = usage;
+            foreach (var part in dottedPath.Split('.'))
+            {
+                if (cur is not JObject obj) return 0;
+                cur = obj[part];
+                if (cur == null) return 0;
+            }
+            return cur.ToObject<long>();
         }
 
         public virtual LLMNonStreamResult ParseNonStreamResponse(string body)

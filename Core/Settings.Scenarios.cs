@@ -63,7 +63,7 @@ namespace AIChronicle
             }
         }
 
-        private MCM.Common.Dropdown<string> _chatProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+        private MCM.Common.Dropdown<string> _chatProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo", "Qwen（百炼）" }, 0);
 
         [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
             HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖（例如史官用 DeepSeek、其余用便宜模型）。")]
@@ -140,7 +140,7 @@ namespace AIChronicle
             }
         }
 
-        private MCM.Common.Dropdown<string> _diplomacyProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+        private MCM.Common.Dropdown<string> _diplomacyProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo", "Qwen（百炼）" }, 0);
 
         [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
             HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
@@ -217,7 +217,7 @@ namespace AIChronicle
             }
         }
 
-        private MCM.Common.Dropdown<string> _kingConsultProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+        private MCM.Common.Dropdown<string> _kingConsultProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo", "Qwen（百炼）" }, 0);
 
         [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
             HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
@@ -294,7 +294,7 @@ namespace AIChronicle
             }
         }
 
-        private MCM.Common.Dropdown<string> _fiefReviewProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+        private MCM.Common.Dropdown<string> _fiefReviewProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo", "Qwen（百炼）" }, 0);
 
         [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
             HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
@@ -371,7 +371,7 @@ namespace AIChronicle
             }
         }
 
-        private MCM.Common.Dropdown<string> _advisoryProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+        private MCM.Common.Dropdown<string> _advisoryProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo", "Qwen（百炼）" }, 0);
 
         [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
             HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
@@ -448,7 +448,7 @@ namespace AIChronicle
             }
         }
 
-        private MCM.Common.Dropdown<string> _clanReplenishmentProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+        private MCM.Common.Dropdown<string> _clanReplenishmentProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo", "Qwen（百炼）" }, 0);
 
         [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
             HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
@@ -525,7 +525,7 @@ namespace AIChronicle
             }
         }
 
-        private MCM.Common.Dropdown<string> _historianProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+        private MCM.Common.Dropdown<string> _historianProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo", "Qwen（百炼）" }, 0);
 
         [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
             HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖（史官文笔核心，可单独配 DeepSeek）。")]
@@ -602,7 +602,7 @@ namespace AIChronicle
             }
         }
 
-        private MCM.Common.Dropdown<string> _consolidationProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+        private MCM.Common.Dropdown<string> _consolidationProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo", "Qwen（百炼）" }, 0);
 
         [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
             HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
@@ -679,7 +679,7 @@ namespace AIChronicle
             }
         }
 
-        private MCM.Common.Dropdown<string> _checkInProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+        private MCM.Common.Dropdown<string> _checkInProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo", "Qwen（百炼）" }, 0);
 
         [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
             HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
@@ -756,7 +756,7 @@ namespace AIChronicle
             }
         }
 
-        private MCM.Common.Dropdown<string> _chanceryProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 0);
+        private MCM.Common.Dropdown<string> _chanceryProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo", "Qwen（百炼）" }, 0);
 
         [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
             HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]

@@ -540,6 +540,8 @@ namespace AIChronicle
 
                     totalCacheHit += chunk.CacheHit;
                     totalCacheMiss += chunk.CacheMiss;
+                    if (!string.IsNullOrEmpty(chunk.RawUsageJson))
+                        DebugLogger.Log($"LLM usage intent={intent} agent={hero?.Name?.ToString() ?? "?"} round={round} {chunk.RawUsageJson}");
                     if (!string.IsNullOrEmpty(chunk.FinishReason))
                         roundFinishReason = chunk.FinishReason;
                     if (!string.IsNullOrEmpty(chunk.Text))

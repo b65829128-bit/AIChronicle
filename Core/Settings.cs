@@ -69,10 +69,10 @@ namespace AIChronicle
             }
         }
 
-        private MCM.Common.Dropdown<string> _llmProviderType = new(new[] { "OpenAI 兼容", "DeepSeek", "GLM", "MiMo" }, 1);
+        private MCM.Common.Dropdown<string> _llmProviderType = new(new[] { "OpenAI 兼容", "DeepSeek", "GLM", "MiMo", "Qwen（百炼）" }, 1);
 
         [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
-            HintText = "LLM 厂商接口方言。OpenAI 兼容 = 通用（MiniMax / Qwen / 豆包 等）；DeepSeek = reasoning/缓存扩展；GLM = 智谱（clear_thinking）；MiMo = 小米（thinking 开关 + max_completion_tokens）。\n厂商差异靠此声明式选择，不做运行时探测。")]
+            HintText = "LLM 厂商接口方言。OpenAI 兼容 = 通用（MiniMax / Qwen / 豆包 等）；DeepSeek = reasoning/缓存扩展；GLM = 智谱（clear_thinking）；MiMo = 小米（thinking 开关 + max_completion_tokens）；Qwen（百炼）= 通义千问（enable_thinking 思考全开 + 嵌套缓存统计）。\nQwen（百炼）推荐配置：URL https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions、模型 qwen3.7-flash。\n厂商差异靠此声明式选择，不做运行时探测。")]
         [SettingPropertyGroup("连接设置（兜底）")]
         public MCM.Common.Dropdown<string> LLMProviderType
         {
@@ -93,6 +93,7 @@ namespace AIChronicle
             "DeepSeek" => LLMProviderKind.DeepSeek,
             "GLM" => LLMProviderKind.GLM,
             "MiMo" => LLMProviderKind.MiMo,
+            "Qwen（百炼）" => LLMProviderKind.Qwen,
             _ => LLMProviderKind.OpenAICompatible
         };
 
@@ -102,6 +103,7 @@ namespace AIChronicle
             "DeepSeek" => LLMProviderKind.DeepSeek,
             "GLM" => LLMProviderKind.GLM,
             "MiMo" => LLMProviderKind.MiMo,
+            "Qwen（百炼）" => LLMProviderKind.Qwen,
             "OpenAI 兼容" => LLMProviderKind.OpenAICompatible,
             _ => ProviderType
         };
@@ -772,7 +774,7 @@ namespace AIChronicle
         private MCM.Common.Dropdown<string> _reasoningEffort = new(new[] { "low", "high", "max" }, 0);
 
         [SettingPropertyDropdown("思考强度 (reasoning_effort)", Order = 9, RequireRestart = false,
-            HintText = "AI 思考强度（DeepSeek reasoning_effort）。这是成本大头：思考按输出价计费（flash 2元/M），默认 high 时每次决策都会产生大量思维链。\nlow=最省 token、决策更直接；high=更周全但更贵；max=最强推理。\n史官固定为 high（文笔核心），不受此设置影响。\n部分模型（非思考模式或不支持该参数的端点）此设置不生效。")]
+            HintText = "AI 思考强度。这是成本大头：思考按输出价计费，默认 high 时每次决策都会产生大量思维链。\nDeepSeek/GLM：直接发 reasoning_effort（low/high/max）。\nQwen（百炼）：无 reasoning_effort，改映射为 thinking_budget（思考长度上限）——low=4096、high=16384(medium)、max=262144(xhigh)。\nlow=最省 token、决策更直接；high=更周全但更贵；max=最强推理。\n史官固定为 high，不受此设置影响。\n部分模型（非思考模式或不支持该参数的端点）此设置不生效。")]
         [SettingPropertyGroup("连接设置（兜底）")]
         public MCM.Common.Dropdown<string> ReasoningEffort
         {
