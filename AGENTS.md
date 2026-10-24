@@ -3,6 +3,8 @@
 > 本文件是 AI 开发入口（面向 DSH / opencode 等 agent，也面向人类贡献者）。**常驻硬规则与速览在此**；详细机制、工具清单、调试方法、Harmony 模式等见 `docs/`（用 `read` 工具按需查阅，不要凭记忆）。
 >
 > 交叉参考：实现功能前先读 `README_MOD.md`（模组能做什么），再读本文件（怎么做）。两份文档互为补充。
+>
+> **主开发环境已迁移到 Linux**（Arch/CachyOS）。构建、部署、打包、日志与调试边界见 `docs/linux-dev.md`；Windows 仅保留 net6/Xbox 构建和需要 dnSpy/附加调试的场景。
 
 ## 0. 文档维护规则（最重要，AI 必读）
 
@@ -36,7 +38,7 @@
 
 ## 1. 路径规则
 
-文件操作可用**相对路径**（工具默认解析到项目根目录）或**绝对路径**均可。不要用 `/c/...` 形式（Windows 下无效）。
+文件操作可用**相对路径**（工具默认解析到项目根目录）或**绝对路径**均可。Linux 下直接用 `/...` 形式；不要用 `C:\...` 或 Git Bash 的 `/c/...`。仓库根目录：`~/项目/AIChronicle`；游戏根目录由 `local.props`（已 gitignore）或环境变量 `BANNERLORD_GAME_DIR` 提供。
 
 ## 2. 硬规则（不可违反）
 
@@ -46,7 +48,7 @@
 
 ### 2.2 禁区
 
-- **`BLSource/`**：反编译的游戏源码（6288 文件），只读参考——**绝不修改、绝不删除、绝不提交**
+- **`BLSource/`**：反编译的游戏源码（7375 个 .cs 文件，约 118MB），只读参考——**绝不修改、绝不删除、绝不提交**
 - **`_Module/Prompts/Campaigns/`**：运行时生成的战役存档数据——**绝不提交**
 
 ### 2.3 信息隔离硬约束
@@ -56,7 +58,7 @@
 ### 2.4 工程健壮性守则（防膨胀、保可维护）
 
 - **类大小控制**：单个类文件原则上不超过 ~1000 行。接近时按领域拆成 partial（如 `ToolExecutor.*.cs`）或拆出独立类。
-- **依赖引入需审批**：原则上不引入新第三方库（当前 NuGet 仅 NAudio）。若某功能用第三方库可显著降低维护成本，**先向用户说明引入理由、备选方案、体积/许可影响，经明确同意后才添加**。同时评估与其他模组的 DLL 冲突风险（同名/同版本覆盖、共享库版本冲突），权衡权始终在开发者。
+- **依赖引入需审批**：原则上不引入新的**运行时**第三方库（当前运行时 NuGet 仅 NAudio）。Linux 编译另用 `Microsoft.NETFramework.ReferenceAssemblies`（编译期参考程序集，不复制进发布包）；`Bannerlord.BuildResources` 仍是原有构建期包。若某功能用第三方库可显著降低维护成本，**先向用户说明引入理由、备选方案、体积/许可影响，经明确同意后才添加**。同时评估与其他模组的 DLL 冲突风险（同名/同版本覆盖、共享库版本冲突），权衡权始终在开发者。
 - **新功能可维护性**：遵循现有分层（Core/Agents/Entities/Tools/UI/Systems），复用现有基础设施（SafeFileIO / MainThreadExecutor / AgentScheduler 事件队列 / DebugLogger），不重复造轮子。工具、事件、补丁等新入口必须登记到对应清单并同步文档。
 
 ## 3. 架构速览
@@ -96,23 +98,34 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 ## 4. 构建与部署
 
-```powershell
-# 编译 + 自动部署（BANNERLORD_GAME_DIR 已设置）
-cd "C:\Users\<用户名>\BLMods\AIChronicle"
-dotnet build -c Release
+Linux 是主工作流。游戏路径由 `local.props` 提供（模板 `local.props.example`；环境变量 `BANNERLORD_GAME_DIR` 优先）。
+
+```bash
+cd ~/项目/AIChronicle
+
+# 编译 + 自动部署（Linux 上 TargetFrameworks 自动只有 net472）
+dotnet build -c Release -f net472
 
 # 全量编译（增量编译可能掩盖文件损坏，定期执行）
-dotnet clean -c Release && dotnet build -c Release
+dotnet clean -c Release && dotnet build -c Release -f net472
 
-# 打包发布版（编译+部署+打包一步完成，产物 dist/AIChronicle_v<版本>.zip）
-powershell -ExecutionPolicy Bypass -File scripts\package.ps1
+# 打包发布版（编译 + 部署 + 打包，产物 dist/AIChronicle_v<版本>.zip）
+python3 scripts/package.py
 ```
 
-部署后 DLL 自动复制到 `D:\steam\steamapps\common\Mount & Blade II Bannerlord\Modules\AIChronicle\bin\Win64_Shipping_Client\AIChronicle.dll`。
+部署后 DLL 自动复制到 `$BANNERLORD_GAME_DIR/Modules/AIChronicle/bin/Win64_Shipping_Client/AIChronicle.dll`（本机游戏根目录见 `local.props`）。
 
 > ⚠️ **`_Module/` 目录（含 `Prompts/`、`GUI/`、`SubModule.xml`）也在 build 时拷到游戏 Modules。纯提示词改动也必须 build 才生效**——只改项目里的 `.txt`/`.json` 不 build，游戏里一直是旧版。
 
-> ⚠️ **构建后校验部署的 `SubModule.xml` 非空**：`Bannerlord.BuildResources` 的 `ReplaceFileText` 步骤会用「截断再重写」的方式回写 `Modules/AIChronicle/SubModule.xml`（非原子），偶发情况下（与其他进程读取撞上）会把它写成 0 字节，导致启动器报 `Root element is missing`。构建完成后确认该文件约 2KB、非空；若为 0 字节，直接把 `_Module/SubModule.xml` 复制过去覆盖即可。
+> ⚠️ **构建后校验部署的 `SubModule.xml` 非空**：`Bannerlord.BuildResources` 的 `ReplaceFileText` 步骤会用「截断再重写」的方式回写 `Modules/AIChronicle/SubModule.xml`（非原子），偶发情况下（与其他进程读取撞上）会把它写成 0 字节，导致启动器报 `Root element is missing`。构建完成后确认该文件约 2KB、非空：
+
+```bash
+stat -c '%s' "$BANNERLORD_GAME_DIR/Modules/AIChronicle/SubModule.xml"
+```
+
+若为 0 字节，直接把 `_Module/SubModule.xml` 复制过去覆盖即可。
+
+> **运行验证边界**：游戏是 Windows 客户端，Linux 下经 Steam/Proton 运行；编译通过不等于进游戏验证。四前置已安装到 `Modules`（Harmony 2.4.2.248 / ButterLib 2.11.1 / UIExtenderEx 2.13.3 / MCM 5.12.2），进档前备份存档。详见 `docs/linux-dev.md`。
 
 ## 5. Harmony 两个致命坑（必读）
 
@@ -131,6 +144,7 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1
 | `docs/tools-reference.md` | 70 工具完整清单 + 工具分类系统 |
 | `docs/debugging.md` | 调试方法/日志位置/生命周期陷阱/故障排查 |
 | `docs/harmony.md` | Harmony 补丁模式/BLSource 搜索指南/创建新模组 |
+| `docs/linux-dev.md` | Linux 开发工作流（环境/构建/部署/打包/Proton 运行/日志/调试边界） |
 
 ## 7. Git 提交
 
@@ -138,18 +152,24 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1
 - 提交前 `git status` / `git diff` 检查改动
 - 提交与推送只在用户要求时执行
 
-**`.gitignore` 排除项：** `bin/`、`obj/`、`BLSource/`、`_Module/Prompts/Campaigns/`、`.idea/`、`.vscode/`、`Thumbs.db`
+**`.gitignore` 排除项：** `bin/`、`obj/`、`dist/`、`BLSource/`、`_Module/Prompts/Campaigns/`、`local.props`、`.idea/`、`.vscode/`、`Thumbs.db`
 
 ## 8. 环境概况
 
 | 项目 | 值 |
 |------|-----|
-| 游戏 | Mount & Blade II: Bannerlord v1.4.8 |
-| 游戏路径 | `D:\steam\steamapps\common\Mount & Blade II Bannerlord` |
-| .NET SDK | 9.0+ |
-| 目标框架 | net472 (Windows) + net6 (Xbox/Store) |
-| 模组框架 | Harmony 2.3.3 (运行时补丁) |
-| 四前置 | Harmony, ButterLib, UIExtenderEx, MCM (MBOptionScreen) |
+| 开发/构建 | Linux（Arch/CachyOS） |
+| 游戏 | Mount & Blade II: Bannerlord v1.4.8（Steam/Proton 的 Windows 客户端） |
+| 游戏路径 | `$BANNERLORD_GAME_DIR`（本机 `/mnt/data/SteamLibrary/steamapps/common/Mount & Blade II Bannerlord`；见 `local.props`） |
+| IDE | JetBrains Rider（Linux，Toolbox） |
+| 开发目录 | `~/项目/AIChronicle` |
+| .NET SDK | 10.0+ |
+| 目标框架 | net472（Steam；Linux/Windows）+ net6（Xbox/Store；仅 Windows） |
+| 构建期参考程序集 | `Microsoft.NETFramework.ReferenceAssemblies` 1.0.3 |
+| 模组框架 | Harmony 2.3.3（NuGet 编译）+ 2.4.2.248（本机运行时） |
+| 四前置 | Harmony 2.4.2.248, ButterLib 2.11.1, UIExtenderEx 2.13.3, MCM 5.12.2（本机已装） |
 | 语音合成 | NAudio 2.2.1 + 免费 Edge TTS（手写 WebSocket 客户端） |
+
+> **运行**：游戏通过 Steam/Proton 启动；四前置已安装到 `Modules`（版本见上），进游戏测试前备份存档。详见 `docs/linux-dev.md`。
 
 > **需求先对齐再动手**：涉及 UI 入口、功能行为、用户体验的改动，先列出方案让用户选择，不要自行判断。兼容性维护（改文件格式/存档结构/配置含义）前先问用户是否需要兼容旧存档。

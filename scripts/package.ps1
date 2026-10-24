@@ -8,7 +8,7 @@
 
   打包内容（纯净版，不含源码/战役数据）：
     - _Module\ 下的 SubModule.xml / GUI / Prompts（排除 Prompts\Campaigns\ 运行期数据）
-    - 新编译的 AIChronicle.dll（Win64_Shipping_Client）
+    - 新编译的 DLL + 运行时依赖（NAudio 等，Win64_Shipping_Client）
     - 面向玩家的文档：README_MOD.md、安装说明.txt、LICENSE
 
   用法：
@@ -24,11 +24,11 @@ Set-Location $root
 
 if (-not $SkipBuild) {
     if (-not $env:BANNERLORD_GAME_DIR) {
-        $env:BANNERLORD_GAME_DIR = "D:\steam\steamapps\common\Mount & Blade II Bannerlord"
+        Write-Host "提示：未设置 BANNERLORD_GAME_DIR，使用 local.props 中的路径。" -ForegroundColor Yellow
     }
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
     Write-Host "[1/3] 编译 + 部署..." -ForegroundColor Cyan
-    dotnet build -c Release
+    dotnet build -c Release -f net472
     if ($LASTEXITCODE -ne 0) { throw "编译失败" }
 } else {
     Write-Host "[1/3] 跳过编译（-SkipBuild）" -ForegroundColor Yellow
@@ -48,10 +48,11 @@ Copy-Item "_Module\Prompts" (Join-Path $staging "Prompts") -Recurse
 $campaigns = Join-Path $staging "Prompts\Campaigns"
 if (Test-Path $campaigns) { Remove-Item $campaigns -Recurse -Force }
 
-# 新编译的 DLL
-$dll = "bin\Release\net472\AIChronicle.dll"
+# 新编译的 DLL + 运行时依赖（NAudio 等）
+$outDir = "bin\Release\net472"
+$dll = Join-Path $outDir "AIChronicle.dll"
 if (-not (Test-Path $dll)) { throw "未找到编译产物 $dll，请先编译" }
-Copy-Item $dll (Join-Path $staging "bin\Win64_Shipping_Client\AIChronicle.dll")
+Get-ChildItem $outDir -Filter "*.dll" | Copy-Item -Destination (Join-Path $staging "bin\Win64_Shipping_Client")
 
 # 面向玩家的文档
 Copy-Item "README_MOD.md" $staging

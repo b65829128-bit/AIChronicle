@@ -94,7 +94,7 @@ InformationManager.DisplayMessage(new InformationMessage("Hello", Colors.Green))
 
 ## 6. 使用 BLSource 搜索游戏逻辑
 
-BLSource 包含完整的反编译游戏源码（6288 个 .cs 文件），供 AI 搜索和理解游戏内部实现。常用搜索路径：
+BLSource 包含完整的反编译游戏源码（7375 个 .cs 文件），供 AI 搜索和理解游戏内部实现。常用搜索路径：
 
 | 要找的内容 | 搜索目录 |
 |-----------|---------|
@@ -115,7 +115,7 @@ BLSource 包含完整的反编译游戏源码（6288 个 .cs 文件），供 AI 
 
 ## 7. 创建新模组
 
-```powershell
-cd C:\Users\<用户名>\BLMods
+```bash
+cd ~/项目
 dotnet new blmodfx --name "新模组名"
 ```

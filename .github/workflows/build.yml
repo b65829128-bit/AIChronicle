@@ -4,15 +4,16 @@ name: Build (needs game DLLs)
 # MANUAL-ONLY (workflow_dispatch) — it will not run on push/PR and will not
 # color your repo badges red.
 #
+# The project is developed on Linux; this workflow runs on Ubuntu.
 # To use it you must provide a game-DLL source. Either:
 #
-#   A) Self-hosted runner with the game installed, then set the repository
-#      secret `BANNERLORD_GAME_DIR` to the game's install path (e.g.
-#      `D:\steam\steamapps\common\Mount & Blade II Bannerlord`), or
+#   A) A self-hosted runner with the game installed: change `runs-on` and set
+#      the repository secret `BANNERLORD_GAME_DIR` to the game's install path
+#      (e.g. `/mnt/data/SteamLibrary/steamapps/common/Mount & Blade II Bannerlord`), or
 #
-#   B) A Windows runner and a URL to a ZIP of the game's Win64_Shipping_Client
-#      DLLs in repository secret `GAME_DLLS_URL`. The ZIP must reproduce the
-#      layout the csproj expects:
+#   B) The default Ubuntu runner and a URL to a ZIP of the game's
+#      Win64_Shipping_Client DLLs in repository secret `GAME_DLLS_URL`.
+#      The ZIP must reproduce the layout the csproj expects:
 #        bin/Win64_Shipping_Client/*.dll
 #        Modules/Native/bin/Win64_Shipping_Client/*.dll
 #        Modules/SandBox/bin/Win64_Shipping_Client/*.dll
@@ -21,17 +22,19 @@ name: Build (needs game DLLs)
 #        Modules/CustomBattle/bin/Win64_Shipping_Client/*.dll
 #        Modules/BirthAndDeath/bin/Win64_Shipping_Client/*.dll
 #      (only the files referenced by AIChronicle.csproj are needed).
+#      Bannerlord.exe is not required: the build passes
+#      `-p:GameBinariesFolder=Win64_Shipping_Client`.
 #
 # Until one of these is configured, run the build locally instead:
-#   $env:BANNERLORD_GAME_DIR = "D:\steam\steamapps\common\Mount & Blade II Bannerlord"
-#   dotnet build -c Release
+#   export BANNERLORD_GAME_DIR="/path/to/Mount & Blade II Bannerlord"
+#   dotnet build -c Release -f net472
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,24 +42,27 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '10.0.x'
 
-      - name: Resolve game DLLs from GAME_DLLS_URL (option B)
-        if: env.BANNERLORD_GAME_DIR == ''
+      - name: Resolve game DLLs (secret path or GAME_DLLS_URL)
         env:
           GAME_DLLS_URL: ${{ secrets.GAME_DLLS_URL }}
-          BANNERLORD_GAME_DIR: ${{ secrets.BANNERLORD_GAME_DIR }}
-        shell: pwsh
+          GAME_DIR_SECRET: ${{ secrets.BANNERLORD_GAME_DIR }}
+        shell: bash
         run: |
-          if ([string]::IsNullOrEmpty($env:GAME_DLLS_URL)) {
-            throw "No game-DLL source configured. Set the BANNERLORD_GAME_DIR secret (self-hosted runner) or the GAME_DLLS_URL secret (hosted runner). See workflow comments."
-          }
-          $dst = Join-Path $env:RUNNER_TEMP 'game'
-          New-Item -ItemType Directory -Force -Path $dst | Out-Null
-          Invoke-WebRequest -Uri $env:GAME_DLLS_URL -OutFile (Join-Path $env:RUNNER_TEMP 'game.zip')
-          Expand-Archive -Path (Join-Path $env:RUNNER_TEMP 'game.zip') -DestinationPath $dst
-          echo "BANNERLORD_GAME_DIR=$dst" >> $env:GITHUB_ENV
+          if [ -n "$GAME_DIR_SECRET" ]; then
+            echo "BANNERLORD_GAME_DIR=$GAME_DIR_SECRET" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          if [ -z "$GAME_DLLS_URL" ]; then
+            echo "No game-DLL source configured. Set the BANNERLORD_GAME_DIR secret (self-hosted runner) or the GAME_DLLS_URL secret (hosted runner). See workflow comments."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/game"
+          curl -fsSL "$GAME_DLLS_URL" -o "$RUNNER_TEMP/game.zip"
+          unzip -q "$RUNNER_TEMP/game.zip" -d "$RUNNER_TEMP/game"
+          echo "BANNERLORD_GAME_DIR=$RUNNER_TEMP/game" >> "$GITHUB_ENV"
 
       - name: Build
-        shell: pwsh
-        run: dotnet build -c Release
+        shell: bash
+        run: dotnet build -c Release -f net472 -p:GameBinariesFolder=Win64_Shipping_Client

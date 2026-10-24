@@ -2,6 +2,9 @@
 bin/
 obj/
 
+# Machine-local build config (game path)
+local.props
+
 # Release packages
 dist/
 

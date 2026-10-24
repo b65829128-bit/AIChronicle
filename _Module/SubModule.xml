@@ -22,7 +22,7 @@
   <DependedModuleMetadatas>
     <DependedModuleMetadata id="Bannerlord.Harmony" order="LoadBeforeThis" version="v2.3.3" />
     <DependedModuleMetadata id="Bannerlord.ButterLib" order="LoadBeforeThis" version="v2.10.9" />
-    <DependedModuleMetadata id="Bannerlord.UIExtenderEx" order="LoadBeforeThis" version="v2.13.7" />
+    <DependedModuleMetadata id="Bannerlord.UIExtenderEx" order="LoadBeforeThis" version="v2.13.3" />
     <DependedModuleMetadata id="Bannerlord.MBOptionScreen" order="LoadBeforeThis" version="v5.11.4" />
     <DependedModuleMetadata id="Native" order="LoadBeforeThis" />
     <DependedModuleMetadata id="SandBoxCore" order="LoadBeforeThis" />

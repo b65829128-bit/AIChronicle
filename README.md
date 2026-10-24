@@ -129,6 +129,10 @@ AIChronicle/
 └── ... (see docs/architecture.md for the full map)
 ```
 
+## Development
+
+Primary development is on Linux. See [`docs/linux-dev.md`](docs/linux-dev.md) for setup, build (`dotnet build -c Release`), packaging, Proton runtime and debugging limits. The Linux build targets Steam `net472`; `net6` (Xbox/Store) is Windows-only.
+
 ## For AI Agents (and Contributors)
 
 This repository was largely developed through an agent-driven workflow. `AGENTS.md` documents the architecture, build commands, Harmony patch patterns, and — importantly — the **documentation-maintenance rule**: every code change must be reflected in the docs. It doubles as an onboarding guide for anyone (human or AI) who wants to contribute.

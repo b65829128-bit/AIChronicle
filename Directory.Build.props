@@ -1,0 +1,4 @@
+<Project>
+  <!-- 机器相关配置（游戏路径等）放在 local.props，已被 .gitignore 排除。 -->
+  <Import Project="$(MSBuildThisFileDirectory)local.props" Condition="Exists('$(MSBuildThisFileDirectory)local.props')" />
+</Project>

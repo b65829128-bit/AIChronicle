@@ -7,6 +7,7 @@ Thank you for your interest! This is an experimental hobby project open-sourced 
 - **`README.md`** — what the mod does.
 - **`README_MOD.md`** — full Chinese feature documentation (features, UI entries, MCM settings).
 - **`AGENTS.md`** — architecture, build commands, Harmony patterns, directory map. Written for AI agents, but it's the best human onboarding guide too.
+- **`docs/linux-dev.md`** — Linux development workflow (environment, build, package, Proton runtime, logs).
 
 ## Project status / expectations
 
@@ -17,19 +18,23 @@ Thank you for your interest! This is an experimental hobby project open-sourced 
 
 ## Local build
 
-```powershell
-# 1. Set the game directory (required — references game DLLs)
-$env:BANNERLORD_GAME_DIR = "D:\steam\steamapps\common\Mount & Blade II Bannerlord"
-$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+The primary development environment is Linux. Windows is only needed for the `net6` Xbox/Store target and dnSpy/attach debugging.
 
-# 2. Build (auto-deploys to Modules\AIChronicle)
-dotnet build -c Release
+```bash
+# 1. Game path: copy local.props.example -> local.props and edit it, or export:
+export BANNERLORD_GAME_DIR="/path/to/Mount & Blade II Bannerlord"
+
+# 2. Build (Linux builds net472 only; auto-deploys to Modules/AIChronicle)
+dotnet build -c Release -f net472
 
 # 3. Full clean build when in doubt
-dotnet clean -c Release && dotnet build -c Release
+dotnet clean -c Release && dotnet build -c Release -f net472
+
+# 4. Package a release zip
+python3 scripts/package.py
 ```
 
-The project builds against game assemblies (not NuGet-only), so you need a local Bannerlord install.
+The project builds against game assemblies (not NuGet-only), so you need a local Bannerlord install (on Linux this is the Steam/Proton Windows install). See [`docs/linux-dev.md`](docs/linux-dev.md) for deployment, Proton runtime, logs and debugging limits.
 
 ## The documentation rule (important)
 
@@ -48,7 +53,7 @@ Changes to `AGENTS.md` / `README_MOD.md` require the author's explicit consent f
 
 ## Code conventions (summary)
 
-- Follow existing style; this is a C# net472 project (net6 for Store/Xbox) with nullable enabled.
+- Follow existing style; this is a C# net472 project (net6 for Store/Xbox on Windows) with nullable enabled.
 - Harmony patches: `PatchAll()` silently skips some campaign-behavior types — for those, register manually in `OnGameStart` via `Type.GetType` + `harmony.Patch` (see `SubModule.cs`).
 - New tools need three synchronized places: the tool definition JSON, the `ToolExecutor` switch case, and (for capability-gated tools) `ContextBuilder.CapabilityToolMap`.
 - Tool descriptions live in `tools.json` / `agent_tools.json` (English, opencode-style) — they drive tool-calling behavior, not the system prompt.
@@ -58,14 +63,14 @@ Changes to `AGENTS.md` / `README_MOD.md` require the author's explicit consent f
 
 - **Bug fixes** — please include reproduction steps and your game version.
 - **Tool / prompt improvements** — prompt files are hot-reloadable; often the highest-value, lowest-risk contribution.
-- **Tests / CI** — the project has none yet. A CI build (needs a game-DLL source — see the open discussion) would be very welcome.
+- **Tests / CI** — there is no test framework yet. The manual build workflow (`.github/workflows/build.yml`, Ubuntu) still needs a game-DLL source; local Linux builds are the primary verification.
 - **Documentation** — English docs, API-key quick-starts, setup videos.
 - **Design discussion** — the agent-driven-world concept is the real point of the project; open an issue for anything you think could be more alive.
 
 ## Pull request process
 
 1. Fork, branch, change.
-2. Compile locally (`dotnet build -c Release`, 0 errors).
+2. Compile locally (`dotnet build -c Release -f net472`, 0 errors).
 3. Update the docs per the documentation rule.
 4. Open a PR describing *what*, *why*, and *how you tested* (even "loaded a save and chatted with a lord" is useful).
 

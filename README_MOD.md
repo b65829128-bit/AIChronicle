@@ -1,6 +1,8 @@
 # AI编年史·言出法随 — 说做合一的 AI 活世模组
 
 > **交叉参考：** 实现功能前请同时阅读 **AGENTS.md**，其中包含开发环境、编译命令、Harmony 模式、BLSource 使用方法等技术细节。两份文档互为补充——README_MOD.md 告诉你模组"能做什么"，AGENTS.md 告诉你"怎么做"。
+>
+> **开发环境：** 自 2026-10 起主开发环境为 Linux；构建/部署/打包见 `docs/linux-dev.md`。玩家安装仍按下文 Windows 步骤（游戏没有 Linux 原生客户端，Linux 需 Proton）。
 
 在《骑马与砍杀2：霸主》中，与 AI 领主进行基于 LLM 的自然语言对话。
 
@@ -508,6 +510,9 @@ _Module/Prompts/
 
 ```
 AIChronicle/
+├── AIChronicle.csproj       # 项目配置（Linux 只编 net472；游戏 DLL 引用）
+├── Directory.Build.props    # 导入 local.props（本机游戏路径）
+├── local.props.example      # 本机配置模板（复制为 local.props，已 gitignore）
 ├── Core/                    # 引擎层：入口、设置、基础设施
 │   ├── SubModule.cs         # 模组入口，Harmony 激活，初始化 PromptManager
 │   ├── Settings.cs          # MCM 设置类（连接兜底 + 游戏设置）
@@ -556,7 +561,11 @@ AIChronicle/
 │   └── ClanDiscontinuationPatch.cs # 独立家族永续（禁用原版 28 天灭族，MCM 可开关）
 ├── AGENTS.md                # AI 开发工作流文档（常驻指令 + docs/ 索引）
 ├── README_MOD.md            # 本文件（功能说明）
-├── docs/                    # AI 参考文档（架构/子系统/工具清单/调试/Harmony）
+├── docs/                    # AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发）
+├── scripts/
+│   ├── ci-health.mjs        # 仓库健康检查（JSON/switch 同步、密钥/个人路径扫描）
+│   ├── package.py           # Linux/跨平台打包（编译+部署+zip，含 NAudio 运行时依赖）
+│   └── package.ps1          # Windows 兼容打包
 ├── _Module/
 │   ├── SubModule.xml     # 模组元数据
 │   ├── GUI/Prefabs/
@@ -573,7 +582,7 @@ AIChronicle/
 │       ├── persona_generation.txt # NPC性格生成提示词（热重载）
 │       ├── Templates/             # NPC 目录模板（含 context_template.txt）
 │       └── Campaigns/             # 各战役独立目录（运行时自动创建）
-└── BLSource/             # 反编译的游戏源码（6288 个文件，只读）
+└── BLSource/             # 反编译的游戏源码（7375 个 .cs 文件，只读）
 ```
 
 ---

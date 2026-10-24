@@ -367,21 +367,25 @@ Usage:
 
 | 项目 | 值 |
 |------|-----|
-| 游戏 | Mount & Blade II: Bannerlord v1.4.8 |
-| 游戏路径 | `D:\steam\steamapps\common\Mount & Blade II Bannerlord` |
-| IDE | JetBrains Rider 2026.2 |
-| 开发目录 | `C:\Users\<用户名>\BLMods\AIChronicle` |
-| .NET SDK | 9.0+ |
-| 目标框架 | net472 (Windows) + net6 (Xbox/Store) |
-| 模组框架 | Harmony 2.3.3 (运行时补丁) |
+| 开发/构建 | Linux（Arch/CachyOS） |
+| 游戏 | Mount & Blade II: Bannerlord v1.4.8（Steam/Proton 的 Windows 客户端） |
+| 游戏路径 | `$BANNERLORD_GAME_DIR`（本机见 `local.props`） |
+| IDE | JetBrains Rider（Linux） |
+| 开发目录 | `~/项目/AIChronicle` |
+| .NET SDK | 10.0+ |
+| 目标框架 | net472（Steam；Linux/Windows）+ net6（Xbox/Store；仅 Windows） |
+| 构建期参考程序集 | `Microsoft.NETFramework.ReferenceAssemblies` 1.0.3（不复制进发布包） |
+| 模组框架 | Harmony 2.3.3（NuGet 编译）+ 2.4.2.248（本机运行时） |
 | 四前置 | Harmony, ButterLib, UIExtenderEx, MCM (MBOptionScreen) |
 | 语音合成 | NAudio 2.2.1（NuGet，播放 mp3）+ 免费 Edge TTS（手写 WebSocket 客户端，无第三方库） |
 
 ## 17. 完整目录结构
 
 ```
-C:\Users\<用户名>\BLMods\AIChronicle\
-├── AIChronicle.csproj          ← 项目配置（引用、框架、部署）
+~/项目/AIChronicle/
+├── AIChronicle.csproj          ← 项目配置（引用、框架、部署；Linux 只编 net472）
+├── Directory.Build.props       ← 导入 local.props（本机游戏路径）
+├── local.props.example         ← 本机配置模板（复制为 local.props，已 gitignore）
 ├── Core/                       ← 引擎层：入口、设置、基础设施
 │   ├── SubModule.cs            ← 模组入口，生命周期回调
 │   ├── Settings.cs             ← MCM 设置基类（连接兜底 + 游戏设置）
@@ -439,16 +443,17 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 │   ├── FiefAssignmentPatch.cs  ← 攻城后册封由 Agent 主导
 │   ├── ExecutionNoPenaltyPatch.cs ← 处决无惩罚
 │   └── ClanDiscontinuationPatch.cs ← 独立家族永续（禁用原版 28 天灭族，MCM 可开关）
-├── docs/                       ← AI 参考文档（架构/子系统/工具清单/调试/Harmony）
+├── docs/                       ← AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发）
 ├── AGENTS.md                  ← 常驻开发指令（本文件）
 ├── README.md                  ← 开源主入口（英文简介，指向 README_MOD.md / AGENTS.md）
 ├── CONTRIBUTING.md            ← 贡献指南（构建方法、文档维护规则、PR 流程）
 ├── scripts/
 │   ├── ci-health.mjs          ← 仓库健康检查（JSON 解析、JSON↔switch 同步、密钥/个人路径扫描，CI 与本地共用）
-│   └── package.ps1            ← 编译+部署+打包纯净发布版（dist/AIChronicle_v<版本>.zip，给其他玩家用）
+│   ├── package.py             ← Linux/跨平台打包（编译+部署+zip；含 NAudio 运行时依赖）
+│   └── package.ps1            ← Windows 兼容打包（同上）
 ├── .github/workflows/
 │   ├── health.yml             ← 轻量 CI（无需游戏 DLL，push/PR 自动跑，绿标）
-│   └── build.yml              ← 手动编译工作流（workflow_dispatch，需 BANNERLORD_GAME_DIR 或 GAME_DLLS_URL 密钥）
+│   └── build.yml              ← 手动编译工作流（Ubuntu runner，需 BANNERLORD_GAME_DIR 或 GAME_DLLS_URL 密钥）
 ├── _Module/
 │   ├── SubModule.xml         ← 模组元数据（ID、依赖、DLL路径）
 │   ├── GUI/
@@ -500,6 +505,8 @@ C:\Users\<用户名>\BLMods\AIChronicle\
 └── bin/Release/net472/       ← 编译产物
 ```
 
-部署后自动复制到：`D:\...\Modules\AIChronicle\bin\Win64_Shipping_Client\AIChronicle.dll`
+部署后自动复制到：`$BANNERLORD_GAME_DIR/Modules/AIChronicle/bin/Win64_Shipping_Client/AIChronicle.dll`
 
 > ⚠️ **`_Module/` 目录（含 `Prompts/`、`GUI/`、`SubModule.xml`）也在 build 时由 Bannerlord.BuildResources 拷到游戏 Modules。纯提示词改动也必须 build 才生效**——只改项目里的 `.txt`/`.json` 不 build，游戏里一直是旧版。战役副本（`Campaigns/{战役}/`）在下次进档时按 newer-wins 同步覆盖。
+
+> **Linux**：构建只编 `net472`；`net6`（Xbox/Store）仅 Windows。游戏经 Steam/Proton 运行，完整工作流见 `docs/linux-dev.md`。

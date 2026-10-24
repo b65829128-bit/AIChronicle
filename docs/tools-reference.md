@@ -4,12 +4,15 @@
 
 ## 1. 开发工具
 
-| 工具 | 路径 | 用途 |
+| 工具 | 路径/命令 | 用途 |
 |------|------|------|
-| dnSpy GUI | `C:\Users\<用户名>\Tools\dnSpy\dnSpy-net-win64\dnSpy.exe` | 反编译、调试、查看游戏源码 |
-| dnSpy CLI | `C:\Users\<用户名>\Tools\dnSpy\dnSpy-net-win64\dnSpy.Console.exe` | 批量反编译（命令行） |
-| dotnet CLI | `dotnet` | 编译、创建新项目 |
-| Rider | `C:\Program Files\JetBrains\JetBrains Rider 2026.2\bin\rider64.exe` | IDE |
+| dotnet CLI | `dotnet` | 编译、打包 |
+| Rider | JetBrains Toolbox（Linux） | IDE |
+| ILSpy CLI | `dotnet tool install -g ilspycmd` | 反编译、查看游戏源码（Linux/Windows） |
+| dnSpy | Windows only（旧工具） | 附加调试/反编译 |
+| BLSource | `BLSource/`（gitignored） | 已反编译的游戏源码 |
+
+> Linux 上 dnSpy 不可用；用 `ilspycmd` 生成/更新 `BLSource/`，或用 Rider 内置反编译。游戏运行经 Steam/Proton，见 `docs/linux-dev.md`。
 
 ## 2. 游戏工具（tools.json，51 个）
 
