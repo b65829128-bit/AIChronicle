@@ -7,7 +7,7 @@
 ## 1. 现状
 
 - CEF 仅在 `net472`（Steam）编译；`net6`/Xbox 用 `#if NET472` 完全排除。
-- 默认页面 800×600、30fps，软件渲染（`--disable-gpu` / `--no-sandbox`）。
+- 默认页面 1280×720（16:9）、30fps，软件渲染（`--disable-gpu` / `--no-sandbox`）。
 - 实机：`Cef.Initialize` 约 0.8s，首帧约 1.6s；浏览器关闭后 CEF 保持初始化，可直接重开。
 - 入口：大地图按 **F8** → Kit Gallery →「打开 CEF」/「打开 CEF 史书」。
 - CEF 原生运行时约 395MB（`libcef.dll` 236MB + locales + subprocess + paks）。
@@ -53,7 +53,7 @@ CefBridge.ActionReceived
 | `_Module/WebUI/chronicle.html` | CEF 史书页：等待 C# 注入数据 |
 | `_Module/WebUI/app.js` | 共享渲染器：`window.__game.render(data)`、`__scrollBySmooth`、安全 `textContent` |
 | `_Module/WebUI/theme.css` | 纸张/朝堂/投票主题 |
-| `_Module/WebUI/cef.css` | 800×600 CEF 版式（贴满纸张、滚动条） |
+| `_Module/WebUI/cef.css` | 1280×720 CEF 版式（贴满纸张、滚动条） |
 | `UI/Kit/KitGalleryScreen.cs` | F8 Gallery；CEF 入口按钮 |
 
 `UI/Web/WebPageModels.cs`、`WebPageService.cs` 的 render-once PNG 缓存脚手架仍在，但 **CEF live 页面不走它**；后续接入真实史书数据时可直接复用 `CefWebScreen` 的数据注入。
@@ -81,7 +81,7 @@ CefBridge.ActionReceived
 
 ## 6. 输入
 
-- `KitTextureWidget` 把 Gauntlet 指针坐标换算到 800×600 view 坐标。
+- `KitTextureWidget` 把 Gauntlet 指针坐标换算到 1280×720 view 坐标。
 - 点击：`SendMouseClickEvent`（左键，down/up）；悬停：`SendMouseMoveEvent`。
 - 滚轮：`OnPreviewMouseScroll()` 必须返回 `true`，否则 Gauntlet 不会把滚轮派发给普通 Widget。
 - 滚轮算法：
@@ -94,10 +94,10 @@ CefBridge.ActionReceived
 
 ## 7. 页面与排版
 
-- CEF viewport 固定 800×600；页面按 4:3 设计。
-- `cef.css` 覆盖 `theme.css` 的 1040px/1400px 长图版式：纸张贴满、正文 15.5px、可滚动。
+- CEF viewport 固定 1280×720（16:9）；页面按 16:9 设计。
+- `cef.css` 覆盖 `theme.css` 的 1040px/1400px 长图版式：纸张贴满、正文 17.5px、可滚动。
 - 史书示例由 C# `BuildChronicleData()` 注入，包含北境/朝议/盟变/岁末/诸国纪事/史官附记。
-- 页面背景与纸张同色，纹理内部无黑边；纹理两侧的暗区是 4:3 页面在 16:9 屏幕上的原生留边。
+- 页面背景与纸张同色，纹理内部无黑边；屏幕边缘的暗区来自固定纹理尺寸/原生面板留白，不是页面版式留边。
 - 中文字体使用系统衬线栈（Noto Serif SC / Source Han Serif / SimSun）；目标机器缺字体时需打包字体或调整字体栈。
 
 ## 8. 构建 / 打包
@@ -112,12 +112,12 @@ CefBridge.ActionReceived
 
 ## 9. 性能与限制
 
-- 当前 30fps、每帧整张 800×600 纹理上传；实机无明显卡顿，但仍不如浏览器 60fps 顺滑。
+- 当前 30fps、每帧整张 1280×720 纹理上传（约 3.7MB/帧、110MB/s）；实机无明显卡顿，但仍不如浏览器 60fps 顺滑。
 - 每帧成本：CEF 软件渲染 + BGRA→RGBA 逐像素交换 + `CreateFromByteArray` + Brush 更新。
 - 引擎 `Texture` 没有 in-place update；不能只更新脏矩形。
 - 可选优化：
   1. 60fps 压测（30fps 已通过）；
-  2. 16:9 viewport（如 1200×675）铺满屏幕；
+  2. 16:9 已做 1280×720；下一步 1440×810 或全幅铺满；
   3. 长期：CEF `OnAcceleratedPaint` + 原生 D3D11 共享纹理，绕过 CPU 上传（工程量大）。
 - 尚未自动回退到原生史书面板；CEF 启动失败会在屏幕内显示错误，不影响游戏其他部分。
 
@@ -147,11 +147,11 @@ CefBridge.ActionReceived
 ## 12. 下一步
 
 1. **60fps 压测**（30fps 已通过，先不改架构）。
-2. **16:9 全屏 CEF 页面**（1200×675，重排 cef.css）。
+2. **全幅 16:9 版式**（当前 1280×720；下一步 1440×810 或自适应纹理尺寸）。
 3. 接入真实游戏数据（当前战役/家族/战事）到 `render(data)`。
 4. 页面动作 `dispatch` 与真实决策/投票流程对接（游戏功能 session）。
 5. 长期评估原生共享纹理桥。
 
 ![史书页面预览（1200px 静态版）](ui-preview-chronicle.png)
 
-> 上图为 `_Module/WebUI/preview.html` 在 Chrome 的静态预览；游戏内是 800×600 CEF live 页面，数据由 C# 注入。
+> 上图为 `_Module/WebUI/preview.html` 在 Chrome 的静态预览；游戏内是 1280×720 CEF live 页面，数据由 C# 注入。

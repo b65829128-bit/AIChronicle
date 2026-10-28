@@ -15,7 +15,7 @@
 | 层 | 负责 | 技术 |
 |---|---|---|
 | 交互层 | 聊天、书信、秘书处、表单、设置、决策按钮 | 原生 Gauntlet + `UI/Kit` |
-| 内容层 | 史书、朝堂报告、投票结果、档案、账本 | HTML/CSS → CEF live 帧 → 纹理（800×600 / 30fps） |
+| 内容层 | 史书、朝堂报告、投票结果、档案、账本 | HTML/CSS → CEF live 帧 → 纹理（1280×720 / 30fps） |
 | 外壳 | 窗口、关闭、翻页、滚动、加载/失败态 | 原生 Kit |
 
 ## 3. 原生 Kit
@@ -126,7 +126,7 @@ public sealed class CourtScreen : KitScreen
 
 详见 [ui-web.md](ui-web.md)。摘要：
 
-- **CEF live**：CefSharp OffScreen 140.1.140 / CEF 140，800×600、30fps，BGRA 帧 → RGBA 引擎纹理。
+- **CEF live**：CefSharp OffScreen 140.1.140 / CEF 140，1280×720（16:9）、30fps，BGRA 帧 → RGBA 引擎纹理。
 - 游戏 → 网页：`window.__game.render(json)`；网页 → 游戏：`aiChronicle.dispatch(id, payload)` → `CefWebScreen.PageAction`。
 - 鼠标点击/悬停/滚轮回传；文本输入/IME 仍走原生。
 - 依赖体积约 395MB，仅 net472/Steam；net6/Xbox `#if NET472` 排除。
@@ -148,7 +148,7 @@ public sealed class CourtScreen : KitScreen
 - 快捷键 O/M/H 与 Gallery 互斥。
 - 无新增运行时依赖（CefSharp/CEF 已批准，属于 UI 运行时；net6 不加载）。
 
-> **本 session 状态**：已实机验证——Gallery 可开、滚动区/动态纹理正常；CEF 初始化约 0.8s、首帧约 1.6s；CEF 史书颜色、鼠标点击、桥接、滚动均通过；**30fps 实机通过，无明显卡顿**。当前限制仍是 800×600 / 每帧整张上传，不如浏览器 60fps 顺滑。
+> **本 session 状态**：已实机验证——Gallery 可开、滚动区/动态纹理正常；CEF 初始化约 0.8s、首帧约 1.6s；CEF 史书颜色、鼠标点击、桥接、滚动均通过；**1280×720 / 30fps 实机通过，无明显卡顿**。当前限制仍是每帧整张上传，不如浏览器 60fps 顺滑。
 
 ## 7. 风险
 
@@ -159,7 +159,7 @@ public sealed class CourtScreen : KitScreen
 
 ## 8. 待办（下一 session）
 
-- CEF 60fps 压测；16:9（1200×675）全屏版式；共享纹理桥评估。
+- CEF 60fps 压测；16:9 已做 1280×720，下一步评估全幅铺满/1440×810；共享纹理桥评估。
 - 史书页接入真实游戏数据（当前为示例 JSON）。
 - 页面 `dispatch` 动作与真实决策/投票流程对接（游戏功能 session）。
 - 把按钮/面板等更多主题 token 迁到 `Kit.xml` 做热重载（文本样式已迁）。

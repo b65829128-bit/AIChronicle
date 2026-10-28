@@ -17,6 +17,9 @@ namespace AIChronicle
     /// </summary>
     public sealed class CefWebScreen : KitScreen
     {
+        private const int ViewWidth = 1280;
+        private const int ViewHeight = 720;
+
         private readonly string _pageFile;
         private readonly string _title;
         private readonly string _subtitle;
@@ -35,7 +38,7 @@ namespace AIChronicle
         public CefWebScreen(
             string pageFile = "live.html",
             string title = "CEF 实时页面",
-            string subtitle = "800×600 · 30fps · 本地 HTML",
+            string subtitle = "1280×720 · 30fps · 本地 HTML",
             object? pageData = null,
             int fps = 30)
         {
@@ -52,7 +55,7 @@ namespace AIChronicle
             new CefWebScreen(
                 "chronicle.html",
                 "编年史 · 实时页面",
-                "800×600 · CEF · 数据由 C# 注入 · 可滚动 · 30fps",
+                "1280×720 · CEF · 数据由 C# 注入 · 可滚动 · 30fps",
                 BuildChronicleData()).Open();
         }
 
@@ -75,8 +78,8 @@ namespace AIChronicle
             {
                 WidthSizePolicy = SizePolicy.Fixed,
                 HeightSizePolicy = SizePolicy.Fixed,
-                SuggestedWidth = 800f,
-                SuggestedHeight = 600f,
+                SuggestedWidth = ViewWidth,
+                SuggestedHeight = ViewHeight,
                 HorizontalAlignment = HorizontalAlignment.Center
             };
             _texture.PointerMoved += OnPointerMoved;
@@ -107,7 +110,7 @@ namespace AIChronicle
             var bridge = new CefBridge(this);
             bridge.ActionReceived += OnBridgeAction;
             string pageFull = Path.GetFullPath(page);
-            if (!_session.Start(new Uri(pageFull).AbsoluteUri, 800, 600, _fps, bridge))
+            if (!_session.Start(new Uri(pageFull).AbsoluteUri, ViewWidth, ViewHeight, _fps, bridge))
             {
                 SetStatus("CEF 启动失败：" + CefWebHost.LastError);
             }

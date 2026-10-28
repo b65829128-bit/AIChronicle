@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=800, height=600">
+<meta name="viewport" content="width=1280, height=720">
 <title>朝堂 · CEF 实时页面</title>
 <style>
   :root {
@@ -16,11 +16,11 @@
   }
   * { box-sizing: border-box; }
   html, body {
-    margin: 0; padding: 0; width: 800px; height: 600px; overflow: hidden;
+    margin: 0; padding: 0; width: 1280px; height: 720px; overflow: hidden;
     background: #0e0b08; color: var(--ink); font-family: var(--serif);
   }
   #app {
-    position: relative; width: 100%; height: 100%; padding: 34px 44px;
+    position: relative; width: 100%; height: 100%; padding: 54px 70px;
     background:
       radial-gradient(circle at 20% 10%, rgba(201,162,39,.12), transparent 40%),
       radial-gradient(circle at 88% 88%, rgba(140,58,58,.10), transparent 42%),
@@ -28,33 +28,33 @@
     border: 1px solid rgba(201,162,39,.35);
   }
   #app::before {
-    content: ""; position: absolute; inset: 12px; border: 1px solid rgba(201,162,39,.16);
+    content: ""; position: absolute; inset: 16px; border: 1px solid rgba(201,162,39,.16);
     pointer-events: none;
   }
-  .eyebrow { font-size: 12px; letter-spacing: .34em; color: var(--muted); }
-  h1 { margin: 10px 0 2px; font-size: 34px; letter-spacing: .12em; font-weight: 600; color: #f6ecd8; }
-  .sub { font-size: 14px; color: var(--muted); letter-spacing: .08em; }
-  .rule { height: 1px; margin: 18px 0 22px; background: linear-gradient(90deg, transparent, var(--gold), transparent); opacity: .8; }
-  .stage { display: flex; align-items: center; gap: 30px; }
+  .eyebrow { font-size: 13px; letter-spacing: .34em; color: var(--muted); }
+  h1 { margin: 14px 0 4px; font-size: 42px; letter-spacing: .12em; font-weight: 600; color: #f6ecd8; }
+  .sub { font-size: 15px; color: var(--muted); letter-spacing: .08em; }
+  .rule { height: 1px; margin: 26px 0 32px; background: linear-gradient(90deg, transparent, var(--gold), transparent); opacity: .8; }
+  .stage { display: flex; align-items: center; gap: 42px; }
   .seal-ring {
-    position: relative; width: 156px; height: 156px; flex: none; border-radius: 50%;
-    border: 2px solid rgba(140,58,58,.85);
-    box-shadow: 0 0 34px rgba(140,58,58,.18), inset 0 0 26px rgba(140,58,58,.16);
+    position: relative; width: 220px; height: 220px; flex: none; border-radius: 50%;
+    border: 3px solid rgba(140,58,58,.85);
+    box-shadow: 0 0 48px rgba(140,58,58,.18), inset 0 0 36px rgba(140,58,58,.16);
     animation: spin 18s linear infinite;
   }
   .seal-ring::before {
-    content: ""; position: absolute; inset: 12px; border-radius: 50%;
+    content: ""; position: absolute; inset: 16px; border-radius: 50%;
     border: 1px dashed rgba(201,162,39,.55);
   }
   .seal {
-    position: absolute; inset: 42px; border-radius: 50%;
+    position: absolute; inset: 60px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    border: 2px solid var(--red); color: #e8c9c9; font-size: 22px; letter-spacing: .16em;
+    border: 2px solid var(--red); color: #e8c9c9; font-size: 28px; letter-spacing: .16em;
     background: rgba(140,58,58,.16); animation: breathe 3.2s ease-in-out infinite;
   }
-  .cards { display: flex; flex: 1; gap: 12px; }
+  .cards { display: flex; flex: 1; gap: 16px; }
   .card {
-    flex: 1; min-height: 156px; padding: 16px 14px;
+    flex: 1; min-height: 220px; padding: 22px 18px;
     background: linear-gradient(180deg, rgba(242,230,207,.07), rgba(242,230,207,.02));
     border: 1px solid rgba(201,162,39,.28);
     box-shadow: inset 0 0 20px rgba(201,162,39,.04);
@@ -62,23 +62,23 @@
   }
   .card:nth-child(2) { animation-delay: .8s; }
   .card:nth-child(3) { animation-delay: 1.6s; }
-  .card .name { font-size: 18px; color: var(--gold); letter-spacing: .12em; }
-  .card .line { height: 1px; margin: 9px 0; background: rgba(201,162,39,.22); }
-  .card .fact { font-size: 13px; line-height: 1.7; color: #d7c7ad; }
+  .card .name { font-size: 22px; color: var(--gold); letter-spacing: .12em; }
+  .card .line { height: 1px; margin: 12px 0; background: rgba(201,162,39,.22); }
+  .card .fact { font-size: 15px; line-height: 1.7; color: #d7c7ad; }
   .footer {
-    position: absolute; left: 44px; right: 44px; bottom: 26px;
+    position: absolute; left: 70px; right: 70px; bottom: 32px;
     display: flex; justify-content: space-between; align-items: center;
-    font-size: 13px; color: var(--muted); letter-spacing: .08em;
+    font-size: 14px; color: var(--muted); letter-spacing: .08em;
   }
   .bridge {
-    position: absolute; left: 44px; right: 44px; bottom: 58px;
-    display: flex; align-items: center; gap: 14px;
-    font-size: 13px; color: var(--muted);
+    position: absolute; left: 70px; right: 70px; bottom: 70px;
+    display: flex; align-items: center; gap: 16px;
+    font-size: 14px; color: var(--muted);
   }
   .bridge button {
     padding: 7px 14px; border: 1px solid rgba(201,162,39,.55);
     background: rgba(201,162,39,.10); color: #ead9ae; font-family: var(--serif);
-    font-size: 13px; letter-spacing: .08em; cursor: pointer;
+    font-size: 14px; letter-spacing: .08em; cursor: pointer;
   }
   .bridge button:hover { background: rgba(201,162,39,.22); }
   #bridgeStatus { color: #c9b894; }
@@ -94,7 +94,7 @@
   <div id="app">
     <div class="eyebrow">卡拉迪亚 · 朝堂</div>
     <h1>实时 Web 页面</h1>
-    <div class="sub">CEF OffScreen · 800×600 · 30fps · 本地 HTML / CSS 动画</div>
+    <div class="sub">CEF OffScreen · 1280×720 · 30fps · 本地 HTML / CSS 动画</div>
     <div class="rule"></div>
     <div class="stage">
       <div class="seal-ring"><div class="seal">朝议</div></div>

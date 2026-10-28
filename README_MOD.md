@@ -389,7 +389,7 @@ _Module/Prompts/
 ### CEF 实时 Web 页面（实验性 UI 框架）
 
 - 大地图按 **F8** 打开原生 Kit UI Gallery；其中可打开 **CEF 实时页面**（CSS 动画 / JS 时钟）和 **CEF 史书**（C# 注入数据、可滚动的纸张页面）。
-- CEF 页面为 800×600、30fps 的 CefSharp OffScreen 渲染，BGRA 帧转换为引擎 RGBA 纹理；支持鼠标点击、悬停、滚轮。
+- CEF 页面为 1280×720（16:9）、30fps 的 CefSharp OffScreen 渲染，BGRA 帧转换为引擎 RGBA 纹理；支持鼠标点击、悬停、滚轮。
 - 网页可通过 `aiChronicle` 桥与 C# 双向通信：页面回传动作，游戏注入 JSON 数据。
 - 依赖 CefSharp.OffScreen 140.1.140 + CEF 140 原生运行时，安装目录约 **395MB**；仅 net472/Steam 启用，net6/Xbox 不加载。
 - 当前是 UI 框架与示例页面，**尚未接入真实游戏数据**；聊天/书信的中文文本输入仍走原生输入框。
@@ -592,7 +592,7 @@ AIChronicle/
 │   │   ├── chronicle.html        # CEF 史书页（等 C# 注入数据）
 │   │   ├── app.js                # 共享渲染器 + __game.render/平滑滚动
 │   │   ├── theme.css             # 纸张/朝堂/投票主题
-│   │   ├── cef.css               # 800×600 CEF 版式
+│   │   ├── cef.css               # 1280×720 CEF 版式
 │   │   ├── preview.html          # Chrome 预览
 │   │   ├── templates/page.html   # render-once 模板（保留）
 │   │   └── assets/               # 测试纹理等
