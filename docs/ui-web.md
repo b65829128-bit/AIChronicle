@@ -146,6 +146,8 @@ CefBridge.ActionReceived
 
 ## 12. 下一步
 
+> 史书迁移的详细分阶段计划见 [plan-history-cef.md](plan-history-cef.md)：推荐“原生目录 + CEF 正文”，保留原生回退。
+
 1. **60fps 压测**（30fps 已通过，先不改架构）。
 2. **全幅 16:9 版式**（当前 1280×720；下一步 1440×810 或自适应纹理尺寸）。
 3. 接入真实游戏数据（当前战役/家族/战事）到 `render(data)`。
