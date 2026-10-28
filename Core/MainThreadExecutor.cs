@@ -36,6 +36,7 @@ namespace AIChronicle
                 try { action(); }
                 catch (Exception e)
                 {
+                    UiTrace.Log("[MainThread] action failed: " + e);
                     try
                     {
                         InformationManager.DisplayMessage(new InformationMessage(

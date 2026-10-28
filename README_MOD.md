@@ -386,6 +386,15 @@ _Module/Prompts/
 - AI 有权修改"对目标的了解"字段（通过 function calling 自动触发），但不能修改聊天记录
 - **玩家有权修改任何提示词文件**
 
+### CEF 实时 Web 页面（实验性 UI 框架）
+
+- 大地图按 **F8** 打开原生 Kit UI Gallery；其中可打开 **CEF 实时页面**（CSS 动画 / JS 时钟）和 **CEF 史书**（C# 注入数据、可滚动的纸张页面）。
+- CEF 页面为 800×600、15fps 的 CefSharp OffScreen 渲染，BGRA 帧转换为引擎 RGBA 纹理；支持鼠标点击、悬停、滚轮。
+- 网页可通过 `aiChronicle` 桥与 C# 双向通信：页面回传动作，游戏注入 JSON 数据。
+- 依赖 CefSharp.OffScreen 140.1.140 + CEF 140 原生运行时，安装目录约 **395MB**；仅 net472/Steam 启用，net6/Xbox 不加载。
+- 当前是 UI 框架与示例页面，**尚未接入真实游戏数据**；聊天/书信的中文文本输入仍走原生输入框。
+- 技术细节见 [docs/ui-web.md](docs/ui-web.md)，原生 Kit 规范见 [docs/ui-framework.md](docs/ui-framework.md)。
+
 ### 全中文界面
 
 - 模组内所有文本、MCM 设置面板、按钮、弹窗、系统提示词均为中文
@@ -503,6 +512,7 @@ _Module/Prompts/
 6. 在聊天窗口中输入消息，按「发送」按钮
 7. AI 回复会显示在聊天窗口中，支持多轮对话
 8. 点击聊天窗口右上角的 X 关闭，回到对话界面
+9. （实验性 UI）在大地图按 **F8** 打开 Kit UI Gallery，可预览原生组件；滚到底部的「CEF 实时页面」可打开 CEF 演示或史书页，按 F8 或「关闭」退出
 
 ---
 
@@ -550,7 +560,9 @@ AIChronicle/
 │   ├── AIChatScreen.cs      # 聊天屏幕管理器（GauntletLayer 挂载）
 │   ├── AIChatScreenVM.cs    # 聊天 ViewModel（消息列表、输入绑定、function calling 处理）
 │   ├── LetterListScreen.cs  # 书信系统屏幕管理器（战役地图 O 键入口）
-│   └── HistoryScreenVM.cs   # 史书 UI ViewModel（编年史列表、内容加载）
+│   ├── HistoryScreenVM.cs   # 史书 UI ViewModel（编年史列表、内容加载）
+│   ├── Kit/                 # 原生 Kit UI 框架（KitScreen/KitTheme/组件/动态纹理/Gallery）
+│   └── Web/                 # CEF live 页面宿主（CefWebScreen/CefWebHost/CefBridge/WebPage 脚手架）
 ├── Systems/                 # 游戏系统与 Harmony 补丁
 │   ├── DiplomacyService.cs  # 外交服务（宣战/议和/结盟/贸易/回复提案）
 │   ├── HistoryRecorder.cs   # 历史记录器（监听游戏事件自动写入原始史料）
@@ -561,17 +573,29 @@ AIChronicle/
 │   └── ClanDiscontinuationPatch.cs # 独立家族永续（禁用原版 28 天灭族，MCM 可开关）
 ├── AGENTS.md                # AI 开发工作流文档（常驻指令 + docs/ 索引）
 ├── README_MOD.md            # 本文件（功能说明）
-├── docs/                    # AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发）
+├── LICENSES/                # 第三方许可（CefSharp/CEF；发布包会一并复制）
+├── docs/                    # AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发/UI 框架与 CEF）
 ├── scripts/
 │   ├── ci-health.mjs        # 仓库健康检查（JSON/switch 同步、密钥/个人路径扫描）
-│   ├── package.py           # Linux/跨平台打包（编译+部署+zip，含 NAudio 运行时依赖）
+│   ├── package.py           # Linux/跨平台打包（编译+部署+zip，含 NAudio + CEF 原生文件）
 │   └── package.ps1          # Windows 兼容打包
 ├── _Module/
 │   ├── SubModule.xml     # 模组元数据
 │   ├── GUI/Prefabs/
 │   │   ├── AIChatScreen.xml      # 聊天窗口 GauntletUI 布局
 │   │   ├── LetterListScreen.xml  # 书信系统界面布局
-│   │   └── HistoryScreen.xml     # 史书 UI 布局（1100×700 双栏）
+│   │   ├── HistoryScreen.xml     # 史书 UI 布局（1100×700 双栏）
+│   │   └── KitHost.xml           # 原生 Kit 宿主 prefab（5 行挂载点）
+│   ├── GUI/Brushes/Kit.xml       # Kit 文本笔刷（Galahad 字体）
+│   ├── WebUI/                    # CEF 页面资产
+│   │   ├── live.html             # CEF 演示页（CSS 动画/JS 时钟/桥接测试）
+│   │   ├── chronicle.html        # CEF 史书页（等 C# 注入数据）
+│   │   ├── app.js                # 共享渲染器 + __game.render/平滑滚动
+│   │   ├── theme.css             # 纸张/朝堂/投票主题
+│   │   ├── cef.css               # 800×600 CEF 版式
+│   │   ├── preview.html          # Chrome 预览
+│   │   ├── templates/page.html   # render-once 模板（保留）
+│   │   └── assets/               # 测试纹理等
 │   └── Prompts/
 │       ├── world_info.txt         # 默认世界背景
 │       ├── world_info_nords.txt   # 可选的诺德势力世界背景段（MCM 开关）

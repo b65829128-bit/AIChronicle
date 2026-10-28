@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Brushes>
+  <Brush Name="Kit.Text.Title" Font="Galahad" TextHorizontalAlignment="Left" TextVerticalAlignment="Center">
+    <Layers></Layers>
+    <Styles>
+      <Style Name="Default" FontSize="30" FontColor="#F2E6CFFF" />
+    </Styles>
+  </Brush>
+  <Brush Name="Kit.Text.Heading" Font="Galahad" TextHorizontalAlignment="Left" TextVerticalAlignment="Center">
+    <Layers></Layers>
+    <Styles>
+      <Style Name="Default" FontSize="22" FontColor="#C9A227FF" />
+    </Styles>
+  </Brush>
+  <Brush Name="Kit.Text.Body" Font="Galahad" TextHorizontalAlignment="Left" TextVerticalAlignment="Center">
+    <Layers></Layers>
+    <Styles>
+      <Style Name="Default" FontSize="17" FontColor="#F2E6CFFF" />
+    </Styles>
+  </Brush>
+  <Brush Name="Kit.Text.Muted" Font="Galahad" TextHorizontalAlignment="Left" TextVerticalAlignment="Center">
+    <Layers></Layers>
+    <Styles>
+      <Style Name="Default" FontSize="17" FontColor="#B89B72FF" />
+    </Styles>
+  </Brush>
+  <Brush Name="Kit.Text.Caption" Font="Galahad" TextHorizontalAlignment="Left" TextVerticalAlignment="Center">
+    <Layers></Layers>
+    <Styles>
+      <Style Name="Default" FontSize="14" FontColor="#B89B72FF" />
+    </Styles>
+  </Brush>
+  <Brush Name="Kit.Button.Text" Font="Galahad" TextHorizontalAlignment="Center" TextVerticalAlignment="Center">
+    <Layers></Layers>
+    <Styles>
+      <Style Name="Default" FontSize="16" FontColor="#F2E6CFFF" />
+    </Styles>
+  </Brush>
+</Brushes>

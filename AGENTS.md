@@ -58,8 +58,16 @@
 ### 2.4 工程健壮性守则（防膨胀、保可维护）
 
 - **类大小控制**：单个类文件原则上不超过 ~1000 行。接近时按领域拆成 partial（如 `ToolExecutor.*.cs`）或拆出独立类。
-- **依赖引入需审批**：原则上不引入新的**运行时**第三方库（当前运行时 NuGet 仅 NAudio）。Linux 编译另用 `Microsoft.NETFramework.ReferenceAssemblies`（编译期参考程序集，不复制进发布包）；`Bannerlord.BuildResources` 仍是原有构建期包。若某功能用第三方库可显著降低维护成本，**先向用户说明引入理由、备选方案、体积/许可影响，经明确同意后才添加**。同时评估与其他模组的 DLL 冲突风险（同名/同版本覆盖、共享库版本冲突），权衡权始终在开发者。
+- **依赖引入需审批**：原则上不引入新的**运行时**第三方库。当前运行时 NuGet：NAudio 2.2.1；CefSharp.OffScreen 140.1.140（仅 net472，含 CEF 140 原生运行时，模块约 395MB，已按 UI 需求批准）。Linux 编译另用 `Microsoft.NETFramework.ReferenceAssemblies`（编译期参考程序集，不复制进发布包）；`Bannerlord.BuildResources` 仍是原有构建期包。若再引入第三方库，**先向用户说明引入理由、备选方案、体积/许可影响，经明确同意后才添加**。同时评估与其他模组的 DLL 冲突风险（同名/同版本覆盖、共享库版本冲突），权衡权始终在开发者。
 - **新功能可维护性**：遵循现有分层（Core/Agents/Entities/Tools/UI/Systems），复用现有基础设施（SafeFileIO / MainThreadExecutor / AgentScheduler 事件队列 / DebugLogger），不重复造轮子。工具、事件、补丁等新入口必须登记到对应清单并同步文档。
+
+### 2.5 CEF / Web 页面边界
+
+- CEF 仅在 `net472`（Steam）编译；所有 CefSharp 代码必须放在 `#if NET472` 内，net6/Xbox 不引用、不加载。
+- 新 Web 页面必须走 `CefWebScreen` / `CefWebSession` / `CefBridge`。页面只能通过 `aiChronicle.dispatch(id, payload)` 发动作，**不得直接调用游戏对象、静态状态或 ToolExecutor**。
+- `CefWebScreen.PageAction` 在 CEF 线程触发；任何改游戏状态的处理必须 `MainThreadExecutor.Post` / `RunOnMainThread`。
+- 只加载本地 `_Module/WebUI/` 页面；禁止远程导航；聊天/书信文本输入与中文 IME 继续用原生输入框。
+- CEF 原生文件（`libcef.dll`、`locales`、`CefSharp.BrowserSubprocess.exe` 等）不进 Git；由 csproj 的 `CopyCefRuntimeToModule` 部署、`scripts/package.py` 递归打包。发布包必须保留 `LICENSES/`。
 
 ## 3. 架构速览
 
@@ -91,7 +99,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | Agent 核心 | `Agents/` | ContextBuilder、AIChatClient、AgentManager、调度器、记忆 |
 | Entity | `Entities/` | 玩家/NPC 统一抽象 |
 | 工具执行 | `Tools/` | 51 游戏工具 + 19 文件/通信工具（按领域拆 partial） |
-| 界面 | `UI/` | 聊天 / 书信 / 史书 ViewModel |
+| 界面 | `UI/` | 原生 Kit（`UI/Kit`）+ CEF live 页面宿主（`UI/Web`）+ 聊天/书信/史书 ViewModel |
 | 游戏系统 | `Systems/` | 外交、历史记录、Harmony 补丁 |
 
 完整目录结构见 `docs/architecture.md` 第 17 节。
@@ -114,6 +122,8 @@ python3 scripts/package.py
 ```
 
 部署后 DLL 自动复制到 `$BANNERLORD_GAME_DIR/Modules/AIChronicle/bin/Win64_Shipping_Client/AIChronicle.dll`（本机游戏根目录见 `local.props`）。
+
+> **CEF 构建约束**：`PlatformTarget` 固定 `x64`；CefSharp/CEF 的原生文件（约 395MB，含 `libcef.dll`、`locales`、`CefSharp.BrowserSubprocess.exe`）由 csproj 的 `CopyCefRuntimeToModule` 目标复制到模块 bin。`scripts/package.py` 必须递归复制非 dll 文件；只复制 `*.dll` 会导致 `Cef.Initialize` 失败。
 
 > ⚠️ **`_Module/` 目录（含 `Prompts/`、`GUI/`、`SubModule.xml`）也在 build 时拷到游戏 Modules。纯提示词改动也必须 build 才生效**——只改项目里的 `.txt`/`.json` 不 build，游戏里一直是旧版。
 
@@ -145,6 +155,8 @@ stat -c '%s' "$BANNERLORD_GAME_DIR/Modules/AIChronicle/SubModule.xml"
 | `docs/debugging.md` | 调试方法/日志位置/生命周期陷阱/故障排查 |
 | `docs/harmony.md` | Harmony 补丁模式/BLSource 搜索指南/创建新模组 |
 | `docs/linux-dev.md` | Linux 开发工作流（环境/构建/部署/打包/Proton 运行/日志/调试边界） |
+| `docs/ui-framework.md` | 原生 Kit UI 框架（主题/组件/屏幕基类/Gallery/迁移规则） |
+| `docs/ui-web.md` | CEF live 页面（CefSharp/CefBridge/输入/BGRA 转换/性能与限制） |
 
 ## 7. Git 提交
 
@@ -169,6 +181,7 @@ stat -c '%s' "$BANNERLORD_GAME_DIR/Modules/AIChronicle/SubModule.xml"
 | 模组框架 | Harmony 2.3.3（NuGet 编译）+ 2.4.2.248（本机运行时） |
 | 四前置 | Harmony 2.4.2.248, ButterLib 2.11.1, UIExtenderEx 2.13.3, MCM 5.12.2（本机已装） |
 | 语音合成 | NAudio 2.2.1 + 免费 Edge TTS（手写 WebSocket 客户端） |
+| Web 页面渲染 | CefSharp.OffScreen 140.1.140 + CEF 140（仅 net472；原生运行时约 395MB） |
 
 > **运行**：游戏通过 Steam/Proton 启动；四前置已安装到 `Modules`（版本见上），进游戏测试前备份存档。详见 `docs/linux-dev.md`。
 

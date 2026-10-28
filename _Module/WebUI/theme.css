@@ -1,0 +1,201 @@
+:root {
+  --ink: #2b2118;
+  --ink-soft: #4a3a2a;
+  --muted: #6b5a45;
+  --gold: #a8792a;
+  --gold-soft: #c9a227;
+  --red: #8c2f2f;
+  --paper: #e8d9b5;
+  --paper-deep: #ddc9a0;
+  --serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", "STSong", serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #0e0b08;
+  color: var(--ink);
+  font-family: var(--serif);
+}
+
+#app {
+  display: flex;
+  justify-content: center;
+  padding: 40px 20px 80px;
+}
+
+.sheet {
+  position: relative;
+  width: 1040px;
+  min-height: 1400px;
+  padding: 76px 88px 64px;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(255,255,255,.12), transparent 38%),
+    radial-gradient(circle at 85% 88%, rgba(120,80,30,.10), transparent 42%),
+    repeating-linear-gradient(0deg, rgba(90,60,20,.035) 0px, rgba(90,60,20,.035) 1px, transparent 1px, transparent 4px),
+    linear-gradient(175deg, #efe2c4 0%, var(--paper) 48%, var(--paper-deep) 100%);
+  border: 1px solid #b08d57;
+  box-shadow:
+    0 30px 80px rgba(0,0,0,.55),
+    inset 0 0 120px rgba(90,60,20,.20),
+    inset 0 0 2px rgba(255,255,255,.6);
+}
+
+.sheet::before {
+  content: "";
+  position: absolute;
+  inset: 14px;
+  border: 1px solid rgba(122,91,46,.28);
+  pointer-events: none;
+}
+
+.sheet::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, transparent 55%, rgba(70,45,15,.16) 100%);
+  pointer-events: none;
+}
+
+.eyebrow {
+  font-size: 13px;
+  letter-spacing: .32em;
+  color: #7a5b2e;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+}
+
+.title {
+  margin: 0;
+  font-size: 46px;
+  line-height: 1.25;
+  letter-spacing: .08em;
+  font-weight: 600;
+  color: #241a10;
+}
+
+.subtitle {
+  margin-top: 12px;
+  font-size: 20px;
+  line-height: 1.6;
+  color: var(--muted);
+  letter-spacing: .06em;
+}
+
+.rule {
+  height: 2px;
+  margin: 28px 0 10px;
+  background: linear-gradient(90deg, transparent, var(--gold) 12%, var(--gold) 88%, transparent);
+  opacity: .8;
+}
+
+.section { margin-top: 34px; }
+
+.section h2 {
+  margin: 0 0 14px;
+  padding-left: 14px;
+  border-left: 4px solid var(--gold);
+  font-size: 24px;
+  line-height: 1.4;
+  letter-spacing: .08em;
+  color: #6f4318;
+  font-weight: 600;
+}
+
+.section p {
+  margin: 0 0 16px;
+  font-size: 19px;
+  line-height: 1.95;
+  text-align: justify;
+  text-indent: 2em;
+  color: var(--ink-soft);
+}
+
+.section:first-of-type p:first-of-type::first-letter {
+  float: left;
+  font-size: 68px;
+  line-height: .88;
+  padding: 6px 12px 0 0;
+  color: var(--red);
+  font-weight: 600;
+}
+
+.note {
+  margin-top: 42px;
+  padding: 24px 140px 24px 28px;
+  border: 1px solid rgba(168,121,42,.75);
+  background: rgba(255,250,235,.38);
+  box-shadow: inset 0 0 28px rgba(168,121,42,.10);
+}
+
+.note .label {
+  font-size: 13px;
+  letter-spacing: .28em;
+  color: var(--red);
+  margin-bottom: 10px;
+}
+
+.note p {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.9;
+  text-indent: 2em;
+  color: #4a3524;
+}
+
+.seal {
+  position: absolute;
+  right: 76px;
+  bottom: 92px;
+  width: 92px;
+  height: 92px;
+  border: 3px solid var(--red);
+  border-radius: 50%;
+  color: var(--red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 17px;
+  line-height: 1.25;
+  letter-spacing: .12em;
+  transform: rotate(-8deg);
+  opacity: .82;
+  padding: 10px;
+}
+
+.footer {
+  margin-top: 54px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(122,91,46,.38);
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  font-size: 14px;
+  color: var(--muted);
+  letter-spacing: .08em;
+}
+
+body.court .sheet {
+  background:
+    radial-gradient(circle at 20% 10%, rgba(255,255,255,.10), transparent 40%),
+    repeating-linear-gradient(0deg, rgba(90,60,20,.03) 0px, rgba(90,60,20,.03) 1px, transparent 1px, transparent 4px),
+    linear-gradient(175deg, #e6d6b2 0%, #d9c39a 100%);
+}
+
+body.vote .sheet {
+  background:
+    radial-gradient(circle at 20% 10%, rgba(255,255,255,.10), transparent 40%),
+    repeating-linear-gradient(90deg, rgba(90,60,20,.03) 0px, rgba(90,60,20,.03) 1px, transparent 1px, transparent 6px),
+    linear-gradient(175deg, #e9dcbd 0%, #d8c59f 100%);
+}
+
+body.vote .seal { border-color: #3e5641; color: #3e5641; }
+
+@media (max-width: 1200px) {
+  .sheet { width: 100%; min-height: 0; padding: 48px 42px; }
+  .title { font-size: 38px; }
+  .section p { font-size: 18px; }
+}

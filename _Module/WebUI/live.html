@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=800, height=600">
+<title>朝堂 · CEF 实时页面</title>
+<style>
+  :root {
+    --ink: #f2e6cf;
+    --muted: #b89b72;
+    --gold: #c9a227;
+    --red: #8c3a3a;
+    --paper: #1c1814;
+    --paper2: #241f19;
+    --serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 800px; height: 600px; overflow: hidden;
+    background: #0e0b08; color: var(--ink); font-family: var(--serif);
+  }
+  #app {
+    position: relative; width: 100%; height: 100%; padding: 34px 44px;
+    background:
+      radial-gradient(circle at 20% 10%, rgba(201,162,39,.12), transparent 40%),
+      radial-gradient(circle at 88% 88%, rgba(140,58,58,.10), transparent 42%),
+      linear-gradient(160deg, #241f19, #15110d 70%);
+    border: 1px solid rgba(201,162,39,.35);
+  }
+  #app::before {
+    content: ""; position: absolute; inset: 12px; border: 1px solid rgba(201,162,39,.16);
+    pointer-events: none;
+  }
+  .eyebrow { font-size: 12px; letter-spacing: .34em; color: var(--muted); }
+  h1 { margin: 10px 0 2px; font-size: 34px; letter-spacing: .12em; font-weight: 600; color: #f6ecd8; }
+  .sub { font-size: 14px; color: var(--muted); letter-spacing: .08em; }
+  .rule { height: 1px; margin: 18px 0 22px; background: linear-gradient(90deg, transparent, var(--gold), transparent); opacity: .8; }
+  .stage { display: flex; align-items: center; gap: 30px; }
+  .seal-ring {
+    position: relative; width: 156px; height: 156px; flex: none; border-radius: 50%;
+    border: 2px solid rgba(140,58,58,.85);
+    box-shadow: 0 0 34px rgba(140,58,58,.18), inset 0 0 26px rgba(140,58,58,.16);
+    animation: spin 18s linear infinite;
+  }
+  .seal-ring::before {
+    content: ""; position: absolute; inset: 12px; border-radius: 50%;
+    border: 1px dashed rgba(201,162,39,.55);
+  }
+  .seal {
+    position: absolute; inset: 42px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--red); color: #e8c9c9; font-size: 22px; letter-spacing: .16em;
+    background: rgba(140,58,58,.16); animation: breathe 3.2s ease-in-out infinite;
+  }
+  .cards { display: flex; flex: 1; gap: 12px; }
+  .card {
+    flex: 1; min-height: 156px; padding: 16px 14px;
+    background: linear-gradient(180deg, rgba(242,230,207,.07), rgba(242,230,207,.02));
+    border: 1px solid rgba(201,162,39,.28);
+    box-shadow: inset 0 0 20px rgba(201,162,39,.04);
+    animation: drift 5.5s ease-in-out infinite;
+  }
+  .card:nth-child(2) { animation-delay: .8s; }
+  .card:nth-child(3) { animation-delay: 1.6s; }
+  .card .name { font-size: 18px; color: var(--gold); letter-spacing: .12em; }
+  .card .line { height: 1px; margin: 9px 0; background: rgba(201,162,39,.22); }
+  .card .fact { font-size: 13px; line-height: 1.7; color: #d7c7ad; }
+  .footer {
+    position: absolute; left: 44px; right: 44px; bottom: 26px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 13px; color: var(--muted); letter-spacing: .08em;
+  }
+  .bridge {
+    position: absolute; left: 44px; right: 44px; bottom: 58px;
+    display: flex; align-items: center; gap: 14px;
+    font-size: 13px; color: var(--muted);
+  }
+  .bridge button {
+    padding: 7px 14px; border: 1px solid rgba(201,162,39,.55);
+    background: rgba(201,162,39,.10); color: #ead9ae; font-family: var(--serif);
+    font-size: 13px; letter-spacing: .08em; cursor: pointer;
+  }
+  .bridge button:hover { background: rgba(201,162,39,.22); }
+  #bridgeStatus { color: #c9b894; }
+  .pulse { width: 8px; height: 8px; border-radius: 50%; background: #7fa86a; box-shadow: 0 0 12px #7fa86a; animation: glow 1.6s ease-in-out infinite; }
+  .clock { font-variant-numeric: tabular-nums; color: #e8d9b5; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes breathe { 0%,100% { transform: scale(.96); opacity: .82; } 50% { transform: scale(1.04); opacity: 1; } }
+  @keyframes drift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+  @keyframes glow { 0%,100% { opacity: .45; } 50% { opacity: 1; } }
+</style>
+</head>
+<body>
+  <div id="app">
+    <div class="eyebrow">卡拉迪亚 · 朝堂</div>
+    <h1>实时 Web 页面</h1>
+    <div class="sub">CEF OffScreen · 800×600 · 15fps · 本地 HTML / CSS 动画</div>
+    <div class="rule"></div>
+    <div class="stage">
+      <div class="seal-ring"><div class="seal">朝议</div></div>
+      <div class="cards">
+        <div class="card"><div class="name">北境</div><div class="line"></div><div class="fact">斯特吉亚<br>盟约动摇</div></div>
+        <div class="card"><div class="name">西陲</div><div class="line"></div><div class="fact">瓦兰迪亚<br>边军集结</div></div>
+        <div class="card"><div class="name">南庭</div><div class="line"></div><div class="fact">阿塞莱<br>商路畅通</div></div>
+      </div>
+    </div>
+    <div class="bridge">
+      <button id="bridgeBtn">测试与游戏通信</button>
+      <span id="bridgeStatus">等待 CefSharp 绑定…</span>
+    </div>
+    <div class="footer">
+      <div style="display:flex;align-items:center;gap:8px"><span class="pulse"></span><span>页面运行中 · CSS 动画与 JS 时钟</span></div>
+      <div class="clock" id="clock">--:--:--</div>
+    </div>
+  </div>
+  <script>
+    function tick() {
+      var now = new Date();
+      var pad = function (n) { return n < 10 ? "0" + n : "" + n; };
+      var el = document.getElementById("clock");
+      if (el) el.textContent = pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds());
+    }
+    setInterval(tick, 250);
+    tick();
+    window.__game = {
+      render: function (data) {
+        console.log("game data", data);
+        var el = document.getElementById("bridgeStatus");
+        if (el) el.textContent = "收到游戏数据：" + JSON.stringify(data).slice(0, 80);
+      },
+      setStatus: function (text) {
+        var el = document.getElementById("bridgeStatus");
+        if (el) el.textContent = text;
+      }
+    };
+
+    async function pingGame(prefix) {
+      var status = document.getElementById("bridgeStatus");
+      try {
+        if (!window.CefSharp) {
+          if (status) status.textContent = "非 CEF 环境（浏览器预览）";
+          return;
+        }
+        await CefSharp.BindObjectAsync("aiChronicle");
+        var reply = await aiChronicle.ping(prefix || "页面已就绪");
+        if (status) status.textContent = "游戏回传：" + reply;
+        console.log("bridge reply", reply);
+      } catch (e) {
+        if (status) status.textContent = "桥接失败：" + (e && e.message ? e.message : e);
+        console.error(e);
+      }
+    }
+
+    setTimeout(function () { pingGame("page-ready"); }, 400);
+    var bridgeBtn = document.getElementById("bridgeBtn");
+    if (bridgeBtn) {
+      bridgeBtn.addEventListener("click", function () { pingGame("button-click"); });
+    }
+  </script>
+</body>
+</html>

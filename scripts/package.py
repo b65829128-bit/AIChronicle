@@ -51,6 +51,11 @@ def assemble() -> Path:
     shutil.copy2(ROOT / "_Module" / "SubModule.xml", staging / "SubModule.xml")
     shutil.copytree(ROOT / "_Module" / "GUI", staging / "GUI")
 
+    # Web 内容层资源（HTML/CSS/JS/字体/预览页）；不存在时跳过，保持旧包兼容。
+    web_ui = ROOT / "_Module" / "WebUI"
+    if web_ui.exists():
+        shutil.copytree(web_ui, staging / "WebUI")
+
     campaigns = ROOT / "_Module" / "Prompts" / "Campaigns"
     if campaigns.exists():
         shutil.copytree(
@@ -67,13 +72,28 @@ def assemble() -> Path:
 
     bin_dir = staging / "bin" / "Win64_Shipping_Client"
     bin_dir.mkdir(parents=True)
-    dlls = sorted(out_dir.glob("*.dll"))
-    for dll in dlls:
-        shutil.copy2(dll, bin_dir / dll.name)
-    print(f"      运行时 DLL: {len(dlls)} 个（含 NAudio 依赖）", flush=True)
+    # CefSharp/CEF 需要 libcef.dll、locales、BrowserSubprocess.exe 等非 dll 文件；
+    # 不能只复制 *.dll，否则运行时会 Cef.Initialize 失败。
+    copied = 0
+    for source in sorted(out_dir.rglob("*")):
+        if not source.is_file():
+            continue
+        rel = source.relative_to(out_dir)
+        if rel.parts and rel.parts[0].lower() == "x86":
+            continue
+        if source.suffix.lower() in (".pdb", ".xml"):
+            continue
+        target = bin_dir / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        copied += 1
+    print(f"      运行时文件: {copied} 个（含 CefSharp/CEF 原生文件）", flush=True)
 
     shutil.copy2(ROOT / "README_MOD.md", staging / "README_MOD.md")
     shutil.copy2(ROOT / "LICENSE", staging / "LICENSE")
+    licenses = ROOT / "LICENSES"
+    if licenses.exists():
+        shutil.copytree(licenses, staging / "LICENSES")
     install_doc = next(
         (p for p in ROOT.glob("*.txt") if "安装" in p.name or "readme" in p.name.lower()),
         None,

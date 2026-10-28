@@ -21,6 +21,8 @@ namespace AIChronicle
         private static bool _prevLetterO;
         private static bool _prevChanceryP;
         private static bool _prevHistoryH;
+        private static bool _prevGalleryKit;
+        private static DateTime? _mapFreeSince;
 
         /// <summary>玩家是否正位于战役大地图（非捏脸/菜单/战斗等界面）。天意等大地图系统的激活以此为准。</summary>
         internal static bool IsPlayerFreeOnMap()
@@ -201,6 +203,7 @@ namespace AIChronicle
         public override void OnGameEnd(Game game)
         {
             base.OnGameEnd(game);
+            KitGalleryScreen.CloseIfOpen();
             EntityManager.ResetForNewCampaign();
             PartyBehaviorManager.ResetForNewCampaign();
             AgentScheduler.ResetForNewCampaign();
@@ -222,7 +225,7 @@ namespace AIChronicle
             var oDown = Input.IsKeyDown(InputKey.O);
             if (oDown && !_prevLetterO && IsPlayerFreeOnMap())
             {
-                if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen && !HistoryScreen.IsOpen)
+                if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen && !HistoryScreen.IsOpen && !KitScreen.AnyOpen)
                     LetterListScreen.Open();
                 else if (LetterListScreen.IsOpen)
                     LetterListScreen.Close();
@@ -232,7 +235,7 @@ namespace AIChronicle
             var mDown = Input.IsKeyDown(InputKey.M);
             if (mDown && !_prevChanceryP && IsPlayerFreeOnMap())
             {
-                if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen && !HistoryScreen.IsOpen)
+                if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen && !HistoryScreen.IsOpen && !KitScreen.AnyOpen)
                     AIChatScreen.OpenChancery();
             }
             _prevChanceryP = mDown;
@@ -240,12 +243,41 @@ namespace AIChronicle
             var hDown = Input.IsKeyDown(InputKey.H);
             if (hDown && !_prevHistoryH && IsPlayerFreeOnMap())
             {
-                if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen && !HistoryScreen.IsOpen)
+                if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen && !HistoryScreen.IsOpen && !KitScreen.AnyOpen)
                     HistoryScreen.Open();
                 else if (HistoryScreen.IsOpen)
                     HistoryScreen.Close();
             }
             _prevHistoryH = hDown;
+
+            var freeOnMap = IsPlayerFreeOnMap();
+            if (freeOnMap && _mapFreeSince == null)
+                _mapFreeSince = DateTime.UtcNow;
+            else if (!freeOnMap)
+                _mapFreeSince = null;
+
+            var f8Down = Input.IsKeyDown(InputKey.F8);
+            if (f8Down && !_prevGalleryKit && freeOnMap
+                && !AIChatScreen.IsOpen && !LetterListScreen.IsOpen && !HistoryScreen.IsOpen
+                && (!KitScreen.AnyOpen || KitGalleryScreen.IsGalleryOpen))
+            {
+                double seconds = _mapFreeSince.HasValue
+                    ? (DateTime.UtcNow - _mapFreeSince.Value).TotalSeconds
+                    : -1;
+                UiTrace.Log($"F8 pressed mapFreeSeconds={seconds:F1} anyKitOpen={KitScreen.AnyOpen}");
+                // 地图刚进入 MapState 时仍在 Bake Terrain/初始化 UI；此时开 GauntletLayer 有卡死风险。
+                if (seconds >= 3.0)
+                {
+                    KitGalleryScreen.Toggle();
+                }
+                else
+                {
+                    UiTrace.Log("F8 ignored: map not settled");
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        "[AI编年史·UI] 地图尚未稳定，请稍候 3 秒再按 F8。", Colors.Yellow));
+                }
+            }
+            _prevGalleryKit = f8Down;
 
             if (_pendingChatHero != null)
             {

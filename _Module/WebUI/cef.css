@@ -1,0 +1,57 @@
+/* CEF 800×600 版本：复用 theme.css 的纸张/字体，但改成单屏可滚动页面。 */
+html, body {
+  width: 800px;
+  min-height: 600px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--paper);
+}
+
+#app {
+  padding: 0;
+}
+
+.sheet {
+  width: 100%;
+  min-height: 600px;
+  padding: 30px 42px 32px;
+  border: 0;
+  box-shadow: inset 0 0 120px rgba(90,60,20,.20), inset 0 0 2px rgba(255,255,255,.6);
+  animation: pageIn .55s ease-out both;
+}
+
+.eyebrow { font-size: 11px; margin-bottom: 10px; letter-spacing: .26em; }
+.title { font-size: 32px; line-height: 1.25; }
+.subtitle { font-size: 15px; margin-top: 8px; }
+.rule { margin: 20px 0 8px; }
+
+.section { margin-top: 24px; }
+.section h2 { font-size: 19px; margin-bottom: 10px; }
+.section p { font-size: 15.5px; line-height: 1.8; margin-bottom: 12px; }
+.section:first-of-type p:first-of-type::first-letter { font-size: 54px; padding: 4px 9px 0 0; }
+
+.note { margin-top: 28px; padding: 18px 92px 18px 22px; }
+.note p { font-size: 15px; line-height: 1.75; }
+.note .label { font-size: 11px; }
+
+.seal {
+  right: 34px; bottom: 28px; width: 66px; height: 66px;
+  font-size: 13px; padding: 8px;
+  animation: sealPulse 4.5s ease-in-out infinite;
+}
+
+.footer { margin-top: 34px; font-size: 12px; }
+
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sealPulse {
+  0%, 100% { transform: rotate(-8deg) scale(.98); opacity: .72; }
+  50% { transform: rotate(-8deg) scale(1.03); opacity: .9; }
+}
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--paper-deep); }
+::-webkit-scrollbar-thumb { background: rgba(168,121,42,.55); }

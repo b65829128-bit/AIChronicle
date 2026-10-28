@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Prefab>
+  <Window>
+    <Widget WidthSizePolicy="StretchToParent" HeightSizePolicy="StretchToParent" DoNotAcceptEvents="false" />
+  </Window>
+</Prefab>
