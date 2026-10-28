@@ -173,7 +173,7 @@ namespace AIChronicle
 #if NET472
             add(Kit.SectionTitle(ctx, "CEF 实时页面"));
             var cefRow = Kit.Row(ctx);
-            cefRow.Add(Kit.Text(ctx, "真实 CefSharp OffScreen 页面（800×600 / 15fps）", KitTextStyle.Body, wrap: false));
+            cefRow.Add(Kit.Text(ctx, "真实 CefSharp OffScreen 页面（800×600 / 30fps）", KitTextStyle.Body, wrap: false));
             cefRow.Add(Kit.Button(ctx, "打开 CEF", () =>
             {
                 Close();

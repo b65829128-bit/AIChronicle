@@ -21,6 +21,7 @@ namespace AIChronicle
         private readonly string _title;
         private readonly string _subtitle;
         private readonly object? _pageData;
+        private readonly int _fps;
 
         private KitTextureWidget? _texture;
         private TextWidget? _status;
@@ -34,13 +35,15 @@ namespace AIChronicle
         public CefWebScreen(
             string pageFile = "live.html",
             string title = "CEF 实时页面",
-            string subtitle = "800×600 · 15fps · 本地 HTML",
-            object? pageData = null)
+            string subtitle = "800×600 · 30fps · 本地 HTML",
+            object? pageData = null,
+            int fps = 30)
         {
             _pageFile = pageFile;
             _title = title;
             _subtitle = subtitle;
             _pageData = pageData;
+            _fps = fps;
         }
 
         /// <summary>打开真实史书页面：内容由 C# 数据注入，页面本身只负责渲染。</summary>
@@ -49,7 +52,7 @@ namespace AIChronicle
             new CefWebScreen(
                 "chronicle.html",
                 "编年史 · 实时页面",
-                "800×600 · CEF · 数据由 C# 注入 · 可滚动",
+                "800×600 · CEF · 数据由 C# 注入 · 可滚动 · 30fps",
                 BuildChronicleData()).Open();
         }
 
@@ -104,7 +107,7 @@ namespace AIChronicle
             var bridge = new CefBridge(this);
             bridge.ActionReceived += OnBridgeAction;
             string pageFull = Path.GetFullPath(page);
-            if (!_session.Start(new Uri(pageFull).AbsoluteUri, 800, 600, 15, bridge))
+            if (!_session.Start(new Uri(pageFull).AbsoluteUri, 800, 600, _fps, bridge))
             {
                 SetStatus("CEF 启动失败：" + CefWebHost.LastError);
             }

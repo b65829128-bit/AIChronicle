@@ -7,7 +7,7 @@
 ## 1. 现状
 
 - CEF 仅在 `net472`（Steam）编译；`net6`/Xbox 用 `#if NET472` 完全排除。
-- 默认页面 800×600、15fps，软件渲染（`--disable-gpu` / `--no-sandbox`）。
+- 默认页面 800×600、30fps，软件渲染（`--disable-gpu` / `--no-sandbox`）。
 - 实机：`Cef.Initialize` 约 0.8s，首帧约 1.6s；浏览器关闭后 CEF 保持初始化，可直接重开。
 - 入口：大地图按 **F8** → Kit Gallery →「打开 CEF」/「打开 CEF 史书」。
 - CEF 原生运行时约 395MB（`libcef.dll` 236MB + locales + subprocess + paks）。
@@ -60,7 +60,7 @@ CefBridge.ActionReceived
 
 ## 4. 帧管线
 
-- `BrowserSettings.WindowlessFrameRate = 15`。
+- `BrowserSettings.WindowlessFrameRate = 30`。
 - `CefWebSession.OnPaint` 在 CEF UI 线程拷贝 BGRA，做 R/B 交换，然后触发 `FrameReady`。
 - `CefWebScreen` 合并主线程投递：主线程忙时丢弃中间帧，只保留最新帧。
 - `KitTextureWidget.SetRawBgra` → `Texture.CreateFromByteArray` → `GauntletEngineTexture` → `KitDynamicSprite` → Brush。
@@ -112,11 +112,11 @@ CefBridge.ActionReceived
 
 ## 9. 性能与限制
 
-- 当前 15fps、每帧整张 800×600 纹理上传；不如浏览器 60fps 顺滑，但已可用。
+- 当前 30fps、每帧整张 800×600 纹理上传；实机无明显卡顿，但仍不如浏览器 60fps 顺滑。
 - 每帧成本：CEF 软件渲染 + BGRA→RGBA 逐像素交换 + `CreateFromByteArray` + Brush 更新。
 - 引擎 `Texture` 没有 in-place update；不能只更新脏矩形。
 - 可选优化：
-  1. 30fps 压测；
+  1. 60fps 压测（30fps 已通过）；
   2. 16:9 viewport（如 1200×675）铺满屏幕；
   3. 长期：CEF `OnAcceleratedPaint` + 原生 D3D11 共享纹理，绕过 CPU 上传（工程量大）。
 - 尚未自动回退到原生史书面板；CEF 启动失败会在屏幕内显示错误，不影响游戏其他部分。
@@ -146,7 +146,7 @@ CefBridge.ActionReceived
 
 ## 12. 下一步
 
-1. **30fps 压测**（先不改架构）。
+1. **60fps 压测**（30fps 已通过，先不改架构）。
 2. **16:9 全屏 CEF 页面**（1200×675，重排 cef.css）。
 3. 接入真实游戏数据（当前战役/家族/战事）到 `render(data)`。
 4. 页面动作 `dispatch` 与真实决策/投票流程对接（游戏功能 session）。
