@@ -126,7 +126,7 @@ public sealed class CourtScreen : KitScreen
 
 详见 [ui-web.md](ui-web.md)。摘要：
 
-- **CEF live**：CefSharp OffScreen 140.1.140 / CEF 140，1280×720（16:9）、30fps，BGRA 帧 → RGBA 引擎纹理。
+- **CEF live**：CefSharp OffScreen 140.1.140 / CEF 140，30fps，BGRA 帧 → RGBA 引擎纹理；演示/编年史页 1280×720，史书窗口 1100×700。
 - 游戏 → 网页：`window.__game.render(json)`；网页 → 游戏：`aiChronicle.dispatch(id, payload)` → `CefWebScreen.PageAction`。
 - 鼠标点击/悬停/滚轮回传；文本输入/IME 仍走原生。
 - 依赖体积约 395MB，仅 net472/Steam；net6/Xbox `#if NET472` 排除。
@@ -136,7 +136,7 @@ public sealed class CourtScreen : KitScreen
 
 1. `KitGalleryScreen`（本 session）
 2. `LetterListScreen`（列表简单，验证 List/Row/Button）
-3. `HistoryScreen` 右侧内容面板（验证 Web 管线）
+3. `HistoryScreen` 全 Web 史书（MVP 已完成：1100×700 窗口 + 全 Web 目录/正文 + 原生 fallback；后续抽 `HistoryArchive`）
 4. 新屏幕（Court/Diplomacy/Dossier）直接用 Kit
 5. `AIChatScreen` 只换主题/笔刷，不重写逻辑
 
@@ -148,7 +148,7 @@ public sealed class CourtScreen : KitScreen
 - 快捷键 O/M/H 与 Gallery 互斥。
 - 无新增运行时依赖（CefSharp/CEF 已批准，属于 UI 运行时；net6 不加载）。
 
-> **本 session 状态**：已实机验证——Gallery 可开、滚动区/动态纹理正常；CEF 初始化约 0.8s、首帧约 1.6s；CEF 史书颜色、鼠标点击、桥接、滚动均通过；**1280×720 / 30fps 实机通过，无明显卡顿**。当前限制仍是每帧整张上传，不如浏览器 60fps 顺滑。
+> **本 session 状态**：已实机验证——Gallery 可开、滚动区/动态纹理正常；CEF 初始化约 0.8s、首帧约 1.6s；CEF 史书颜色、鼠标点击、桥接、滚动均通过；**1280×720 / 30fps 与史书 1100×700 窗口均实机通过，无明显卡顿**。当前限制仍是每帧整张上传，不如浏览器 60fps 顺滑。
 
 ## 7. 风险
 
@@ -159,8 +159,8 @@ public sealed class CourtScreen : KitScreen
 
 ## 8. 待办（下一 session）
 
-- CEF 60fps 压测；16:9 已做 1280×720，下一步评估全幅铺满/1440×810；共享纹理桥评估。
-- 史书页接入真实游戏数据（当前为示例 JSON）。
+- 史书收尾：抽出 `HistoryArchive`、边界/fallback 回归、清晰度（见 `plan-history-cef.md`）。
+- CEF 60fps 压测；全幅铺满/1440×810；共享纹理桥评估。
 - 页面 `dispatch` 动作与真实决策/投票流程对接（游戏功能 session）。
 - 把按钮/面板等更多主题 token 迁到 `Kit.xml` 做热重载（文本样式已迁）。
-- 迁移 LetterList/History，补 Gallery 实机截图。
+- 迁移 LetterList，补 Gallery 实机截图。

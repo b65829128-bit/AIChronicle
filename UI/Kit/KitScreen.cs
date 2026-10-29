@@ -29,6 +29,9 @@ namespace AIChronicle
         public bool IsOpen => _layer != null;
         public static bool AnyOpen => _openCount > 0;
 
+        /// <summary>屏幕完全关闭后触发；用于宿主清理数据/会话。</summary>
+        public event Action? Closed;
+
         public void Open()
         {
             if (_layer != null)
@@ -85,6 +88,7 @@ namespace AIChronicle
             if (_openCount > 0)
                 _openCount--;
             OnClosed();
+            Closed?.Invoke();
         }
 
         public void Rebuild()

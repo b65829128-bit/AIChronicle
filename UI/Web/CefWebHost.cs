@@ -319,7 +319,7 @@ namespace AIChronicle
                     pixels = direction;
 
                 _browser?.EvaluateScriptAsync(
-                    "if(window.__scrollBySmooth){window.__scrollBySmooth(" + pixels + ");}" +
+                    "if(window.__scrollBySmooth){window.__scrollBySmooth(" + pixels + "," + x + "," + y + ");}" +
                     "else{window.scrollBy({top:" + pixels + ",behavior:'smooth'});}");
                 UiTrace.Log($"CefWebSession wheel delta={delta} notches={notches:F2} step={pixels} velocity={_wheelVelocity:F0}");
             }

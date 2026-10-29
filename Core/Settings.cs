@@ -627,6 +627,24 @@ namespace AIChronicle
             }
         }
 
+        private bool _useCefHistory;
+
+        [SettingPropertyBool("史书使用 CEF 阅读页（实验性）", Order = 13, RequireRestart = false,
+            HintText = "开启：H 键打开 CEF 全 Web 史书（目录 + 正文），排版接近网页。\n关闭：使用现有原生史书。CEF 初始化失败或非 Steam 版会自动回退原生。")]
+        [SettingPropertyGroup("游戏设置")]
+        public bool UseCefHistory
+        {
+            get => _useCefHistory;
+            set
+            {
+                if (_useCefHistory != value)
+                {
+                    _useCefHistory = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private bool _executionNoPenalty = true;
 
         [SettingPropertyBool("处决无惩罚", Order = 16, RequireRestart = false,

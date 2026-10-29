@@ -394,6 +394,7 @@ _Module/Prompts/
 - 依赖 CefSharp.OffScreen 140.1.140 + CEF 140 原生运行时，安装目录约 **395MB**；仅 net472/Steam 启用，net6/Xbox 不加载。
 - 当前是 UI 框架与示例页面，**尚未接入真实游戏数据**；聊天/书信的中文文本输入仍走原生输入框。
 - 技术细节见 [docs/ui-web.md](docs/ui-web.md)，原生 Kit 规范见 [docs/ui-framework.md](docs/ui-framework.md)。
+- 史书也可切到全 Web 阅读页：MCM 开启「史书使用 CEF 阅读页（实验性）」后按 H，目录和正文都由 CEF 渲染，以 1100×700 居中窗口显示；关闭开关仍用原生史书。
 
 ### 全中文界面
 
@@ -459,6 +460,7 @@ _Module/Prompts/
 | 启用记忆巩固 | 自我审视（国王政务/封地审视/外交问询/封臣自省/密使回应）激活前，若日记落后于聊天记录，先跑一次巩固——把最近往来中值得记住的决定/承诺/计策/战略补记进 decisions/diary.txt，避免照陈旧日记行事。只在日记落后时触发 | 开启 |
 | 独立家族永不失踪 | 开启后无王国的独立家族（灭国幸存者/自愿离国者/丢光封地者）不再被原版 28 天计时器自动灭族，永久保留，契合封臣自省与玩家劝降；关闭恢复原版（28 天不加入势力即灭族，仅剩百科） | 开启 |
 | 史书字体大小 | 史书 UI 中编年史正文的字体大小 | `28` |
+| 史书使用 CEF 阅读页（实验性） | 开启后 H 键打开 CEF 全 Web 史书（目录 + 正文，1100×700 窗口）；关闭使用原生史书。CEF 初始化失败自动回退 | 关闭 |
 | 强制开始外交 | 立即激活所有国王 Agent 进行外交审视，重置计时器（按钮） | — |
 | 强制封臣自省 | 立即重置所有王国的封臣自省计时器（按钮） | — |
 | 对话字体大小 | 聊天窗口中对话内容的字号 | `24` |
@@ -562,7 +564,7 @@ AIChronicle/
 │   ├── LetterListScreen.cs  # 书信系统屏幕管理器（战役地图 O 键入口）
 │   ├── HistoryScreenVM.cs   # 史书 UI ViewModel（编年史列表、内容加载）
 │   ├── Kit/                 # 原生 Kit UI 框架（KitScreen/KitTheme/组件/动态纹理/Gallery）
-│   └── Web/                 # CEF live 页面宿主（CefWebScreen/CefWebHost/CefBridge/WebPage 脚手架）
+│   └── Web/                 # CEF 页面宿主（CefWebScreen/CefWebHost/CefBridge/HistoryCefScreen/WebPage 脚手架）
 ├── Systems/                 # 游戏系统与 Harmony 补丁
 │   ├── DiplomacyService.cs  # 外交服务（宣战/议和/结盟/贸易/回复提案）
 │   ├── HistoryRecorder.cs   # 历史记录器（监听游戏事件自动写入原始史料）
@@ -590,6 +592,9 @@ AIChronicle/
 │   ├── WebUI/                    # CEF 页面资产
 │   │   ├── live.html             # CEF 演示页（CSS 动画/JS 时钟/桥接测试）
 │   │   ├── chronicle.html        # CEF 史书页（等 C# 注入数据）
+│   │   ├── history.html          # CEF 全 Web 史书（1100×700，目录+正文）
+│   │   ├── history.css           # 史书目录/纸张正文版式
+│   │   ├── history.js            # 史书目录/正文/桥接/逐元素平滑滚动
 │   │   ├── app.js                # 共享渲染器 + __game.render/平滑滚动
 │   │   ├── theme.css             # 纸张/朝堂/投票主题
 │   │   ├── cef.css               # 1280×720 CEF 版式

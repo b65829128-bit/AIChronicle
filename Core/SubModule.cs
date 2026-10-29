@@ -243,10 +243,31 @@ namespace AIChronicle
             var hDown = Input.IsKeyDown(InputKey.H);
             if (hDown && !_prevHistoryH && IsPlayerFreeOnMap())
             {
-                if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen && !HistoryScreen.IsOpen && !KitScreen.AnyOpen)
-                    HistoryScreen.Open();
-                else if (HistoryScreen.IsOpen)
+#if NET472
+                if (HistoryCefScreen.IsOpen)
+                {
+                    HistoryCefScreen.Close();
+                }
+                else
+#endif
+                if (HistoryScreen.IsOpen)
+                {
                     HistoryScreen.Close();
+                }
+                else if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen && !KitScreen.AnyOpen)
+                {
+#if NET472
+                    if (MySettings.Instance?.UseCefHistory == true)
+                    {
+                        if (!HistoryCefScreen.Open())
+                            HistoryScreen.Open();
+                    }
+                    else
+#endif
+                    {
+                        HistoryScreen.Open();
+                    }
+                }
             }
             _prevHistoryH = hDown;
 

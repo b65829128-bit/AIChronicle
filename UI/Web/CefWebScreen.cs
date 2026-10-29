@@ -17,8 +17,9 @@ namespace AIChronicle
     /// </summary>
     public sealed class CefWebScreen : KitScreen
     {
-        private const int ViewWidth = 1280;
-        private const int ViewHeight = 720;
+        private readonly int _viewWidth;
+        private readonly int _viewHeight;
+        private readonly bool _windowed;
 
         private readonly string _pageFile;
         private readonly string _title;
@@ -40,13 +41,19 @@ namespace AIChronicle
             string title = "CEF 实时页面",
             string subtitle = "1280×720 · 30fps · 本地 HTML",
             object? pageData = null,
-            int fps = 30)
+            int fps = 30,
+            int viewWidth = 1280,
+            int viewHeight = 720,
+            bool windowed = false)
         {
             _pageFile = pageFile;
             _title = title;
             _subtitle = subtitle;
             _pageData = pageData;
             _fps = fps;
+            _viewWidth = viewWidth;
+            _viewHeight = viewHeight;
+            _windowed = windowed;
         }
 
         /// <summary>打开真实史书页面：内容由 C# 数据注入，页面本身只负责渲染。</summary>
@@ -66,6 +73,16 @@ namespace AIChronicle
             root.Scrim();
 
             var panel = Kit.Panel(ctx, KitTheme.Window, KitTheme.S5, stretchContent: true);
+            if (_windowed)
+            {
+                // 窗口模式：不铺满整个屏幕，按 CEF 纹理尺寸留出原生边距。
+                panel.Root.WidthSizePolicy = SizePolicy.Fixed;
+                panel.Root.SuggestedWidth = _viewWidth + KitTheme.S5 * 2f;
+                panel.Root.HeightSizePolicy = SizePolicy.Fixed;
+                panel.Root.SuggestedHeight = _viewHeight + 160f;
+                panel.Root.HorizontalAlignment = HorizontalAlignment.Center;
+                panel.Root.VerticalAlignment = VerticalAlignment.Center;
+            }
             panel.Add(Kit.Header(ctx, _title,
                 right: Kit.Button(ctx, "关闭", Close, KitButtonStyle.Ghost),
                 subtitle: _subtitle));
@@ -78,8 +95,8 @@ namespace AIChronicle
             {
                 WidthSizePolicy = SizePolicy.Fixed,
                 HeightSizePolicy = SizePolicy.Fixed,
-                SuggestedWidth = ViewWidth,
-                SuggestedHeight = ViewHeight,
+                SuggestedWidth = _viewWidth,
+                SuggestedHeight = _viewHeight,
                 HorizontalAlignment = HorizontalAlignment.Center
             };
             _texture.PointerMoved += OnPointerMoved;
@@ -110,9 +127,27 @@ namespace AIChronicle
             var bridge = new CefBridge(this);
             bridge.ActionReceived += OnBridgeAction;
             string pageFull = Path.GetFullPath(page);
-            if (!_session.Start(new Uri(pageFull).AbsoluteUri, ViewWidth, ViewHeight, _fps, bridge))
+            if (!_session.Start(new Uri(pageFull).AbsoluteUri, _viewWidth, _viewHeight, _fps, bridge))
             {
                 SetStatus("CEF 启动失败：" + CefWebHost.LastError);
+            }
+        }
+
+        /// <summary>向页面推进数据（主线程调用）；用于史书选中后加载正文。</summary>
+        public void PushJson(string method, object data)
+        {
+            if (_closed || _session == null)
+                return;
+            try
+            {
+                string json = JsonConvert.SerializeObject(data);
+                UiTrace.Log($"CefWebScreen.PushJson method={method} bytes={json.Length}");
+                _session.EvaluateScriptAsync(
+                    "window.__game && window.__game." + method + "(" + json + ")");
+            }
+            catch (Exception ex)
+            {
+                UiTrace.Log("CefWebScreen.PushJson failed: " + ex);
             }
         }
 

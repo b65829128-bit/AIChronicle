@@ -100,6 +100,18 @@ CefBridge.ActionReceived
 - 页面背景与纸张同色，纹理内部无黑边；屏幕边缘的暗区来自固定纹理尺寸/原生面板留白，不是页面版式留边。
 - 中文字体使用系统衬线栈（Noto Serif SC / Source Han Serif / SimSun）；目标机器缺字体时需打包字体或调整字体栈。
 
+### 7.1 史书全 Web（已实现 MVP）
+
+- MCM「史书使用 CEF 阅读页（实验性）」默认关闭；开启后 H 打开全 Web 史书。
+- HistoryCefScreen + _Module/WebUI/history.html/css/js：
+  - 左侧 Web 目录（分组/选中/滚动）；
+  - 右侧纸张正文（章节/空行解析、MCM 字号、滚动）；
+  - 点击目录 → aiChronicle.dispatch("select", index) → C# 读取 → showArticle。
+- 窗口模式 1100×700，居中，不再是 1280 全屏；原生只保留标题/关闭。
+- 原生 HistoryScreen 保留为 fallback；CEF 初始化失败/MCM 关闭时 H 仍打开原生史书。
+- 当前 HistoryCefScreen 暂时复用 HistoryScreenVM 的目录解析；收尾计划是抽出 HistoryArchive，详见 plan-history-cef.md。
+- 清晰度：窗口比 1280 全屏更接近 1:1；浏览器按 DPR 栅格化，CEF 固定位图仍可能被 Gauntlet 二次采样，必要时再做超采样/字体。
+
 ## 8. 构建 / 打包
 
 - `AIChronicle.csproj`：
@@ -112,14 +124,14 @@ CefBridge.ActionReceived
 
 ## 9. 性能与限制
 
-- 当前 30fps、每帧整张 1280×720 纹理上传（约 3.7MB/帧、110MB/s）；实机无明显卡顿，但仍不如浏览器 60fps 顺滑。
+- 当前 30fps；全幅 CEF 页为 1280×720（约 3.7MB/帧、110MB/s），史书窗口为 1100×700（约 3.1MB/帧、92MB/s）；实机无明显卡顿，但仍不如浏览器 60fps 顺滑。
 - 每帧成本：CEF 软件渲染 + BGRA→RGBA 逐像素交换 + `CreateFromByteArray` + Brush 更新。
 - 引擎 `Texture` 没有 in-place update；不能只更新脏矩形。
 - 可选优化：
   1. 60fps 压测（30fps 已通过）；
   2. 16:9 已做 1280×720；下一步 1440×810 或全幅铺满；
   3. 长期：CEF `OnAcceleratedPaint` + 原生 D3D11 共享纹理，绕过 CPU 上传（工程量大）。
-- 尚未自动回退到原生史书面板；CEF 启动失败会在屏幕内显示错误，不影响游戏其他部分。
+- 普通 CefWebScreen 启动失败会在屏幕内显示错误；HistoryCefScreen 会把失败上报给 H 入口，回退原生史书。
 
 ## 10. 安全
 

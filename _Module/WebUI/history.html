@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1100, height=700">
+  <title>卡拉迪亚史书</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="history.css">
+</head>
+<body>
+  <div id="app">
+    <aside class="catalog">
+      <div class="catalog-head">史册目录</div>
+      <div id="catalogList" class="catalog-list scrollable"></div>
+    </aside>
+    <main id="reader" class="reader scrollable">
+      <article id="paper" class="paper">
+        <h1 id="articleTitle" class="article-title"></h1>
+        <div id="articleMeta" class="article-meta"></div>
+        <div id="articleBody" class="article-body"></div>
+      </article>
+    </main>
+  </div>
+  <div id="status" class="status">研墨中…</div>
+  <script src="history.js"></script>
+</body>
+</html>
