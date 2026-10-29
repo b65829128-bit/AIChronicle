@@ -136,7 +136,7 @@ public sealed class CourtScreen : KitScreen
 
 1. `KitGalleryScreen`（本 session）
 2. `LetterListScreen`（列表简单，验证 List/Row/Button）
-3. `HistoryScreen` 全 Web 史书（MVP 已完成：1100×700 窗口 + 全 Web 目录/正文 + 原生 fallback；后续抽 `HistoryArchive`）
+3. `HistoryScreen` 全 Web 史书（已完成：1100×700 窗口 + 全 Web 目录/正文 + 原生 fallback；`HistoryArchive` 已抽离，正史 Markdown 渲染）
 4. 新屏幕（Court/Diplomacy/Dossier）直接用 Kit
 5. `AIChatScreen` 只换主题/笔刷，不重写逻辑
 
@@ -159,7 +159,7 @@ public sealed class CourtScreen : KitScreen
 
 ## 8. 待办（下一 session）
 
-- 史书收尾：抽出 `HistoryArchive`、边界/fallback 回归、清晰度（见 `plan-history-cef.md`）。
+- 史书收尾：边界/fallback 回归、清晰度（`HistoryArchive` 已抽离，见 `plan-history-cef.md`）。
 - CEF 60fps 压测；全幅铺满/1440×810；共享纹理桥评估。
 - 页面 `dispatch` 动作与真实决策/投票流程对接（游戏功能 session）。
 - 把按钮/面板等更多主题 token 迁到 `Kit.xml` 做热重载（文本样式已迁）。
@@ -173,17 +173,19 @@ public sealed class CourtScreen : KitScreen
 
 - 原生 Kit：主题 token、文本/按钮/Badge/Divider/Toggle/Slider/FormRow、Panel/Card/Row/Column/Scroll、KitScreen、F8 Gallery。
 - CEF：CefSharp 140/CEF 140、OffScreen 30fps、BGRA→RGBA、窗口/全屏宿主、数据注入、双向桥、鼠标点击/悬停/滚轮、窗口模式。
-- 真实页面：演示页、编年史页、全 Web 史书（目录 + 正文，1100×700，MCM 开关，原生 fallback）。
+- 真实页面：演示页、编年史页、全 Web 史书（目录 + 正文，1100×700，MCM 开关，原生 fallback；正史 Markdown 渲染）。
+- 史书数据层：`HistoryArchive` 统一目录/分组/权限/正文；原生与 CEF 共用。
+- 测试：`tests/AIChronicle.Pure.Tests`（目录/权限/读取）+ `tests/web`（Markdown 渲染，Node DOM 桩），无需游戏 DLL。
 - 构建/部署：x64、CEF 原生文件复制、全量打包、第三方许可、文档。
 - 实机：CEF 初始化/首帧、颜色、桥接、滚动、窗口模式均通过。
 
 还未完成/不应假设：
 
-- 史书数据仍复用 `HistoryScreenVM`；`HistoryArchive` 尚未抽出，双入口长期会分叉。
+- 史书数据已抽到 `HistoryArchive`，双入口共用目录/权限/正文；但边界场景仍需进游戏回归。
 - CEF 仍是固定位图 + 每帧整张上传；30fps 可用，60fps/共享纹理未验证。
 - 只有 net472/Steam；net6/Xbox 只能走原生。
 - 页面不处理文本输入/IME；聊天/书信不迁 Web。
 - 没有自动化 UI/像素回归；Gallery 仍有诊断模式；CEF 包约 395MB。
-- 史书边界（空目录、无权限、缺文件、超长文）和 fallback 尚未系统回归。
+- 史书边界已有单测；进游戏回归（超长文、滚动、字号、CEF 失败回退）仍待做。
 
-结论：**布局/主题/屏幕/CEF 页面链路已经成形，可作为后续朝堂/投票/档案的 UI 基础；下一阶段应做数据抽离与回归硬化，而不是继续堆新页面。**
+结论：**布局/主题/屏幕/CEF 页面链路已经成形，可作为后续朝堂/投票/档案的 UI 基础；数据抽离已完成，下一阶段做进游戏回归，再开新页面。**

@@ -1,18 +1,20 @@
 #if NET472
 using System;
 using System.Collections.Generic;
-using TaleWorlds.Library;
 
 namespace AIChronicle
 {
     /// <summary>
     /// 全 Web 史书：目录和正文都由 CEF 渲染；原生只保留标题栏/关闭和 fallback。
+    /// 目录与正文统一由 HistoryArchive 提供，不再复用原生 HistoryScreenVM。
     /// 选中条目经 aiChronicle.dispatch 回主线程读取文件，再推回页面。
     /// </summary>
     public static class HistoryCefScreen
     {
         private static CefWebScreen? _screen;
-        private static HistoryScreenVM? _vm;
+        private static HistoryCatalog? _catalog;
+        private static int _selectedIndex = -1;
+        private static int _fontSize = 28;
 
         public static bool IsOpen => _screen != null && _screen.IsOpen;
 
@@ -29,8 +31,17 @@ namespace AIChronicle
             CleanupClosed();
             try
             {
-                _vm = new HistoryScreenVM();
-                object pageData = BuildPageData(_vm);
+                _fontSize = MySettings.Instance?.ChronicleFontSize ?? 28;
+                _catalog = HistoryArchive.LoadCatalog(
+                    HistoryViewerFactory.ForCurrentGame(),
+                    PromptManager.CampaignDir);
+                _selectedIndex = _catalog.FirstSelectableIndex;
+
+                HistoryArticle? article = _selectedIndex >= 0
+                    ? HistoryArchive.ReadArticle(_catalog.Entries[_selectedIndex])
+                    : null;
+
+                object pageData = BuildPageData(article);
                 var screen = new CefWebScreen(
                     "history.html",
                     "史书 · 编年史",
@@ -80,93 +91,83 @@ namespace AIChronicle
 
             MainThreadExecutor.Post(() =>
             {
-                if (_vm == null || _screen == null || !_screen.IsOpen)
+                var catalog = _catalog;
+                if (catalog == null || _screen == null || !_screen.IsOpen)
                     return;
-                if (index < 0 || index >= _vm.Chronicles.Count)
-                    return;
-
-                var entry = _vm.Chronicles[index];
-                if (entry.IsHeader)
+                if (index < 0 || index >= catalog.Entries.Count)
                     return;
 
-                try
-                {
-                    _vm.SelectChronicle(entry);
-                    _screen.PushJson("showArticle", BuildArticle(_vm, index));
-                }
-                catch (Exception ex)
-                {
-                    UiTrace.Log("HistoryCefScreen select failed: " + ex);
-                    _screen.PushJson("showError", ex.Message);
-                }
+                var entry = catalog.Entries[index];
+                if (!entry.IsSelectable)
+                    return;
+
+                _selectedIndex = index;
+                var article = HistoryArchive.ReadArticle(entry);
+                _screen.PushJson("showArticle", BuildArticle(article));
             });
         }
 
         private static void OnScreenClosed()
         {
-            var vm = _vm;
-            _vm = null;
             _screen = null;
-            try { vm?.OnFinalize(); } catch { }
+            _catalog = null;
+            _selectedIndex = -1;
         }
 
         private static void CleanupClosed()
         {
             if (_screen != null && !_screen.IsOpen)
             {
-                var vm = _vm;
-                _vm = null;
                 _screen = null;
-                try { vm?.OnFinalize(); } catch { }
+                _catalog = null;
+                _selectedIndex = -1;
             }
         }
 
         private static void Cleanup()
         {
             try { _screen?.Close(); } catch { }
-            var vm = _vm;
-            _vm = null;
             _screen = null;
-            try { vm?.OnFinalize(); } catch { }
+            _catalog = null;
+            _selectedIndex = -1;
         }
 
-        private static object BuildPageData(HistoryScreenVM vm)
+        private static object BuildPageData(HistoryArticle? article)
         {
             var entries = new List<object>();
-            int selected = -1;
-
-            for (int i = 0; i < vm.Chronicles.Count; i++)
+            var catalog = _catalog;
+            if (catalog != null)
             {
-                var entry = vm.Chronicles[i];
-                if (entry.IsSelected)
-                    selected = i;
-
-                entries.Add(new Dictionary<string, object>
+                foreach (var entry in catalog.Entries)
                 {
-                    ["index"] = i,
-                    ["title"] = entry.Name,
-                    ["header"] = entry.IsHeader,
-                    ["selected"] = entry.IsSelected
-                });
+                    entries.Add(new Dictionary<string, object>
+                    {
+                        ["index"] = entry.Index,
+                        ["title"] = entry.Title,
+                        ["header"] = entry.IsHeader,
+                        ["selected"] = entry.Index == _selectedIndex
+                    });
+                }
             }
 
-            object? article = selected >= 0 ? BuildArticle(vm, selected) : null;
-            return new Dictionary<string, object>
+            return new Dictionary<string, object?>
             {
                 ["entries"] = entries,
-                ["article"] = article,
-                ["fontSize"] = vm.FontSize
+                ["article"] = article != null ? BuildArticle(article) : null,
+                ["fontSize"] = _fontSize
             };
         }
 
-        private static object BuildArticle(HistoryScreenVM vm, int index)
+        private static object BuildArticle(HistoryArticle article)
         {
-            return new Dictionary<string, object>
+            return new Dictionary<string, object?>
             {
-                ["index"] = index,
-                ["title"] = vm.SelectedTitle,
-                ["body"] = vm.ContentText,
-                ["fontSize"] = vm.FontSize
+                ["index"] = article.Index,
+                ["title"] = article.Title,
+                ["body"] = article.Body,
+                ["format"] = article.Format == HistoryTextFormat.Markdown ? "markdown" : "plain",
+                ["error"] = article.Error ?? "",
+                ["fontSize"] = _fontSize
             };
         }
     }

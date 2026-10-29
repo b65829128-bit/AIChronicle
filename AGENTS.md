@@ -119,6 +119,11 @@ dotnet clean -c Release && dotnet build -c Release -f net472
 
 # 打包发布版（编译 + 部署 + 打包，产物 dist/AIChronicle_v<版本>.zip）
 python3 scripts/package.py
+
+# 纯逻辑测试（无需游戏 DLL；CI 同款）
+dotnet run --project tests/AIChronicle.Pure.Tests/AIChronicle.Pure.Tests.csproj -c Release
+node tests/web/history-render.test.mjs
+node scripts/ci-health.mjs
 ```
 
 部署后 DLL 自动复制到 `$BANNERLORD_GAME_DIR/Modules/AIChronicle/bin/Win64_Shipping_Client/AIChronicle.dll`（本机游戏根目录见 `local.props`）。
@@ -158,6 +163,7 @@ stat -c '%s' "$BANNERLORD_GAME_DIR/Modules/AIChronicle/SubModule.xml"
 | `docs/ui-framework.md` | 原生 Kit UI 框架（主题/组件/屏幕基类/Gallery/迁移规则） |
 | `docs/ui-web.md` | CEF live 页面（CefSharp/CefBridge/输入/BGRA 转换/性能与限制） |
 | `docs/plan-history-cef.md` | 全 Web 史书 MVP 状态与收尾计划（HistoryArchive/边界/清晰度） |
+| `docs/i18n-plan.md` | 中英双语（i18n）长线方案（规划，不实现） |
 
 ## 7. Git 提交
 

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>10.0</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>AIChronicle.Pure.Tests</AssemblyName>
+    <RootNamespace>AIChronicle.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <!-- 只链接不依赖 TaleWorlds 的纯逻辑文件：无需游戏 DLL 即可在 CI/Linux 跑。 -->
+    <Compile Include="../../Systems/HistoryArchive.cs" Link="HistoryArchive.cs" />
+    <Compile Include="../../Systems/HistoryMarkdown.cs" Link="HistoryMarkdown.cs" />
+    <Compile Include="../../Core/SafeFileIO.cs" Link="SafeFileIO.cs" />
+  </ItemGroup>
+
+</Project>

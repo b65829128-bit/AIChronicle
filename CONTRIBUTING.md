@@ -14,7 +14,7 @@ Thank you for your interest! This is an experimental hobby project open-sourced 
 - The codebase was largely written with AI assistance; the author's role was design and logic review.
 - It targets **Bannerlord v1.4.8**. Game updates may break it. Please state your game version when reporting issues.
 - All comments and prompts are currently in **Chinese**. English contributions are welcome, but please keep existing Chinese comments intact unless you update the corresponding docs too.
-- No test framework exists yet. **Do not break the build**; verify by compiling locally.
+- There is a small pure-logic test suite that needs no game DLLs (history archive parsing/permissions, Markdown renderer). **Do not break the build**; verify by compiling and running the tests locally.
 
 ## Local build
 
@@ -30,7 +30,12 @@ dotnet build -c Release -f net472
 # 3. Full clean build when in doubt
 dotnet clean -c Release && dotnet build -c Release -f net472
 
-# 4. Package a release zip
+# 4. Run pure logic tests (no game DLLs; Linux/CI friendly)
+dotnet run --project tests/AIChronicle.Pure.Tests/AIChronicle.Pure.Tests.csproj -c Release
+node tests/web/history-render.test.mjs
+node scripts/ci-health.mjs
+
+# 5. Package a release zip
 python3 scripts/package.py
 ```
 
@@ -42,7 +47,7 @@ This project treats documentation as part of the work, not an afterthought. **Ev
 
 Before finishing a change, run through the self-check in `AGENTS.md` ("代码修改后文档自检清单"):
 
-- New/deleted files → update `README_MOD.md` file structure + `AGENTS.md` directory map
+- New/deleted files → update `README_MOD.md` file structure + `AGENTS.md` layer/docs index if relevant
 - New/modified feature → update `README_MOD.md`
 - New/changed MCM setting → update `README_MOD.md` settings table
 - Architecture/entry-point changes → update `AGENTS.md`
@@ -63,7 +68,7 @@ Changes to `AGENTS.md` / `README_MOD.md` require the author's explicit consent f
 
 - **Bug fixes** — please include reproduction steps and your game version.
 - **Tool / prompt improvements** — prompt files are hot-reloadable; often the highest-value, lowest-risk contribution.
-- **Tests / CI** — there is no test framework yet. The manual build workflow (`.github/workflows/build.yml`, Ubuntu) still needs a game-DLL source; local Linux builds are the primary verification.
+- **Tests / CI** — pure logic tests and the history renderer test run without game DLLs; the manual build workflow (`.github/workflows/build.yml`, Ubuntu) still needs a game-DLL source, so local Linux builds are the primary full-build verification.
 - **Documentation** — English docs, API-key quick-starts, setup videos.
 - **Design discussion** — the agent-driven-world concept is the real point of the project; open an issue for anything you think could be more alive.
 

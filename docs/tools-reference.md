@@ -72,7 +72,7 @@
 |------|------|
 | `read_file` | 读取文件内容（支持行号范围） |
 | `write_file` | 创建新文件或完整重写 |
-| `write_chronicle` | 史官成文落盘（体例/名称/正文，系统按「名称+体例.txt」规范命名，仅 `__historian__` 可用，Chronicler 能力门控） |
+| `write_chronicle` | 史官成文落盘（体例/名称/正文，系统按「名称+体例.txt」规范命名，仅 `__historian__` 可用，Chronicler 能力门控；正文用 Markdown：`##` 分节、`**` 强调、`>` 史官曰，不重复篇名） |
 | `append_file` | 追加内容到文件末尾 |
 | `edit_file` | 精确替换文件中的文本（必须唯一匹配） |
 | `delete_file` | 删除文件 |

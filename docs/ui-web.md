@@ -10,7 +10,7 @@
 - 默认页面 1280×720（16:9）、30fps，软件渲染（`--disable-gpu` / `--no-sandbox`）。
 - 实机：`Cef.Initialize` 约 0.8s，首帧约 1.6s；浏览器关闭后 CEF 保持初始化，可直接重开。
 - 入口：大地图按 **F8** → Kit Gallery →「打开 CEF」/「打开 CEF 史书」（演示/编年史示例）。
-- 全 Web 史书：MCM 开启「史书使用 CEF 阅读页（实验性）」后按 H；关闭/失败回退原生史书。
+- 全 Web 史书：MCM 开启「史书使用 CEF 阅读页（实验性）」后按 H；关闭/失败回退原生史书。正文按 Markdown 渲染，谏言/诏令/密陈保持纯文本。
 - CEF 原生运行时约 395MB（`libcef.dll` 236MB + locales + subprocess + paks）。
 
 ## 2. 架构
@@ -49,9 +49,11 @@ CefBridge.ActionReceived
 |---|---|
 | `UI/Web/CefWebHost.cs` | `CefWebHost` 初始化/路径/日志；`CefWebSession` 浏览器、帧、鼠标、JS；`CefBridge` JS 对象 |
 | `UI/Web/CefWebScreen.cs` | 通用 CEF 屏幕：标题、页面文件、C# 数据注入、输入接线、窗口/全屏、`PageAction` |
-| `UI/Web/HistoryCefScreen.cs` | 史书入口：目录/正文数据、条目选择、原生 fallback |
+| `UI/Web/HistoryCefScreen.cs` | 史书入口：调用 `HistoryArchive` 取目录/正文、条目选择、原生 fallback |
+| `Systems/HistoryArchive.cs` | 史册数据层：目录扫描、体例分组、权限过滤、正文读取（原生/CEF 共用） |
+| `Systems/HistoryMarkdown.cs` | Markdown → 原生纯文本（CEF 失败时的 fallback） |
 | `_Module/WebUI/history.html/css/js` | 全 Web 史书：1100×700 目录 + 纸张正文 |
-| `_Module/WebUI/history.js` | 目录渲染、正文解析、dispatch、逐元素平滑滚动 |
+| `_Module/WebUI/history.js` | 目录渲染、Markdown/纯文本正文渲染、dispatch、逐元素平滑滚动 |
 | `UI/Kit/KitTexture.cs` | `KitTextureWidget`：动态纹理、BGRA/raw 帧、指针/滚轮事件、旧纹理延迟释放 |
 | `_Module/WebUI/live.html` | CEF 演示页：CSS 动画、JS 时钟、`ping` 桥测试按钮 |
 | `_Module/WebUI/chronicle.html` | CEF 史书页：等待 C# 注入数据 |
@@ -80,7 +82,7 @@ CefBridge.ActionReceived
   - `log(message)` → 写 `ui_trace.log`
   - `dispatch(id, payload)` → 触发 `CefWebScreen.PageAction`
   - `close()` → 关闭 CEF 屏幕
-- 游戏 → 网页：`FrameLoadEnd` 后执行 `window.__game.render(json)`；不要在首帧 Paint 时执行，此时 `CanExecuteJavascriptInMainFrame` 可能还是 false。
+- 游戏 → 网页：`FrameLoadEnd` 后执行 `window.__game.render(json)`；不要在首帧 Paint 时执行，此时 `CanExecuteJavascriptInMainFrame` 可能还是 false。史书页的 `article` 带 `format`（`markdown` / `plain`）与 `error`，页面据此选择渲染器。
 - `PageAction` 在 CEF 线程触发；处理游戏状态必须回主线程。页面不得直接访问 `ToolExecutor`、游戏对象或静态状态。
 
 ## 6. 输入
@@ -109,11 +111,12 @@ CefBridge.ActionReceived
 - MCM「史书使用 CEF 阅读页（实验性）」默认关闭；开启后 H 打开全 Web 史书。
 - HistoryCefScreen + _Module/WebUI/history.html/css/js：
   - 左侧 Web 目录（分组/选中/滚动）；
-  - 右侧纸张正文（章节/空行解析、MCM 字号、滚动）；
+  - 右侧纸张正文（Markdown 渲染、MCM 字号、滚动）；
   - 点击目录 → aiChronicle.dispatch("select", index) → C# 读取 → showArticle。
 - 窗口模式 1100×700，居中，不再是 1280 全屏；原生只保留标题/关闭。
 - 原生 HistoryScreen 保留为 fallback；CEF 初始化失败/MCM 关闭时 H 仍打开原生史书。
-- 当前 HistoryCefScreen 暂时复用 HistoryScreenVM 的目录解析；收尾计划是抽出 HistoryArchive，详见 plan-history-cef.md。
+- 目录/正文数据已抽到 `HistoryArchive`（HistoryCefScreen 不再持有 HistoryScreenVM）；两套入口共用同一份目录顺序、权限与正文读取。
+- 正史正文按 Markdown 渲染：`##` 分节、`**` 强调、`>` 史官曰引用块、`- ` 列表；页面用 DOM 节点构造，不拼 `innerHTML`。谏言/诏令/密陈按 `format=plain` 原样显示，`*`/`#` 等字符不被解释。
 - 清晰度：窗口比 1280 全屏更接近 1:1；浏览器按 DPR 栅格化，CEF 固定位图仍可能被 Gauntlet 二次采样，必要时再做超采样/字体。
 
 ## 8. 构建 / 打包
@@ -162,11 +165,11 @@ CefBridge.ActionReceived
 
 ## 12. 下一步
 
-> 史书迁移的详细计划见 [plan-history-cef.md](plan-history-cef.md)：全 Web 目录 + 正文 MVP 已完成，剩余 HistoryArchive 抽离、边界回归、清晰度。
+> 史书迁移的详细计划见 [plan-history-cef.md](plan-history-cef.md)：全 Web 目录 + 正文 MVP 已完成，HistoryArchive 已抽离，剩余边界回归与清晰度。
 
 1. **60fps 压测**（30fps 已通过，先不改架构）。
 2. **全幅 16:9 版式**（当前 1280×720；下一步 1440×810 或自适应纹理尺寸）。
-3. 接入真实游戏数据（当前战役/家族/战事）到 `render(data)`。
+3. 其余 CEF 页面接入真实游戏数据（当前战役/家族/战事）到 `render(data)`；史书已接入。
 4. 页面动作 `dispatch` 与真实决策/投票流程对接（游戏功能 session）。
 5. 长期评估原生共享纹理桥。
 

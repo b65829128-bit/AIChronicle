@@ -1,6 +1,6 @@
 # 史书 CEF 迁移 — 实施与收尾计划
 
-> 状态：MVP 已实现并实机验证。目录和正文都走 CEF，1100×700 居中窗口；原生只保留标题/关闭和 fallback。
+> 状态：MVP 已实机验证；Phase A（HistoryArchive 抽离）已完成，Phase B 代码级边界/权限回归已完成（进游戏回归待做）。正史改为 Markdown 渲染，谏言/诏令/密陈保持纯文本。
 >
 > 用户已确认：目录也 Web 化；MCM 默认关闭、验证后开启；初版只读。
 
@@ -11,18 +11,27 @@
 | MCM 开关 | 史书使用 CEF 阅读页（实验性），默认关闭 |
 | H 入口 | 开启后 H 打开 HistoryCefScreen；失败/关闭时打开原生 HistoryScreen |
 | 全 Web 目录 | history.html 左侧目录，分组/选中/滚动 |
-| 正文 | history.html 右侧纸张正文，章节/空行解析、MCM 字号 |
+| 正文 | history.html 右侧纸张正文，Markdown 渲染、MCM 字号 |
 | 数据桥 | 目录点击 → aiChronicle.dispatch(select, index) → C# 读文件 → showArticle(json) |
 | 窗口 | CefWebScreen 窗口模式：1100×700 纹理 + 原生标题栏，居中，不再铺满 |
 | 输入 | 鼠标点击/悬停；滚轮按鼠标命中目录或正文，分别平滑滚动 |
 | fallback | CEF 初始化失败或 MCM 关闭 → 原生史书 |
+| 数据层 | HistoryArchive + HistoryViewer；原生/CEF 共用目录、体例分组、权限、正文读取 |
+| Markdown | 史官成文 Markdown；history.js 渲染（标题/强调/引用/列表）；HistoryMarkdown 为原生 fallback |
+| 单测 | tests/AIChronicle.Pure.Tests（目录/权限/读取）+ tests/web（Markdown 渲染，Node DOM 桩） |
+| 政务文献 | 三类文献共用一个「政务文献」分组头，按年份倒序 |
 
 当前代码：
 
-- UI/Web/HistoryCefScreen.cs：入口/数据/选中/fallback
+- Systems/HistoryArchive.cs：目录/分组/权限/正文数据层
+- Systems/HistoryViewerFactory.cs：从当前战役取权限视角
+- Systems/HistoryMarkdown.cs：Markdown → 原生纯文本
+- UI/HistoryScreenVM.cs：原生史书 ViewModel（只做绑定/选中）
+- UI/Web/HistoryCefScreen.cs：CEF 入口/选中/fallback（不再持有 ViewModel）
 - UI/Web/CefWebScreen.cs：窗口/全屏 CEF 宿主，PushJson
 - UI/Web/CefWebHost.cs：CEF 会话、桥、滚轮
-- _Module/WebUI/history.html/css/js：全 Web 史书
+- _Module/WebUI/history.html/css/js：全 Web 史书 + Markdown 渲染
+- tests/AIChronicle.Pure.Tests + tests/web：纯逻辑/渲染测试
 - Core/Settings.cs：MCM 开关
 - Core/SubModule.cs：H 路由
 
@@ -38,32 +47,30 @@
 
 数据流：
 
-    HistoryScreenVM（暂时复用）
-      → entries（index/title/header/selected）+ article
+    HistoryArchive.LoadCatalog(viewer, campaignDir)
+      → catalog.Entries（index/title/header/format）
+      → HistoryArchive.ReadArticle(entry)
       → CefWebScreen 初始 pageData
       → window.__game.render
     点击条目
       → aiChronicle.dispatch(select, index)
       → HistoryCefScreen（CEF 线程）
       → MainThreadExecutor.Post
-      → HistoryScreenVM.SelectChronicle(index)
+      → HistoryArchive.ReadArticle(entry)
       → window.__game.showArticle(article)
 
-## 3. 已知技术债
+## 3. 已完成的分层
 
-最重要：当前 HistoryCefScreen 直接 new 了 HistoryScreenVM 并复用它的私有目录逻辑。
-这能快速验证 UI，但不符合长期分层：
+HistoryArchive 已抽出，原生 HistoryScreenVM 与 CEF HistoryCefScreen 都只调用它：
 
-- ViewModel 仍耦合 Gauntlet 数据绑定；
-- CEF/原生两套入口共享同一 VM 的副作用；
-- 后续加搜索/过滤时容易分叉。
+    HistoryCatalog LoadCatalog(HistoryViewer viewer, string campaignDir);
+    HistoryArticle ReadArticle(HistoryCatalogEntry entry);
 
-收尾第一件事：抽出 HistoryArchive：
+- ViewModel 只做 Gauntlet 绑定/选中态，不再解析文件名或判断权限；
+- CEF 不再复用原生 ViewModel；
+- 权限由 HistoryViewer 描述（王国/雇佣兵/国王），可脱离 Campaign.Current 单测。
 
-    HistoryCatalog LoadCatalog();
-    HistoryArticle ReadArticle(int index);
-
-原生 HistoryScreenVM 和 CEF HistoryCefScreen 都调用它；ViewModel 只做绑定/选中态。
+剩余：进游戏回归边界（空目录/空文件/缺文件/无权限/超长文/CEF 失败回退），以及清晰度选项。
 
 ## 4. 窗口与清晰度
 
@@ -79,16 +86,17 @@
 
 ## 5. 收尾阶段
 
-### Phase A：数据抽离（0.5 天）
+### Phase A：数据抽离（已完成）
 
-- 新增 HistoryArchive + DTO；迁移目录查找、文件名解析、advisory/edict/secret 权限。
+- 已完成：HistoryArchive + DTO；目录查找、文件名解析、advisory/edict/secret 权限已迁入。
 - HistoryScreenVM 改为调用 HistoryArchive，原生界面行为不变。
 - HistoryCefScreen 不再持有 ViewModel，只持有 catalog/article。
 - 验收：原生/CEF 目录顺序、权限、正文完全一致。
 
-### Phase B：边界与回归（0.5–1 天）
+### Phase B：边界与回归（代码级已完成，进游戏待做）
 
-- 空目录、空文件、缺文件、无权限、超长文（卡拉迪亚上古编年史）。
+- 已有单测覆盖：空目录、空文件、缺文件、无权限、目录分组/排序、Markdown 渲染。
+- 待进游戏回归：超长文（卡拉迪亚上古编年史）、滚动/字号、CEF 失败回退。
 - 目录滚动、正文滚动、选中项自动滚入视野。
 - MCM 字号 14–36；重启/重开保持。
 - H 开/关、O/M/F8 互斥、关闭后输入恢复。
@@ -121,7 +129,7 @@
 
 | 风险 | 缓解 |
 |---|---|
-| 直接复用 HistoryScreenVM 造成耦合 | Phase A 抽 HistoryArchive |
+| 直接复用 HistoryScreenVM 造成耦合（已解决） | 已抽 HistoryArchive；两入口只依赖数据层 |
 | 目录/正文滚动区域互相误伤 | 按鼠标坐标 elementFromPoint 的 .scrollable |
 | 长文/特殊字符 | textContent；真实文件预览；空行/章节测试 |
 | 清晰度仍不足 | 窗口 1:1 优先；必要时超采样/字体 |

@@ -2,7 +2,8 @@ name: Repo Health
 
 # Lightweight CI that needs no game installation:
 # validates tool-definition JSON, checks JSON/ToolExecutor switch sync,
-# and scans for leaked secrets / personal paths.
+# CEF conditional-compilation guards, source-size/prompt/WebUI checks,
+# pure logic tests, the history page renderer, and secret/personal-path scans.
 # Run locally with: node scripts/ci-health.mjs
 
 on:
@@ -21,5 +22,16 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Run repo health check
         run: node scripts/ci-health.mjs
+
+      - name: Run pure logic tests (no game DLLs)
+        run: dotnet run --project tests/AIChronicle.Pure.Tests/AIChronicle.Pure.Tests.csproj -c Release
+
+      - name: Run history renderer test (DOM stub)
+        run: node tests/web/history-render.test.mjs

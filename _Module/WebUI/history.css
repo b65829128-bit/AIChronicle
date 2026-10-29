@@ -142,6 +142,82 @@ html, body {
   white-space: pre-wrap;
 }
 
+.article-body h3 {
+  margin: 22px 0 10px;
+  color: #6f4318;
+  font-size: 17px;
+  line-height: 1.6;
+  letter-spacing: .06em;
+  font-weight: 600;
+}
+
+.article-body strong {
+  color: #4a2f14;
+  font-weight: 700;
+}
+
+.article-body em {
+  font-style: normal;
+  color: #6f4318;
+}
+
+.article-body blockquote {
+  margin: 18px 0 20px;
+  padding: 12px 18px 12px 20px;
+  border-left: 3px solid var(--gold);
+  background: rgba(201, 162, 39, .09);
+  color: #5a4326;
+}
+
+.article-body blockquote p {
+  margin: 0;
+  text-indent: 0;
+  white-space: pre-wrap;
+  font-size: calc(var(--reader-font-size) - 1px);
+  line-height: 1.9;
+}
+
+.article-body ul,
+.article-body ol {
+  margin: 0 0 16px 1.8em;
+  padding: 0;
+  font-size: var(--reader-font-size);
+  line-height: 1.9;
+}
+
+.article-body li {
+  margin: 0 0 6px;
+  text-indent: 0;
+}
+
+.article-body hr {
+  margin: 26px 0;
+  border: 0;
+  border-top: 1px solid rgba(122, 91, 46, .35);
+}
+
+.article-body pre {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  background: rgba(122, 91, 46, .10);
+  border: 1px solid rgba(122, 91, 46, .22);
+}
+
+.article-body pre code {
+  font-family: Consolas, "Noto Sans Mono", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.article-body code {
+  padding: 1px 4px;
+  background: rgba(122, 91, 46, .12);
+  font-family: Consolas, "Noto Sans Mono", monospace;
+  font-size: .9em;
+}
+
 .status {
   position: fixed;
   left: 50%;

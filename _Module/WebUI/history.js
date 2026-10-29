@@ -114,12 +114,205 @@
     articleBody.appendChild(p);
   }
 
-  function renderArticleBody(data) {
-    if (!articleBody) return;
-    clear(articleBody);
+  /* ---------- Markdown（史官成文） ---------- */
 
-    var body = String(data.body || '').replace(/\r/g, '');
-    var lines = body.split(/\n/);
+  // 只用 DOM 节点构造正文，不拼 innerHTML；史文里的 < > 永远是文本。
+  function appendInline(parent, text) {
+    var value = String(text == null ? '' : text);
+    // 史官被要求不用 HTML；若模型仍写出标签，按原生 fallback 的规则去掉，只留文字。
+    value = value.replace(/<[^>]+>/g, '');
+    // 链接/图片只保留文字：史书不需要可点击链接，也避免页面跳转。
+    value = value.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+                 .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+
+    var pattern = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|`[^`]+`)/g;
+    var lastIndex = 0;
+    var match;
+    while ((match = pattern.exec(value)) !== null) {
+      if (match.index > lastIndex) {
+        parent.appendChild(document.createTextNode(value.slice(lastIndex, match.index)));
+      }
+
+      var token = match[0];
+      var node;
+      if (token.slice(0, 2) === '**' || token.slice(0, 2) === '__') {
+        node = document.createElement('strong');
+        node.textContent = token.slice(2, -2);
+      } else if (token.charAt(0) === '`') {
+        node = document.createElement('code');
+        node.textContent = token.slice(1, -1);
+      } else {
+        node = document.createElement('em');
+        node.textContent = token.slice(1, -1);
+      }
+      parent.appendChild(node);
+      lastIndex = match.index + token.length;
+    }
+
+    if (lastIndex < value.length) {
+      parent.appendChild(document.createTextNode(value.slice(lastIndex)));
+    }
+  }
+
+  function joinLines(lines) {
+    var result = '';
+    lines.forEach(function (line) {
+      var value = String(line || '').trim();
+      if (!value) return;
+      if (!result) {
+        result = value;
+        return;
+      }
+      var prev = result.charAt(result.length - 1);
+      var next = value.charAt(0);
+      var cjk = /[\u3000-\u303f\u3400-\u9fff\uff00-\uffef]/;
+      result += (cjk.test(prev) && cjk.test(next)) ? '' : ' ';
+      result += value;
+    });
+    return result;
+  }
+
+  function isDuplicateTitle(text, title) {
+    var value = String(text == null ? '' : text).replace(/^#+\s*/, '').trim();
+    var expected = String(title == null ? '' : title).trim();
+    if (!expected) return false;
+    if (value === expected) return true;
+    return value.length > expected.length &&
+           value.length - expected.length <= 12 &&
+           value.slice(-expected.length) === expected;
+  }
+
+  function isBlockStart(line) {
+    var text = String(line || '').trim();
+    return /^(#{1,6})\s+/.test(text) ||
+           /^```/.test(text) ||
+           /^(-{3,}|\*{3,}|_{3,})$/.test(text) ||
+           /^>/.test(text) ||
+           /^【[^】]+】$/.test(text) ||
+           /^\s*[-*+]\s+/.test(line) ||
+           /^\s*\d+[.)]\s+/.test(line);
+  }
+
+  function renderMarkdownBody(body, title) {
+    var lines = String(body || '').replace(/\r/g, '').split('\n');
+    var i = 0;
+    var firstBlock = true;
+
+    while (i < lines.length) {
+      var line = lines[i];
+      var text = line.trim();
+      if (!text) {
+        i++;
+        continue;
+      }
+
+      if (firstBlock) {
+        var firstHeading = text.match(/^(#{1,6})\s+(.*)$/);
+        var firstText = firstHeading ? firstHeading[2].trim() : text;
+        if (isDuplicateTitle(firstText, title)) {
+          firstBlock = false;
+          i++;
+          continue;
+        }
+        firstBlock = false;
+      }
+
+      if (/^```/.test(text)) {
+        var codeLines = [];
+        i++;
+        while (i < lines.length && !/^```/.test(lines[i].trim())) {
+          codeLines.push(lines[i]);
+          i++;
+        }
+        if (i < lines.length) i++;
+        var pre = document.createElement('pre');
+        var code = document.createElement('code');
+        code.textContent = codeLines.join('\n');
+        pre.appendChild(code);
+        articleBody.appendChild(pre);
+        continue;
+      }
+
+      var heading = text.match(/^(#{1,6})\s+(.*)$/);
+      if (heading) {
+        var level = Math.min(3, Math.max(2, heading[1].length));
+        var node = document.createElement('h' + level);
+        appendInline(node, heading[2]);
+        articleBody.appendChild(node);
+        i++;
+        continue;
+      }
+
+      if (/^【[^】]+】$/.test(text)) {
+        appendHeading(text);
+        i++;
+        continue;
+      }
+
+      if (/^(-{3,}|\*{3,}|_{3,})$/.test(text)) {
+        articleBody.appendChild(document.createElement('hr'));
+        i++;
+        continue;
+      }
+
+      if (/^>/.test(line)) {
+        var quoteLines = [];
+        while (i < lines.length && /^\s*>/.test(lines[i])) {
+          quoteLines.push(lines[i].replace(/^\s*>\s?/, ''));
+          i++;
+        }
+        var quote = document.createElement('blockquote');
+        var quoteParagraph = document.createElement('p');
+        appendInline(quoteParagraph, joinLines(quoteLines));
+        quote.appendChild(quoteParagraph);
+        articleBody.appendChild(quote);
+        continue;
+      }
+
+      if (/^\s*[-*+]\s+/.test(line)) {
+        var ul = document.createElement('ul');
+        while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
+          var li = document.createElement('li');
+          appendInline(li, lines[i].replace(/^\s*[-*+]\s+/, ''));
+          ul.appendChild(li);
+          i++;
+        }
+        articleBody.appendChild(ul);
+        continue;
+      }
+
+      if (/^\s*\d+[.)]\s+/.test(line)) {
+        var ol = document.createElement('ol');
+        while (i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])) {
+          var oli = document.createElement('li');
+          appendInline(oli, lines[i].replace(/^\s*\d+[.)]\s+/, ''));
+          ol.appendChild(oli);
+          i++;
+        }
+        articleBody.appendChild(ol);
+        continue;
+      }
+
+      var buffer = [line];
+      i++;
+      while (i < lines.length) {
+        if (!lines[i].trim() || isBlockStart(lines[i])) break;
+        buffer.push(lines[i]);
+        i++;
+      }
+
+      var paragraph = document.createElement('p');
+      appendInline(paragraph, joinLines(buffer));
+      articleBody.appendChild(paragraph);
+
+      if (i < lines.length && !lines[i].trim()) i++;
+    }
+  }
+
+  /* ---------- 纯文本（谏言/诏令/密陈，保持原样） ---------- */
+
+  function renderPlainBody(body, title) {
+    var lines = String(body || '').replace(/\r/g, '').split('\n');
     var buffer = [];
     var skippedTitle = false;
 
@@ -144,7 +337,7 @@
       }
 
       if (!skippedTitle) {
-        if (text === data.title) {
+        if (text === title) {
           skippedTitle = true;
           return;
         }
@@ -155,6 +348,24 @@
     });
 
     flush();
+  }
+
+  function renderArticleBody(data) {
+    if (!articleBody) return;
+    clear(articleBody);
+
+    if (data.error) {
+      appendParagraph('（读取失败：' + String(data.error) + '）');
+      return;
+    }
+
+    var body = String(data.body || '').replace(/\r/g, '');
+    var format = String(data.format || 'plain').toLowerCase();
+    if (format === 'markdown') {
+      renderMarkdownBody(body, data.title);
+    } else {
+      renderPlainBody(body, data.title);
+    }
 
     if (articleBody.childNodes.length === 0) {
       appendParagraph('（此篇暂无正文）');
@@ -174,7 +385,7 @@
     document.documentElement.style.setProperty('--reader-font-size', fontSize + 'px');
 
     articleTitle.textContent = data.title || '无题';
-    articleMeta.textContent = '史册 · 第 ' + (selectedIndex + 1) + ' 篇';
+    articleMeta.textContent = '史册 · 第 ' + ((selectedIndex >= 0 ? selectedIndex : 0) + 1) + ' 篇';
     renderArticleBody(data);
     setStatus('', true);
 

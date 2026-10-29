@@ -78,8 +78,8 @@ namespace AIChronicle
                 {
                     var year = ExtractYearFromContent(evtContent);
                     var retryHint = year > 0
-                        ? $"你上一轮思考到一半被截断，未能写成编年史。现在请调用 write_chronicle 落盘：体例=编年史，名称={year}，正文=编年史全文（系统自动存档为 {year}编年史.txt），尽快成文落盘。"
-                        : "你上一轮思考到一半被截断，未能写成内容。现在请调用 write_chronicle 将内容落盘到 history/chronicles/（体例=本纪/世家/列传/纪事，名称=人物/国族/事件名），尽快成文落盘。";
+                        ? $"你上一轮思考到一半被截断，未能写成编年史。现在请调用 write_chronicle 落盘：体例=编年史，名称={year}，正文=编年史全文（Markdown：## 分节、** 强调、> 史官曰；系统自动存档为 {year}编年史.txt），尽快成文落盘。"
+                        : "你上一轮思考到一半被截断，未能写成内容。现在请调用 write_chronicle 将内容落盘到 history/chronicles/（体例=本纪/世家/列传/纪事，名称=人物/国族/事件名；正文用 Markdown），尽快成文落盘。";
                     DebugLogger.Log($"史官因 token 截断重试 eventLabel={eventLabel} year={year}");
                     var retryPrompt = new CharacterPrompt
                     {

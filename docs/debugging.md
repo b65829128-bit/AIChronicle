@@ -97,3 +97,40 @@ Bannerlord 的模组加载有严格的初始化顺序。**在错误的阶段调�
 - Harmony 补丁中的私有字段名必须与原始 DLL 中的字段名**完全一致**（Linux 用 `ilspycmd`/Rider 反编译，Windows 可用 dnSpy）
 - 模组的 SubModule.xml 中 `Id` 和 `Name` 默认等于项目名（`$(MSBuildProjectName)`）
 - 如果补丁不生效，检查：1) 方法名是否正确 2) 参数类型是否匹配 3) 是否有重载冲突（aka Ambiguous match）
+
+## 7. 纯逻辑测试（无需游戏）
+
+史册数据层与 CEF 史书页渲染有独立测试，不需要游戏 DLL，Linux/CI 均可跑：
+
+```bash
+# 史册目录/权限/读取（dotnet，目标 net10.0）
+dotnet run --project tests/AIChronicle.Pure.Tests/AIChronicle.Pure.Tests.csproj -c Release
+
+# 史书页 Markdown 渲染（Node + 最小 DOM 桩）
+node tests/web/history-render.test.mjs
+
+# 仓库健康检查（JSON/switch 同步、CEF 条件编译、文件行数、密钥扫描）
+node scripts/ci-health.mjs
+```
+
+测试源码通过 `<Compile Include>` 链接 `Systems/HistoryArchive.cs`/`HistoryMarkdown.cs`/`Core/SafeFileIO.cs`，不引用 TaleWorlds，也不打进模组发布包。新增纯逻辑模块时优先采用这种方式。
+
+## 8. 遭遇无反应（PlayerEncounter 残留）
+
+**现象**：大地图上部队相遇/点击敌对部队没有遭遇菜单，时间仍可流动，AI 仍会活动。
+
+**原理**：`EncounterManager.HandleEncounterForMobileParty` 在 `PlayerEncounter.Current != null` 时会跳过主队伍；如果遭遇只在存档里留下 `PlayerEncounter`、却没有对应菜单/对话/MapEvent（例如在遭遇菜单上叠了 H/F8 界面后存档，或 `let_go` 只设置 `LeaveEncounter` 而没有 `Finish`），新遭遇就被永久挡住。
+
+**排查**：看战役 `debug_logs/ui_trace.log` 的 `[Encounter]` 行：
+
+    [Encounter] session launched current=... state=... leave=... atMenu=... mapConversation=... conversation=... mapEvent=... modUi=... encountered=... settlement=... time=...
+
+- `current=True` 且 `atMenu/conversation/mapEvent` 全为 False → 残留状态；
+- `current=True` 且有 menu/conversation/mapEvent → 正常遭遇，不要清；
+- `time=Stop` 且部队不移动 → 先按空格恢复时间，不是遭遇残留。
+
+**恢复**：
+
+- 自动：`EncounterDiagnostics.Tick` 检测到"有 Current、无菜单/对话/MapEvent"持续 8 秒，自动 `PlayerEncounter.Finish()` 并写日志/黄字；若 `modUi=True`（AI 聊天/史书/书信面板仍打开）则等待，不误伤；
+- 手动：MCM「游戏设置 → 修复遭遇状态」（正在对话/战斗时不会修复）；
+- 代码侧：`let_go` 结束对话后下一帧显式 `Finish`；H/O/M/F8 入口现在要求 `MapState.AtMenu == false`、无对话、无 `PlayerEncounter`、无 MapEvent，避免在遭遇菜单上叠 UI。

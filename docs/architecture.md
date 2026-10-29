@@ -240,6 +240,8 @@ Bannerlord 使用自研的 GauntletUI 框架。UI 开发分两层：
 
 > 写 GauntletUI 前先拆解游戏已有同类 Prefab（`Modules/Native/GUI/Prefabs/`、`Modules/Multiplayer/GUI/Prefabs/`）：找到行为最接近的现有 Prefab，逐段分析 Widget 层级、`DoNotAcceptEvents` 逻辑、`InputRestrictions` 设置，基于现有模板改，不要从零写。
 >
+> 当前 UI 分两层：原生 Kit（`docs/ui-framework.md`）与 CEF Web 内容层（`docs/ui-web.md`）。交互/表单/输入用 Kit，长篇阅读/目录/账本用 CEF；史书已两套并存，原生作为 fallback。
+>
 > 典型踩坑：`DoNotAcceptEvents="true"` 的含义是「本 Widget 不接事件，但透传给子级」。
 
 ## 14. AI 交互架构（function calling）
@@ -434,8 +436,14 @@ Usage:
 │   ├── AIChatScreen.cs         ← 聊天屏幕管理器（静态类，GauntletLayer 挂载）
 │   ├── AIChatScreenVM.cs       ← 聊天 ViewModel（消息列表、输入绑定、function calling 处理）
 │   ├── LetterListScreen.cs     ← 书信收信人列表屏幕
-│   └── HistoryScreenVM.cs      ← 史书屏幕 ViewModel
+│   ├── HistoryScreenVM.cs      ← 史书原生 ViewModel（只做绑定/选中态；数据经 HistoryArchive）
+│   ├── Kit/                    ← 原生 Kit UI 框架（KitScreen/KitTheme/组件/动态纹理/Gallery）
+│   └── Web/                    ← CEF 页面宿主（CefWebHost/CefWebScreen/HistoryCefScreen/Bridge；WebPage 脚手架）
 ├── Systems/                    ← 游戏系统与 Harmony 补丁
+│   ├── HistoryArchive.cs       ← 史册数据层（目录/体例分组/权限/正文；原生与 CEF 共用）
+│   ├── HistoryViewerFactory.cs ← 从当前战役读取史册权限视角
+│   ├── HistoryMarkdown.cs      ← Markdown → 原生纯文本（CEF 不可用时的 fallback）
+│   ├── EncounterDiagnostics.cs ← 遭遇状态诊断/残留自动恢复（PlayerEncounter）
 │   ├── DiplomacyService.cs     ← 外交服务（宣战/议和/结盟/贸易协定/回复提案 + FindKingdom + 盟约/贸易到期记录与清除）
 │   ├── HistoryRecorder.cs      ← 历史记录器（监听游戏事件写入原始史料）
 │   ├── LordChatBehavior.cs     ← 对话中插入聊天选项，战役 ID 管理
@@ -443,23 +451,30 @@ Usage:
 │   ├── FiefAssignmentPatch.cs  ← 攻城后册封由 Agent 主导
 │   ├── ExecutionNoPenaltyPatch.cs ← 处决无惩罚
 │   └── ClanDiscontinuationPatch.cs ← 独立家族永续（禁用原版 28 天灭族，MCM 可开关）
-├── docs/                       ← AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发）
+├── docs/                       ← AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发/UI 框架与 CEF/i18n）
 ├── AGENTS.md                  ← 常驻开发指令（本文件）
 ├── README.md                  ← 开源主入口（英文简介，指向 README_MOD.md / AGENTS.md）
 ├── CONTRIBUTING.md            ← 贡献指南（构建方法、文档维护规则、PR 流程）
 ├── scripts/
-│   ├── ci-health.mjs          ← 仓库健康检查（JSON 解析、JSON↔switch 同步、密钥/个人路径扫描，CI 与本地共用）
+│   ├── ci-health.mjs          ← 仓库健康检查（JSON 解析、JSON↔switch 同步、CEF 条件编译、密钥/个人路径扫描，CI 与本地共用）
 │   ├── package.py             ← Linux/跨平台打包（编译+部署+zip；含 NAudio 运行时依赖）
 │   └── package.ps1            ← Windows 兼容打包（同上）
+├── tests/                      ← 纯逻辑测试（不依赖游戏 DLL）
+│   ├── AIChronicle.Pure.Tests/ ← 史册解析/权限/读取测试（dotnet run）
+│   └── web/                    ← 史书页 Markdown 渲染测试（Node DOM 桩）
 ├── .github/workflows/
-│   ├── health.yml             ← 轻量 CI（无需游戏 DLL，push/PR 自动跑，绿标）
+│   ├── health.yml             ← 轻量 CI（无需游戏 DLL，push/PR 自动跑 health + 纯逻辑测试）
 │   └── build.yml              ← 手动编译工作流（Ubuntu runner，需 BANNERLORD_GAME_DIR 或 GAME_DLLS_URL 密钥）
 ├── _Module/
 │   ├── SubModule.xml         ← 模组元数据（ID、依赖、DLL路径）
 │   ├── GUI/
-│   │   └── Prefabs/
-│   │       ├── AIChatScreen.xml  ← 聊天窗口布局
-│   │       └── LetterListScreen.xml ← 书信收信人列表
+│   │   ├── Prefabs/
+│   │   │   ├── AIChatScreen.xml  ← 聊天窗口布局
+│   │   │   ├── LetterListScreen.xml ← 书信收信人列表
+│   │   │   ├── HistoryScreen.xml ← 原生史书（1100×700 双栏 fallback）
+│   │   │   └── KitHost.xml       ← 原生 Kit 宿主 prefab
+│   │   └── Brushes/Kit.xml       ← Kit 文本笔刷（Galahad）
+│   ├── WebUI/                ← CEF 页面资产（history/live/chronicle/theme/cef/preview）
 │   └── Prompts/
 │       ├── world_info.txt     ← 默认世界背景（六大王国 + 天命）
 │       ├── world_info_nords.txt ← 可选诺德势力段（MCM「包含诺德势力」开启时由 ContextBuilder 拼入主世界观）

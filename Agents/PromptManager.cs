@@ -458,12 +458,12 @@ namespace AIChronicle
                         new() { Name = "content", Type = "string", Description = "内容" }
                     } },
                 new() { Name = "write_chronicle", Category = "file",
-                    Description = "史官成文落盘（体例/名称/正文，系统按「名称+体例.txt」规范命名）。",
+                    Description = "史官成文落盘（体例/名称/正文，系统按「名称+体例.txt」规范命名；正文用 Markdown）。",
                     Parameters = new List<ToolParamDef>
                     {
                         new() { Name = "genre", Type = "string", Description = "体例：编年史/本纪/世家/列传/纪事" },
                         new() { Name = "name", Type = "string", Description = "主题名，如 拉盖娅/南帝国/1084" },
-                        new() { Name = "content", Type = "string", Description = "史文正文" }
+                        new() { Name = "content", Type = "string", Description = "史文正文（Markdown：## 分节、** 强调、> 史官曰；不重复篇名）" }
                     } },
                 new() { Name = "list_dir", Category = "file",
                     Description = "列出目录内容。",

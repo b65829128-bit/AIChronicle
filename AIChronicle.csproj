@@ -68,6 +68,9 @@
   <ItemGroup>
     <Compile Remove="BLSource/**/*.cs" />
     <None Include="BLSource/**/*.cs" />
+    <!-- 纯逻辑测试由 tests/*.csproj 自行链接源码，不参与模组编译。 -->
+    <Compile Remove="tests/**/*.cs" />
+    <None Include="tests/**/*.cs" Exclude="tests/**/bin/**;tests/**/obj/**" />
   </ItemGroup>
 
   <ItemGroup>

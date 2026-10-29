@@ -134,11 +134,13 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 - **传记质量**：`query_character` 现可查已故人物（枚举所有氏族成员含已故 + 在世英雄）并返回出生/卒年；传记提示词要求开头点明身份（统治者/族长/成员）与生卒年。**立传身份在死亡前一刻捕获**（`BeforeHeroKilledEvent` 存 `_pendingHeroDeathTitle`，先于原版继任改选），关闭「所有贵族立传」后国王/族长仍立传。成功判定改为"chronicles 目录出现新文件"（传记/世家/纪事是自命名体例文件，原只查 `chronicle_*.txt` 会误报"未生成"）
 - **Entity**：史官是虚拟 Entity（ID: `__historian__`，`HeroRef = null`），不映射任何游戏 NPC
 - **工具**：`query` + `file` 分类的工具（`ActivatedCategories = {"universal", "query", "file"}`），含专属落盘工具 `write_chronicle`（`Chronicler` 能力门控，仅史官可用）
+- **正文格式**：史文正文用 Markdown 落盘——`##` 分节、`**` 强调、`>` 写「史官曰」，不重复篇名，不用 HTML/表格/图片/链接/代码块。阅读页按 Markdown 渲染；CEF 不可用时原生 fallback 由 `HistoryMarkdown` 去标记显示
 - **权限**：可读 `World/history/` 目录，可写 `World/history/chronicles/` 目录
 - **提示词**：使用 `intent = "historian"` 的 `ContextBuilder.Build()`，规则来自 `historian_rules.txt`
 - **体例规范（史书命名，代码强制）**：史文统一按五种体例落盘，文件名由系统自动生成（`AgentManager.ExecuteWriteChronicle` 校验体例白名单 + 清洗名称 + 拼 `{名称}{体例}.txt`）——**本纪**（`{国王名}本纪`，一国之君生平与在位大事）、**世家**（`{国名}世家`，一国/大族兴衰史）、**列传**（`{人名}列传`，单个人物生平）、**编年史**（`{年份}编年史`，年度大事记）、**纪事**（`{事件名}纪事`，重大事件始末）。史官不得再用 `write_file` 自行命名（提示词已改指 `write_chronicle`）
 - **体例建议（代码给建议，史官可调整）**：`ConsumeSpecialChronicleContent` 按事件性质注入体例建议——「重要人物之死」中死者为统治者→本纪、其余→列传；「王国灭亡：X」→世家；其他→纪事。判定标准同时写入 `historian_rules.txt` 的「史书体例」表
-- **输出**：年度编年史 → `World/history/chronicles/{year}编年史.txt`；传记/世家/纪事 → `{名称}{体例}.txt`
+- **输出**：年度编年史 → `World/history/chronicles/{year}编年史.txt`；传记/世家/纪事 → `{名称}{体例}.txt`。文件内容为 Markdown；谏言/诏令/密陈仍是实体角色扮演产出的纯文本
+- **阅读入口**：原生 `HistoryScreenVM` 与 CEF `HistoryCefScreen` 共用 `HistoryArchive`（目录扫描/体例分组/权限过滤/正文读取），避免双入口各自实现一套逻辑
 
 ### NPC 查阅历史
 

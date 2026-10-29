@@ -56,8 +56,8 @@ Key design principles:
 
 ### Living History
 - Major events (wars, peace, fief ownership, kingdom destruction/founding, noble deaths, marriages) are auto-recorded into raw sources (`World/history/events_{year}.txt`).
-- At year's end the **Historian agent** (a virtual entity, no game NPC) writes an annual chronicle in classical-chronicle prose.
-- **H** key: read the chronicle in-game. NPCs can also `read_file` the chronicles — history becomes shared knowledge.
+- At year's end the **Historian agent** (a virtual entity, no game NPC) writes an annual chronicle in classical-chronicle prose, formatted in Markdown.
+- **H** key: read the chronicle in-game (Markdown headings, emphasis, and historian's notes render in the CEF reader). NPCs can also `read_file` the chronicles — history becomes shared knowledge.
 
 ### Internal Politics & Court
 - **Fief review**: kings assign/reclaim fiefs; the deprived clan gets activated to react (protest, write letters, defect to another kingdom).
