@@ -99,7 +99,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | Agent 核心 | `Agents/` | ContextBuilder、AIChatClient、AgentManager、调度器、记忆 |
 | Entity | `Entities/` | 玩家/NPC 统一抽象 |
 | 工具执行 | `Tools/` | 51 游戏工具 + 19 文件/通信工具（按领域拆 partial） |
-| 界面 | `UI/` | 原生 Kit（`UI/Kit`）+ CEF live 页面宿主（`UI/Web`）+ 聊天/书信/史书 ViewModel |
+| 界面 | `UI/` | 原生 Kit（`UI/Kit`）+ CEF 页面宿主/全 Web 史书（`UI/Web`）+ 聊天/书信 ViewModel |
 | 游戏系统 | `Systems/` | 外交、历史记录、Harmony 补丁 |
 
 完整目录结构见 `docs/architecture.md` 第 17 节。
@@ -157,6 +157,7 @@ stat -c '%s' "$BANNERLORD_GAME_DIR/Modules/AIChronicle/SubModule.xml"
 | `docs/linux-dev.md` | Linux 开发工作流（环境/构建/部署/打包/Proton 运行/日志/调试边界） |
 | `docs/ui-framework.md` | 原生 Kit UI 框架（主题/组件/屏幕基类/Gallery/迁移规则） |
 | `docs/ui-web.md` | CEF live 页面（CefSharp/CefBridge/输入/BGRA 转换/性能与限制） |
+| `docs/plan-history-cef.md` | 全 Web 史书 MVP 状态与收尾计划（HistoryArchive/边界/清晰度） |
 
 ## 7. Git 提交
 

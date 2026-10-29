@@ -9,7 +9,8 @@
 - CEF 仅在 `net472`（Steam）编译；`net6`/Xbox 用 `#if NET472` 完全排除。
 - 默认页面 1280×720（16:9）、30fps，软件渲染（`--disable-gpu` / `--no-sandbox`）。
 - 实机：`Cef.Initialize` 约 0.8s，首帧约 1.6s；浏览器关闭后 CEF 保持初始化，可直接重开。
-- 入口：大地图按 **F8** → Kit Gallery →「打开 CEF」/「打开 CEF 史书」。
+- 入口：大地图按 **F8** → Kit Gallery →「打开 CEF」/「打开 CEF 史书」（演示/编年史示例）。
+- 全 Web 史书：MCM 开启「史书使用 CEF 阅读页（实验性）」后按 H；关闭/失败回退原生史书。
 - CEF 原生运行时约 395MB（`libcef.dll` 236MB + locales + subprocess + paks）。
 
 ## 2. 架构
@@ -47,7 +48,10 @@ CefBridge.ActionReceived
 | 文件 | 职责 |
 |---|---|
 | `UI/Web/CefWebHost.cs` | `CefWebHost` 初始化/路径/日志；`CefWebSession` 浏览器、帧、鼠标、JS；`CefBridge` JS 对象 |
-| `UI/Web/CefWebScreen.cs` | 通用 CEF 屏幕：标题、页面文件、C# 数据注入、输入接线、`PageAction` |
+| `UI/Web/CefWebScreen.cs` | 通用 CEF 屏幕：标题、页面文件、C# 数据注入、输入接线、窗口/全屏、`PageAction` |
+| `UI/Web/HistoryCefScreen.cs` | 史书入口：目录/正文数据、条目选择、原生 fallback |
+| `_Module/WebUI/history.html/css/js` | 全 Web 史书：1100×700 目录 + 纸张正文 |
+| `_Module/WebUI/history.js` | 目录渲染、正文解析、dispatch、逐元素平滑滚动 |
 | `UI/Kit/KitTexture.cs` | `KitTextureWidget`：动态纹理、BGRA/raw 帧、指针/滚轮事件、旧纹理延迟释放 |
 | `_Module/WebUI/live.html` | CEF 演示页：CSS 动画、JS 时钟、`ping` 桥测试按钮 |
 | `_Module/WebUI/chronicle.html` | CEF 史书页：等待 C# 注入数据 |
@@ -81,7 +85,7 @@ CefBridge.ActionReceived
 
 ## 6. 输入
 
-- `KitTextureWidget` 把 Gauntlet 指针坐标换算到 1280×720 view 坐标。
+- `KitTextureWidget` 把 Gauntlet 指针坐标换算到当前 CEF view 尺寸（全幅 1280×720 / 史书 1100×700）。
 - 点击：`SendMouseClickEvent`（左键，down/up）；悬停：`SendMouseMoveEvent`。
 - 滚轮：`OnPreviewMouseScroll()` 必须返回 `true`，否则 Gauntlet 不会把滚轮派发给普通 Widget。
 - 滚轮算法：
@@ -94,7 +98,7 @@ CefBridge.ActionReceived
 
 ## 7. 页面与排版
 
-- CEF viewport 固定 1280×720（16:9）；页面按 16:9 设计。
+- 全幅 CEF viewport 1280×720（16:9）；史书窗口 1100×700；页面按对应尺寸设计。
 - `cef.css` 覆盖 `theme.css` 的 1040px/1400px 长图版式：纸张贴满、正文 17.5px、可滚动。
 - 史书示例由 C# `BuildChronicleData()` 注入，包含北境/朝议/盟变/岁末/诸国纪事/史官附记。
 - 页面背景与纸张同色，纹理内部无黑边；屏幕边缘的暗区来自固定纹理尺寸/原生面板留白，不是页面版式留边。
@@ -158,7 +162,7 @@ CefBridge.ActionReceived
 
 ## 12. 下一步
 
-> 史书迁移的详细分阶段计划见 [plan-history-cef.md](plan-history-cef.md)：推荐“原生目录 + CEF 正文”，保留原生回退。
+> 史书迁移的详细计划见 [plan-history-cef.md](plan-history-cef.md)：全 Web 目录 + 正文 MVP 已完成，剩余 HistoryArchive 抽离、边界回归、清晰度。
 
 1. **60fps 压测**（30fps 已通过，先不改架构）。
 2. **全幅 16:9 版式**（当前 1280×720；下一步 1440×810 或自适应纹理尺寸）。
@@ -168,4 +172,4 @@ CefBridge.ActionReceived
 
 ![史书页面预览（1200px 静态版）](ui-preview-chronicle.png)
 
-> 上图为 `_Module/WebUI/preview.html` 在 Chrome 的静态预览；游戏内是 1280×720 CEF live 页面，数据由 C# 注入。
+> 上图为 `_Module/WebUI/preview.html` 在 Chrome 的静态预览；游戏内全幅 CEF 页为 1280×720，史书页为 1100×700，数据由 C# 注入。

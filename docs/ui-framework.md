@@ -15,7 +15,7 @@
 | 层 | 负责 | 技术 |
 |---|---|---|
 | 交互层 | 聊天、书信、秘书处、表单、设置、决策按钮 | 原生 Gauntlet + `UI/Kit` |
-| 内容层 | 史书、朝堂报告、投票结果、档案、账本 | HTML/CSS → CEF live 帧 → 纹理（1280×720 / 30fps） |
+| 内容层 | 史书、朝堂报告、投票结果、档案、账本 | HTML/CSS → CEF live 帧 → 纹理（全幅 1280×720 / 史书窗口 1100×700 / 30fps） |
 | 外壳 | 窗口、关闭、翻页、滚动、加载/失败态 | 原生 Kit |
 
 ## 3. 原生 Kit
@@ -120,7 +120,7 @@ public sealed class CourtScreen : KitScreen
 3. 新增屏幕：在 `UI/Screens/` 建一个 `KitScreen` 子类，实现 `Build`；在入口处 `new YourScreen().Open()`。
 4. 调主题：只改 `KitTheme` token；需要新尺寸/颜色先加 token，不要写进屏幕。
 5. Web 预览：直接用 Chrome 打开 `_Module/WebUI/preview.html`；改 CSS/HTML 刷新即可，不需要进游戏。
-6. CEF 页面：F8 →「打开 CEF 史书」；页面数据由 `CefWebScreen` 注入，输入/滚动走原生纹理控件。
+6. CEF 演示/编年史：F8 →「打开 CEF」/「打开 CEF 史书」（示例页）；全 Web 史书：MCM 开启「史书使用 CEF 阅读页」后按 H。
 
 ## 4. Web 内容层
 
@@ -164,3 +164,26 @@ public sealed class CourtScreen : KitScreen
 - 页面 `dispatch` 动作与真实决策/投票流程对接（游戏功能 session）。
 - 把按钮/面板等更多主题 token 迁到 `Kit.xml` 做热重载（文本样式已迁）。
 - 迁移 LetterList，补 Gallery 实机截图。
+
+## 9. 框架成熟度结论
+
+**基本成形，可以承接下一批界面。** 但还不是“完全硬化”：
+
+已完成：
+
+- 原生 Kit：主题 token、文本/按钮/Badge/Divider/Toggle/Slider/FormRow、Panel/Card/Row/Column/Scroll、KitScreen、F8 Gallery。
+- CEF：CefSharp 140/CEF 140、OffScreen 30fps、BGRA→RGBA、窗口/全屏宿主、数据注入、双向桥、鼠标点击/悬停/滚轮、窗口模式。
+- 真实页面：演示页、编年史页、全 Web 史书（目录 + 正文，1100×700，MCM 开关，原生 fallback）。
+- 构建/部署：x64、CEF 原生文件复制、全量打包、第三方许可、文档。
+- 实机：CEF 初始化/首帧、颜色、桥接、滚动、窗口模式均通过。
+
+还未完成/不应假设：
+
+- 史书数据仍复用 `HistoryScreenVM`；`HistoryArchive` 尚未抽出，双入口长期会分叉。
+- CEF 仍是固定位图 + 每帧整张上传；30fps 可用，60fps/共享纹理未验证。
+- 只有 net472/Steam；net6/Xbox 只能走原生。
+- 页面不处理文本输入/IME；聊天/书信不迁 Web。
+- 没有自动化 UI/像素回归；Gallery 仍有诊断模式；CEF 包约 395MB。
+- 史书边界（空目录、无权限、缺文件、超长文）和 fallback 尚未系统回归。
+
+结论：**布局/主题/屏幕/CEF 页面链路已经成形，可作为后续朝堂/投票/档案的 UI 基础；下一阶段应做数据抽离与回归硬化，而不是继续堆新页面。**
