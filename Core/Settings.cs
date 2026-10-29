@@ -630,7 +630,7 @@ namespace AIChronicle
         private bool _useCefHistory;
 
         [SettingPropertyBool("史书使用 CEF 阅读页（实验性）", Order = 13, RequireRestart = false,
-            HintText = "开启：H 键打开 CEF 全 Web 史书（目录 + 正文），排版接近网页。\n关闭：使用现有原生史书。CEF 初始化失败或非 Steam 版会自动回退原生。")]
+            HintText = "开启：H 键打开 CEF 全 Web 史书（目录 + 正文，正文按 Markdown 渲染），排版接近网页。\n关闭：使用现有原生史书。CEF 初始化失败或非 Steam 版会自动回退原生。")]
         [SettingPropertyGroup("游戏设置")]
         public bool UseCefHistory
         {
@@ -844,6 +844,15 @@ namespace AIChronicle
         public Action ForceAdvisory { get; set; } = () =>
         {
             AgentScheduler.ForceAdvisory();
+        };
+
+        [SettingPropertyButton("修复遭遇状态", Content = "尝试修复", Order = 22,
+            RequireRestart = false,
+            HintText = "仅当大地图上部队相遇无反应时使用：结束残留的 PlayerEncounter 状态。\n正在对话时不会修复；详情写入 debug_logs/ui_trace.log。")]
+        [SettingPropertyGroup("游戏设置")]
+        public Action RepairEncounter { get; set; } = () =>
+        {
+            EncounterDiagnostics.RepairFromSettings();
         };
 
         // ============ 语音（TTS） ============

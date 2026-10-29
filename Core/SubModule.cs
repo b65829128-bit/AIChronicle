@@ -3,6 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Encounters;
+using TaleWorlds.CampaignSystem.GameState;
+using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.Core;
 using TaleWorlds.InputSystem;
 using TaleWorlds.Library;
@@ -24,17 +27,41 @@ namespace AIChronicle
         private static bool _prevGalleryKit;
         private static DateTime? _mapFreeSince;
 
-        /// <summary>玩家是否正位于战役大地图（非捏脸/菜单/战斗等界面）。天意等大地图系统的激活以此为准。</summary>
+        /// <summary>
+        /// 玩家是否正位于战役大地图（非捏脸/菜单/对话/遭遇/战斗等界面）。
+        /// 天意等大地图系统的激活、H/O/M/F8 入口都以此为准——尤其不能把 H/CEF 叠到遭遇菜单上，
+        /// 否则会留下"有 PlayerEncounter、却没有菜单"的残留状态，导致后续部队相遇无反应。
+        /// </summary>
         internal static bool IsPlayerFreeOnMap()
         {
             if (Campaign.Current == null) return false;
             try
             {
                 var state = Game.Current?.GameStateManager?.ActiveState;
-                if (state == null) return false;
-                return state.GetType().Name == "MapState";
+                if (state is MapState mapState)
+                {
+                    if (mapState.AtMenu || mapState.MapConversationActive)
+                        return false;
+                }
+                else if (state == null || state.GetType().Name != "MapState")
+                {
+                    return false;
+                }
+
+                if (Campaign.Current.ConversationManager?.IsConversationInProgress == true)
+                    return false;
+                if (PlayerEncounter.Current != null)
+                    return false;
+                if (MobileParty.MainParty?.MapEvent != null)
+                    return false;
+
+                return true;
             }
-            catch { return true; }
+            catch
+            {
+                // 宁可不弹 UI，也不要在不确定状态下叠加 GauntletLayer。
+                return false;
+            }
         }
 
         protected override void OnSubModuleLoad()
@@ -217,6 +244,7 @@ namespace AIChronicle
             base.OnApplicationTick(dt);
 
             MainThreadExecutor.Tick();
+            EncounterDiagnostics.Tick();
             PartyBehaviorManager.Tick();
             AIChatClient.CheckPendingInquiry();
             AgentScheduler.Tick();

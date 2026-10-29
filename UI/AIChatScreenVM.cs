@@ -526,6 +526,10 @@ namespace AIChronicle
                                     Campaign.Current.ConversationManager.EndConversation();
                             }
                             catch { }
+
+                            // 只置 LeaveEncounter 不会清 Campaign.PlayerEncounter；不 Finish 会残留读档，
+                            // 之后 EncounterManager 会跳过主队伍的新遭遇。下一帧在主线程收尾。
+                            EncounterDiagnostics.FinishAfterLetGo();
                         }
                     });
                 }

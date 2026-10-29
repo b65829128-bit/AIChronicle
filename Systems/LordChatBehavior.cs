@@ -54,6 +54,7 @@ namespace AIChronicle
         private void OnSessionLaunched(CampaignGameStarter starter)
         {
             PromptManager.StartCampaign(GetOrCreateCampaignId());
+            EncounterDiagnostics.OnSessionLaunched();
 
             starter.AddPlayerLine(
                 "aichronicle_ai_chat_dialog",
