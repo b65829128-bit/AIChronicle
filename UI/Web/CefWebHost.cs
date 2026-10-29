@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using CefSharp;
+using CefSharp.Handler;
 using CefSharp.OffScreen;
 
 namespace AIChronicle
@@ -136,6 +137,7 @@ namespace AIChronicle
                     automaticallyCreateBrowser: false);
                 _browser.Size = new System.Drawing.Size(width, height);
                 _browser.DeviceScaleFactor = 1f;
+                _browser.RequestHandler = new LocalOnlyRequestHandler();
                 _browser.Paint += OnPaint;
                 _browser.BrowserInitialized += OnBrowserInitialized;
                 _browser.LoadError += OnLoadError;
@@ -360,6 +362,31 @@ namespace AIChronicle
             _browserSettings = null;
             FrameReady = null;
             Status = null;
+        }
+    }
+
+    /// <summary>只允许本地 file/about/data 页面；远程导航直接取消。</summary>
+    internal sealed class LocalOnlyRequestHandler : RequestHandler
+    {
+        protected override bool OnBeforeBrowse(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame,
+            IRequest request, bool userGesture, bool isRedirect)
+        {
+            return !IsLocal(request.Url);
+        }
+
+        protected override bool OnOpenUrlFromTab(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame,
+            string targetUrl, WindowOpenDisposition targetDisposition, bool userGesture)
+        {
+            return !IsLocal(targetUrl);
+        }
+
+        private static bool IsLocal(string? url)
+        {
+            if (string.IsNullOrEmpty(url))
+                return false;
+            return url.StartsWith("file:", StringComparison.OrdinalIgnoreCase)
+                || url.StartsWith("about:", StringComparison.OrdinalIgnoreCase)
+                || url.StartsWith("data:", StringComparison.OrdinalIgnoreCase);
         }
     }
 
