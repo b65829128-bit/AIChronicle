@@ -32,7 +32,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁。**玩家发起的聊天（conversation）是全功能通道——全部分类默认激活**（AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全则对话里达成的承诺无法兑现；能力门控照旧，国王专属工具仍只有国王拿到） |
 | **提示词全部可编辑** | `context_template.txt`、`persona_generation.txt`、`chancery_rules.txt`、`world_info.txt`、`game_rules.txt` 等均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环，模型调用工具 → 执行 → 追加结果 → 重请求，直到模型自然停止（无轮数限制，仅保留极高安全阀防死循环） |
-| **主线程分发** | LLM 工具循环跑在后台线程，但**所有修改游戏状态的工具**经 `MainThreadExecutor` 排队到主线程 `OnApplicationTick` 执行（后台线程阻塞等待结果）；仅 `request_gold`/`request_items`/`browse_tools` 留在后台线程（前两者需主线程弹窗等待玩家，后者改本流程上下文）。背景：Bannerlord 游戏对象（MobileParty/Hero/Kingdom）是主线程独占的 |
+| **主线程分发** | LLM 工具循环跑在后台线程，但**所有修改游戏状态的工具**经 `MainThreadExecutor` 排队到主线程 `OnApplicationTick` 执行（后台线程阻塞等待结果）；仅 `request_gold`/`request_items`/`browse_tools` 留在后台线程（前两者需主线程弹窗等待玩家，后者改本流程上下文）。背景：Bannerlord 游戏对象（MobileParty/Hero/Kingdom）是主线程独占的。**战役生命周期隔离**：`OnGameStart`/`OnGameEnd` 递增 campaign epoch 并清空旧队列；旧 epoch 动作直接丢弃，等待中的 `RunOnMainThread` 立即取消；`AIChatClient.SendMessage` 也捕获 epoch，跨档的 LLM 工具循环不再执行工具 |
 | **上下文隔离（AsyncLocal）** | `CurrentHero`/`CurrentIntent`/`ActivatedCategories`（AIChatClient）、`_agentEntityId`/`_targetEntityId`（AgentManager）、`_activeAgentId`/`_activeTargetId`（EntityManager）均为 `AsyncLocal`——聊天与后台信件/自省/密使/外交多个流程并发时上下文互不覆盖；实体缓存用 `ConcurrentDictionary`（线程安全） |
 | **秘书处** | M 键打开，玩家的个人行政助手。固定 persona（无条件服从），不读玩家 persona。国王/封臣/平民均可使用。**工具范围严格受限**：仅查询、谏言（`submit_advisory`/`submit_secret_advisory`）、诏令与问询回复（`submit_edict`/`reply_consult`，国王）、快速加入/脱离王国（`change_kingdom`，受家族等级限制）——行军/军事/金钱物品/好感/写信一律不可用（有替代路径），且不提供 `browse_tools`（防止解锁受限分类绕过权限）。玩家可经秘书处调 `submit_advisory` 提交公开谏言（雇佣兵除外） |
 | **天意** | 虚拟实体（ID: `__fate__`，HeroRef=null，与史官并列）。家族补充系统：在世贵族/佣兵家族**总数**（封臣世家 + 雇佣兵公司，佣兵不论是否受雇都计入）低于「家族总数补充阈值」时被激活，决定新家族名称/文化/投效势力/以封臣还是佣兵身份入世（`create_clan`，能力门控仅天意可用），成员程序生成、等级 2、族长带兵、旗帜随机，入原始史料但不激活史官。只在玩家位于大地图时检测（捏脸/初始化阶段计数失真），有 MCM 冷却防连补；成员模板用 `RebelliousHeroTemplates`（`GetRandomTemplateByOccupation(Lord)` 查不到 Lord 模板、恒 null 的历史死路径已弃） |
@@ -395,7 +395,7 @@ Usage:
 │   ├── ConnectionResolver.cs   ← 场景连接解析器（intent → 生效 URL/模型/密钥/接口类型，逐字段兜底到全局连接设置）
 │   ├── DebugLogger.cs          ← 调试日志（LLM 调用摘要/思维链摘录 → 战役 debug_logs/）
 │   ├── SafeFileIO.cs           ← 带重试的文件 IO（并发读写同一文件时避免"文件正被使用"异常）
-│   ├── MainThreadExecutor.cs   ← 主线程分发器（后台线程的工具执行排队回主线程，防跨线程崩溃）
+│   ├── MainThreadExecutor.cs   ← 主线程分发器（工具回主线程 + 战役 epoch 生命周期隔离）
 │   ├── TtsService.cs           ← 语音合成门面（ITtsProvider 接口 + 合成/磁盘缓存/播放/打断）
 │   ├── EdgeTtsProvider.cs      ← Edge TTS 免费引擎（手写 WebSocket 客户端 EdgeWsClient，可设浏览器 UA）
 │   └── LLM/                    ← LLM 厂商兼容层（Provider 抽象，声明式厂商差异）
@@ -460,7 +460,7 @@ Usage:
 │   ├── package.py             ← Linux/跨平台打包（编译+部署+zip；含 NAudio 运行时依赖）
 │   └── package.ps1            ← Windows 兼容打包（同上）
 ├── tests/                      ← 纯逻辑测试（不依赖游戏 DLL）
-│   ├── AIChronicle.Pure.Tests/ ← 史册解析/权限/读取测试（dotnet run）
+│   ├── AIChronicle.Pure.Tests/ ← 史册解析/权限/读取 + 主线程 epoch 测试（dotnet run）
 │   └── web/                    ← 史书页 Markdown 渲染测试（Node DOM 桩）
 ├── .github/workflows/
 │   ├── health.yml             ← 轻量 CI（无需游戏 DLL，push/PR 自动跑 health + 纯逻辑测试）

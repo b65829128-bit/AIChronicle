@@ -54,6 +54,7 @@ namespace AIChronicle
         private void OnSessionLaunched(CampaignGameStarter starter)
         {
             PromptManager.StartCampaign(GetOrCreateCampaignId());
+            MainThreadExecutor.TraceStatus("session launched");
             EncounterDiagnostics.OnSessionLaunched();
 
             starter.AddPlayerLine(

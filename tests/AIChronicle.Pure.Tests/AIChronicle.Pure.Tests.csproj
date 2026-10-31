@@ -13,7 +13,9 @@
 
   <ItemGroup>
     <Compile Include="Program.cs" />
-    <!-- 只链接不依赖 TaleWorlds 的纯逻辑文件：无需游戏 DLL 即可在 CI/Linux 跑。 -->
+    <Compile Include="MainThreadStubs.cs" />
+    <!-- 只链接不依赖 TaleWorlds 的纯逻辑文件（MainThreadExecutor 用最小桩）：无需游戏 DLL 即可在 CI/Linux 跑。 -->
+    <Compile Include="../../Core/MainThreadExecutor.cs" Link="MainThreadExecutor.cs" />
     <Compile Include="../../Systems/HistoryArchive.cs" Link="HistoryArchive.cs" />
     <Compile Include="../../Systems/HistoryMarkdown.cs" Link="HistoryMarkdown.cs" />
     <Compile Include="../../Core/SafeFileIO.cs" Link="SafeFileIO.cs" />

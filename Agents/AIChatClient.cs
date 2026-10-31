@@ -292,6 +292,10 @@ namespace AIChronicle
 
         public static async Task<ChatResponse> SendMessage(CharacterPrompt charPrompt, Hero? hero = null, bool includeTools = true, string intent = "conversation")
         {
+            // 战役生命周期令牌：若请求/工具循环跨越切档，立即丢弃本次行动，避免旧战役的
+            // LLM 回调在新区里执行工具（仅靠主线程队列的 epoch 只能拦住“已入队”的动作）。
+            long campaignEpoch = MainThreadExecutor.CampaignEpoch;
+
             CurrentHero = hero;
             CurrentIntent = intent;
             ActivatedCategories = new HashSet<string>(GetDefaultCategories(intent));
@@ -472,8 +476,21 @@ namespace AIChronicle
             // 用 lastRetriedRound 限制每个 round 至多重试一次，防病态端点导致死循环。
             int lastRetriedRound = -1;
 
+            ChatResponse CampaignEnded()
+            {
+                DebugLogger.Log($"LLM 取消 intent={intent} agent={hero?.Name?.ToString() ?? "?"}：战役生命周期已切换");
+                return new ChatResponse
+                {
+                    Content = "（战役已切换，本次行动已取消。）",
+                    FinishReason = "campaign_ended"
+                };
+            }
+
             for (int round = 0; round < MaxSafetyRounds; round++)
             {
+                if (MainThreadExecutor.CampaignEpoch != campaignEpoch)
+                    return CampaignEnded();
+
                 // 构建请求：全部厂商差异（参数/字段名）由 provider 依据能力声明处理
                 var request = provider.BuildRequest(new LLMRequest
                 {
@@ -655,8 +672,15 @@ namespace AIChronicle
                     assistantMsg[provider.Capabilities.ReasoningContentField] = roundReasoning;
                 messageList.Add(assistantMsg);
 
+                // 流式响应读完、真正执行工具之前再检查一次：切档后不得把旧战役的工具落进新区。
+                if (MainThreadExecutor.CampaignEpoch != campaignEpoch)
+                    return CampaignEnded();
+
                 foreach (var rt in roundToolCalls)
                 {
+                    if (MainThreadExecutor.CampaignEpoch != campaignEpoch)
+                        return CampaignEnded();
+
                     var callId = rt["id"]?.ToString() ?? Guid.NewGuid().ToString("N");
                     var func = rt["function"];
                     var funcName = func?["name"]?.ToString() ?? "";

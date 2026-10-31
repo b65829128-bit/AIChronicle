@@ -89,6 +89,10 @@ namespace AIChronicle
 
         protected override void OnGameStart(Game game, IGameStarter gameStarter)
         {
+            // 新战役开始：递增主线程队列 epoch，丢弃上一局未消费的动作。
+            // 放在 base 之前，确保 base/行为初始化期间投递的动作也属于新 epoch。
+            MainThreadExecutor.BeginCampaign();
+
             base.OnGameStart(game, gameStarter);
 
             InformationManager.DisplayMessage(new InformationMessage(
@@ -229,7 +233,11 @@ namespace AIChronicle
         /// <summary>战役结束（切档/退回主菜单/关游戏）时清空跨档残留状态，避免新档用到旧档的实体/计时器。</summary>
         public override void OnGameEnd(Game game)
         {
+            // 先让主线程队列失效，再清理 UI/实体；否则旧战役排队动作可能在新战役执行。
+            MainThreadExecutor.EndCampaign();
+
             base.OnGameEnd(game);
+
             KitGalleryScreen.CloseIfOpen();
             EntityManager.ResetForNewCampaign();
             PartyBehaviorManager.ResetForNewCampaign();

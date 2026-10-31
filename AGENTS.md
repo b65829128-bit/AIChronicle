@@ -88,7 +88,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 ### 三个必须记住的机制
 
 1. **单一模型**：整套模组只有一条 LLM 调用链路，角色扮演与工具调用在同一次 SSE 流式请求内完成（`AIChatClient.SendMessage`）。
-2. **主线程分发**：LLM 工具循环跑后台线程，但**所有修改游戏状态的工具**经 `MainThreadExecutor` 排队到主线程 `OnApplicationTick` 执行（Bannerlord 游戏对象主线程独占）。
+2. **主线程分发**：LLM 工具循环跑后台线程，但**所有修改游戏状态的工具**经 `MainThreadExecutor` 排队到主线程 `OnApplicationTick` 执行（Bannerlord 游戏对象主线程独占）。队列动作带 campaign epoch：`OnGameStart`/`OnGameEnd` 递增 epoch 并清空旧队列，切档后旧动作直接丢弃、阻塞等待立即取消；`AIChatClient.SendMessage` 也捕获 epoch，跨档的 LLM 工具循环不再执行工具。
 3. **上下文隔离（AsyncLocal）**：聊天与后台信件/自省/密使/外交多流程并发时上下文互不覆盖；实体缓存用 `ConcurrentDictionary`。
 
 ### 分层速览

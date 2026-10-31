@@ -535,7 +535,7 @@ AIChronicle/
 │   ├── ConnectionResolver.cs # 场景连接解析器（intent → 生效 URL/模型/密钥，逐字段兜底）
 │   ├── DebugLogger.cs       # 调试日志（LLM 调用摘要/思维链摘录 → 战役 debug_logs/）
 │   ├── SafeFileIO.cs        # 带重试的文件 IO（并发读写同一文件时避免"文件正被使用"异常）
-│   ├── MainThreadExecutor.cs # 主线程分发器（后台线程工具执行回主线程，防跨线程崩溃）
+│   ├── MainThreadExecutor.cs # 主线程分发器（工具回主线程 + 战役 epoch 生命周期隔离）
 │   ├── TtsService.cs        # 语音合成门面（ITtsProvider 接口 + 合成/缓存/播放/打断）
 │   ├── EdgeTtsProvider.cs   # Edge TTS 免费引擎实现（手写 WebSocket 客户端，可设浏览器 UA）
 │   └── LLM/                 # LLM 厂商兼容层（Provider 抽象，声明式厂商差异）
@@ -589,7 +589,7 @@ AIChronicle/
 │   ├── package.py           # Linux/跨平台打包（编译+部署+zip，含 NAudio + CEF 原生文件）
 │   └── package.ps1          # Windows 兼容打包
 ├── tests/                   # 纯逻辑测试（不依赖游戏 DLL；CI 与本地 dotnet run）
-│   ├── AIChronicle.Pure.Tests/ # 史册解析/权限/读取测试
+│   ├── AIChronicle.Pure.Tests/ # 史册解析/权限/读取 + 主线程 epoch 测试
 │   └── web/history-render.test.mjs # 史书页 Markdown 渲染（Node DOM 桩）
 ├── _Module/
 │   ├── SubModule.xml     # 模组元数据

@@ -68,8 +68,8 @@ Bannerlord 的模组加载有严格的初始化顺序。**在错误的阶段调�
 |------|-----------|-----------|
 | `OnSubModuleLoad` | `Harmony.PatchAll()`（仅对已完成的类型生效）、初始化纯数据结构 | 调用 `InformationManager`、访问 `Campaign`、打补丁到未初始化的类型 |
 | `OnBeforeInitialModuleScreenSetAsRoot` | 显示欢迎消息、修改主菜单 | 访问战役数据（还没进游戏） |
-| `OnGameStart` | 注册 CampaignBehavior、显示消息、访问战役数据、**用 Type.GetType + harmony.Patch 手动补丁未初始化的类型** | - |
-| `OnGameEnd` | 清空跨档静态状态（`EntityManager.ResetForNewCampaign`/`PartyBehaviorManager`/`AgentScheduler`/`DebugLogger`）——避免新档用到旧档的实体缓存、计时器、编年史年份 | 访问战役数据（已结束） |
+| `OnGameStart` | 递增主线程队列 epoch（`MainThreadExecutor.BeginCampaign`）、注册 CampaignBehavior、显示消息、访问战役数据、**用 Type.GetType + harmony.Patch 手动补丁未初始化的类型** | - |
+| `OnGameEnd` | 先 `MainThreadExecutor.EndCampaign` 取消旧队列动作，再清空跨档静态状态（`EntityManager.ResetForNewCampaign`/`PartyBehaviorManager`/`AgentScheduler`/`DebugLogger`）——避免新档用到旧档的实体缓存、计时器、编年史年份 | 访问战役数据（已结束） |
 
 **常见崩溃码：**
 
@@ -103,7 +103,7 @@ Bannerlord 的模组加载有严格的初始化顺序。**在错误的阶段调�
 史册数据层与 CEF 史书页渲染有独立测试，不需要游戏 DLL，Linux/CI 均可跑：
 
 ```bash
-# 史册目录/权限/读取（dotnet，目标 net10.0）
+# 史册目录/权限/读取 + 主线程 epoch（dotnet，目标 net10.0）
 dotnet run --project tests/AIChronicle.Pure.Tests/AIChronicle.Pure.Tests.csproj -c Release
 
 # 史书页 Markdown 渲染（Node + 最小 DOM 桩）
@@ -113,7 +113,7 @@ node tests/web/history-render.test.mjs
 node scripts/ci-health.mjs
 ```
 
-测试源码通过 `<Compile Include>` 链接 `Systems/HistoryArchive.cs`/`HistoryMarkdown.cs`/`Core/SafeFileIO.cs`，不引用 TaleWorlds，也不打进模组发布包。新增纯逻辑模块时优先采用这种方式。
+测试源码通过 `<Compile Include>` 链接 `Systems/HistoryArchive.cs`/`HistoryMarkdown.cs`/`Core/SafeFileIO.cs`/`Core/MainThreadExecutor.cs`，不引用真实 TaleWorlds；`MainThreadStubs.cs` 只提供 `MainThreadExecutor` 需要的最小日志/消息桩，不模拟游戏行为，也不打进模组发布包。新增纯逻辑模块时优先采用这种方式。
 
 ## 8. 遭遇无反应（PlayerEncounter 残留）
 
@@ -134,3 +134,33 @@ node scripts/ci-health.mjs
 - 自动：`EncounterDiagnostics.Tick` 检测到"有 Current、无菜单/对话/MapEvent"持续 8 秒，自动 `PlayerEncounter.Finish()` 并写日志/黄字；若 `modUi=True`（AI 聊天/史书/书信面板仍打开）则等待，不误伤；
 - 手动：MCM「游戏设置 → 修复遭遇状态」（正在对话/战斗时不会修复）；
 - 代码侧：`let_go` 结束对话后下一帧显式 `Finish`；H/O/M/F8 入口现在要求 `MapState.AtMenu == false`、无对话、无 `PlayerEncounter`、无 MapEvent，避免在遭遇菜单上叠 UI。
+
+## 9. 切档后旧动作/主线程队列残留
+
+**现象**：切档/读档/回主菜单后，屏幕上出现旧档的消息，或新档里突然执行了旧档排队的行军/外交/UI 动作；严重时红字异常或游戏对象失效。
+
+**原理**：LLM 工具在后台线程运行，通过 `MainThreadExecutor` 投递到主线程。旧版队列只有一条 `ConcurrentQueue`，`OnGameEnd` 不清空、动作也不带战役标识；旧档动作如果在新档的 `OnApplicationTick` 才被消费，就会落到新档的游戏对象上。
+
+**现在的保护**：
+
+- `OnGameStart` → `MainThreadExecutor.BeginCampaign()`，`OnGameEnd` → `EndCampaign()`，每次生命周期切换递增 campaign epoch 并清空队列；
+- 入队动作记录 epoch；`Tick` 发现 epoch 不匹配直接丢弃；
+- 正在等待 `RunOnMainThread` 的后台线程会收到取消异常（不再等 30 秒超时）；
+- `AIChatClient.SendMessage` 在请求开始时捕获 epoch，切档后不再执行后续工具，返回 `FinishReason=campaign_ended`。
+
+**日志**（战役 `debug_logs/ui_trace.log`）：
+
+    [MainThread] initialized epoch=0
+    [MainThread] campaign epoch=1 (新战役开始), canceled=0, pending=0
+    [MainThread] status epoch=1, pending=0 (session launched)
+    [MainThread] campaign epoch=2 (战役结束), canceled=3, pending=0
+    [MainThread] dropped stale work (epoch 1 != 2), total=1, item=...
+
+如果看到 `campaign epoch` 正常递增但仍有旧动作，优先检查该动作是否在新 epoch 下才第一次入队（例如旧 Agent 在新档才发起新的 `SendMessage`）——这属于 Agent/调度器生命周期，需继续在调用方加 epoch 校验。
+
+**回归测试**：
+
+1. 进档，确认 `ui_trace.log` 有 `campaign epoch=1`；
+2. 触发一个后台动作（写信/聊天/自省），在它完成前回主菜单或读另一个档；
+3. 确认日志出现新的 `campaign epoch` 和 `canceled=N`，且新档没有旧档的提示/动作；
+4. 若正在跑 LLM，确认日志出现 `LLM 取消 ... 战役生命周期已切换`，没有工具副作用。

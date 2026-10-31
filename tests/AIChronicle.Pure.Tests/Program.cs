@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using AIChronicle;
 
 namespace AIChronicle.Tests
@@ -24,6 +25,7 @@ namespace AIChronicle.Tests
             Run("catalog: empty campaign dir", TestEmptyCatalog);
             Run("read: markdown, empty file, missing file, header", TestReadArticle);
             Run("markdown -> plain text fallback", TestMarkdownPlainText);
+            Run("main-thread epoch: drop stale + cancel waiters", TestMainThreadEpoch);
 
             Console.WriteLine();
             Console.WriteLine($"passed: {_passed}, failed: {_failed}");
@@ -255,6 +257,57 @@ namespace AIChronicle.Tests
                 "single underscore identifier preserved");
             AssertEqual("", HistoryMarkdown.ToPlainText(null));
             AssertEqual("", HistoryMarkdown.ToPlainText(""));
+        }
+
+        private static void TestMainThreadEpoch()
+        {
+            MainThreadExecutor.Initialize();
+            MainThreadExecutor.BeginCampaign();
+            int executed = 0;
+
+            MainThreadExecutor.Post(() => executed++);
+            MainThreadExecutor.Tick();
+            AssertEqual(1, executed, "current-epoch action runs");
+
+            MainThreadExecutor.Post(() => executed += 100);
+            AssertTrue(MainThreadExecutor.PendingCount >= 1, "action queued");
+            MainThreadExecutor.EndCampaign();
+            MainThreadExecutor.Tick();
+            AssertEqual(1, executed, "queued action from ended campaign dropped");
+
+            MainThreadExecutor.BeginCampaign();
+            string? cancelMessage = null;
+            var worker = new Thread(() =>
+            {
+                try
+                {
+                    MainThreadExecutor.RunOnMainThread(() =>
+                    {
+                        executed += 1000;
+                        return true;
+                    });
+                }
+                catch (Exception ex)
+                {
+                    cancelMessage = ex.Message;
+                }
+            })
+            {
+                IsBackground = true
+            };
+            worker.Start();
+            AssertTrue(SpinWait.SpinUntil(() => MainThreadExecutor.PendingCount > 0, 2000),
+                "background waiter queued");
+            MainThreadExecutor.EndCampaign();
+            AssertTrue(worker.Join(2000), "background waiter canceled promptly");
+            AssertTrue(cancelMessage != null && cancelMessage.Contains("已取消"),
+                "background waiter received cancel error");
+            AssertEqual(1, executed, "canceled waiter did not execute");
+
+            MainThreadExecutor.BeginCampaign();
+            MainThreadExecutor.Post(() => executed++);
+            MainThreadExecutor.Tick();
+            AssertEqual(2, executed, "new-campaign action runs");
         }
 
         private static HistoryCatalog Load(string campaignDir, string? kingdom = null,
