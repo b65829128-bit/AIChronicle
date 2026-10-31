@@ -58,7 +58,11 @@ class FakeNode {
 }
 
 const elements = new Map();
-for (const id of ["catalogList", "reader", "articleTitle", "articleMeta", "articleBody", "status"]) {
+for (const id of [
+  "catalogList", "catalogCount", "reader", "articleTitle", "articleMeta",
+  "articleCategory", "articleYear", "mastDot", "articleNumber", "articleTotal",
+  "articleBody", "articleEnd", "progressBar", "pageLabel", "status",
+]) {
   elements.set(id, new FakeNode("div"));
 }
 
@@ -118,6 +122,10 @@ game.showArticle({
   title: "第1084年编年史",
   format: "markdown",
   fontSize: 18,
+  category: "编年史",
+  year: 1084,
+  position: 2,
+  total: 6,
   body: [
     "## 春",
     "",
@@ -131,6 +139,13 @@ game.showArticle({
     "---",
   ].join("\n"),
 });
+
+assert.equal(elements.get("articleCategory").textContent, "编年史", "article category");
+assert.equal(elements.get("articleYear").textContent, "第 1084 年", "article year");
+assert.equal(elements.get("articleNumber").textContent, "02", "article position");
+assert.equal(elements.get("articleTotal").textContent, "06", "article total");
+assert.ok(elements.get("articleMeta").textContent.includes("字"), "article character count");
+assert.ok(elements.get("pageLabel").textContent.includes("第 2 篇"), "page label");
 
 assert.ok(findNodes(body, "h2").some((node) => nodeText(node) === "春"), "markdown heading");
 assert.ok(nodeText(body).includes("加粗与代码"), "inline formatting text");

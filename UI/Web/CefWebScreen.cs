@@ -20,6 +20,8 @@ namespace AIChronicle
         private readonly int _viewWidth;
         private readonly int _viewHeight;
         private readonly bool _windowed;
+        private readonly float _contentPadding;
+        private readonly bool _showStatus;
 
         private readonly string _pageFile;
         private readonly string _title;
@@ -44,7 +46,9 @@ namespace AIChronicle
             int fps = 30,
             int viewWidth = 1280,
             int viewHeight = 720,
-            bool windowed = false)
+            bool windowed = false,
+            float contentPadding = KitTheme.S5,
+            bool showStatus = true)
         {
             _pageFile = pageFile;
             _title = title;
@@ -54,6 +58,8 @@ namespace AIChronicle
             _viewWidth = viewWidth;
             _viewHeight = viewHeight;
             _windowed = windowed;
+            _contentPadding = contentPadding;
+            _showStatus = showStatus;
         }
 
         /// <summary>打开真实史书页面：内容由 C# 数据注入，页面本身只负责渲染。</summary>
@@ -72,24 +78,48 @@ namespace AIChronicle
             var ctx = Context!;
             root.Scrim();
 
-            var panel = Kit.Panel(ctx, KitTheme.Window, KitTheme.S5, stretchContent: true);
+            float padding = Math.Max(0f, _contentPadding);
+            var panel = Kit.Panel(ctx, KitTheme.Window, padding, stretchContent: true);
             if (_windowed)
             {
-                // 窗口模式：不铺满整个屏幕，按 CEF 纹理尺寸留出原生边距。
+                // 窗口模式：按 CEF 纹理尺寸 + 原生标题栏/状态行高度收口，避免页面底部留出空条。
+                // 65 = 标题栏 64 + 分隔线 1；85 另外计入启动状态文字约 20。
                 panel.Root.WidthSizePolicy = SizePolicy.Fixed;
-                panel.Root.SuggestedWidth = _viewWidth + KitTheme.S5 * 2f;
+                panel.Root.SuggestedWidth = _viewWidth + padding * 2f;
                 panel.Root.HeightSizePolicy = SizePolicy.Fixed;
-                panel.Root.SuggestedHeight = _viewHeight + 160f;
+                panel.Root.SuggestedHeight = _viewHeight + (_showStatus ? 85f : 65f) + padding * 2f;
                 panel.Root.HorizontalAlignment = HorizontalAlignment.Center;
                 panel.Root.VerticalAlignment = VerticalAlignment.Center;
             }
-            panel.Add(Kit.Header(ctx, _title,
-                right: Kit.Button(ctx, "关闭", Close, KitButtonStyle.Ghost),
-                subtitle: _subtitle));
-            panel.Add(Kit.Divider(ctx));
 
-            _status = Kit.Text(ctx, "正在启动 CEF…", KitTextStyle.Muted, wrap: false);
-            panel.Add(_status);
+            var header = Kit.Header(ctx, _title,
+                right: Kit.Button(ctx, "关闭", Close, KitButtonStyle.Ghost),
+                subtitle: _subtitle);
+            if (padding <= 0f)
+            {
+                header.MarginLeft = KitTheme.S5;
+                header.MarginRight = KitTheme.S5;
+            }
+            panel.Add(header);
+
+            var divider = Kit.Divider(ctx);
+            if (padding <= 0f)
+            {
+                divider.MarginLeft = KitTheme.S5;
+                divider.MarginRight = KitTheme.S5;
+            }
+            panel.Add(divider);
+
+            if (_showStatus)
+            {
+                _status = Kit.Text(ctx, "正在启动 CEF…", KitTextStyle.Muted, wrap: false);
+                if (padding <= 0f)
+                {
+                    _status.MarginLeft = KitTheme.S5;
+                    _status.MarginRight = KitTheme.S5;
+                }
+                panel.Add(_status);
+            }
 
             _texture = new KitTextureWidget(ctx)
             {

@@ -15,7 +15,7 @@
 | 层 | 负责 | 技术 |
 |---|---|---|
 | 交互层 | 聊天、书信、秘书处、表单、设置、决策按钮 | 原生 Gauntlet + `UI/Kit` |
-| 内容层 | 史书、朝堂报告、投票结果、档案、账本 | HTML/CSS → CEF live 帧 → 纹理（全幅 1280×720 / 史书窗口 1100×700 / 30fps） |
+| 内容层 | 史书、朝堂报告、投票结果、档案、账本 | HTML/CSS → CEF live 帧 → 纹理（全幅 1280×720 / 史书内容区 1100×700 / 30fps） |
 | 外壳 | 窗口、关闭、翻页、滚动、加载/失败态 | 原生 Kit |
 
 ## 3. 原生 Kit
@@ -120,13 +120,13 @@ public sealed class CourtScreen : KitScreen
 3. 新增屏幕：在 `UI/Screens/` 建一个 `KitScreen` 子类，实现 `Build`；在入口处 `new YourScreen().Open()`。
 4. 调主题：只改 `KitTheme` token；需要新尺寸/颜色先加 token，不要写进屏幕。
 5. Web 预览：直接用 Chrome 打开 `_Module/WebUI/preview.html`；改 CSS/HTML 刷新即可，不需要进游戏。
-6. CEF 演示/编年史：F8 →「打开 CEF」/「打开 CEF 史书」（示例页）；全 Web 史书：MCM 开启「史书使用 CEF 阅读页」后按 H。
+6. CEF 演示/编年史：F8 →「打开 CEF」/「打开 CEF 史书」（示例页）；全 Web 史书：默认按 H 打开，MCM 可切回原生。
 
 ## 4. Web 内容层
 
 详见 [ui-web.md](ui-web.md)。摘要：
 
-- **CEF live**：CefSharp OffScreen 140.1.140 / CEF 140，30fps，BGRA 帧 → RGBA 引擎纹理；演示/编年史页 1280×720，史书窗口 1100×700。
+- **CEF live**：CefSharp OffScreen 140.1.140 / CEF 140，30fps，BGRA 帧 → RGBA 引擎纹理；演示/编年史页 1280×720，史书内容区 1100×700（原生标题栏另计）。
 - 游戏 → 网页：`window.__game.render(json)`；网页 → 游戏：`aiChronicle.dispatch(id, payload)` → `CefWebScreen.PageAction`。
 - 鼠标点击/悬停/滚轮回传；文本输入/IME 仍走原生。
 - 依赖体积约 395MB，仅 net472/Steam；net6/Xbox `#if NET472` 排除。
@@ -136,7 +136,7 @@ public sealed class CourtScreen : KitScreen
 
 1. `KitGalleryScreen`（本 session）
 2. `LetterListScreen`（列表简单，验证 List/Row/Button）
-3. `HistoryScreen` 全 Web 史书（已完成：1100×700 窗口 + 全 Web 目录/正文 + 原生 fallback；`HistoryArchive` 已抽离，正史 Markdown 渲染）
+3. `HistoryScreen` 全 Web 史书（已完成：1100×700 内容区 + 全 Web 目录/正文 + 原生 fallback；`HistoryArchive` 已抽离，正史 Markdown 渲染）
 4. 新屏幕（Court/Diplomacy/Dossier）直接用 Kit
 5. `AIChatScreen` 只换主题/笔刷，不重写逻辑
 
@@ -148,7 +148,7 @@ public sealed class CourtScreen : KitScreen
 - 快捷键 O/M/H 与 Gallery 互斥。
 - 无新增运行时依赖（CefSharp/CEF 已批准，属于 UI 运行时；net6 不加载）。
 
-> **本 session 状态**：已实机验证——Gallery 可开、滚动区/动态纹理正常；CEF 初始化约 0.8s、首帧约 1.6s；CEF 史书颜色、鼠标点击、桥接、滚动均通过；**1280×720 / 30fps 与史书 1100×700 窗口均实机通过，无明显卡顿**。当前限制仍是每帧整张上传，不如浏览器 60fps 顺滑。
+> **本 session 状态**：已实机验证——Gallery 可开、滚动区/动态纹理正常；CEF 初始化约 0.8s、首帧约 1.6s；CEF 史书颜色、鼠标点击、桥接、滚动均通过；**1280×720 / 30fps 与史书 1100×700 内容区均实机通过，无明显卡顿**。当前限制仍是每帧整张上传，不如浏览器 60fps 顺滑。
 
 ## 7. 风险
 

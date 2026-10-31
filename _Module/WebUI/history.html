@@ -3,24 +3,78 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=1100, height=700">
-  <title>卡拉迪亚史书</title>
-  <link rel="stylesheet" href="theme.css">
+  <title>卡拉迪亚编年史</title>
   <link rel="stylesheet" href="history.css">
 </head>
 <body>
-  <div id="app">
+  <div id="book">
     <aside class="catalog">
-      <div class="catalog-head">史册目录</div>
+      <div class="brand">
+        <div class="brand-seal">史</div>
+        <div class="brand-copy">
+          <div class="brand-kicker">卡拉迪亚</div>
+          <div class="brand-title">编年史</div>
+          <div class="brand-latin">ANNALES CALRADIAE</div>
+        </div>
+      </div>
+
+      <div class="brand-rule"><span></span><i></i><span></span></div>
+
+      <div class="catalog-head">
+        <span>史册目录</span>
+        <span id="catalogCount" class="catalog-count"></span>
+      </div>
       <div id="catalogList" class="catalog-list scrollable"></div>
+
+      <div class="catalog-colophon">据实而录 · 不为王者讳</div>
+
+      <div class="catalog-foot">
+        <span class="key">H</span><span>收起史书</span>
+        <span class="foot-sep"></span>
+        <span>滚轮翻阅</span>
+      </div>
     </aside>
+
+    <div class="spine" aria-hidden="true"></div>
+
     <main id="reader" class="reader scrollable">
-      <article id="paper" class="paper">
-        <h1 id="articleTitle" class="article-title"></h1>
-        <div id="articleMeta" class="article-meta"></div>
-        <div id="articleBody" class="article-body"></div>
-      </article>
+      <div class="progress"><span id="progressBar"></span></div>
+
+      <div class="reader-inner">
+        <div class="masthead">
+          <div class="masthead-left">
+            <span id="articleCategory">史册</span>
+            <span id="mastDot" class="mast-dot"></span>
+            <span id="articleYear"></span>
+          </div>
+          <div class="masthead-right">
+            <span>NO.</span><span id="articleNumber">00</span>
+            <span class="mast-slash">/</span><span id="articleTotal">00</span>
+          </div>
+        </div>
+
+        <article id="paper" class="paper">
+          <header class="title-block">
+            <div class="title-ornament"><span></span><i></i><span></span></div>
+            <h1 id="articleTitle" class="article-title"></h1>
+            <div id="articleMeta" class="article-meta"></div>
+          </header>
+
+          <div id="articleBody" class="article-body"></div>
+
+          <div id="articleEnd" class="article-end">
+            <span></span><b>终</b><span></span>
+          </div>
+        </article>
+
+        <footer class="reader-foot">
+          <span class="foot-mark">AI · CHRONICLE</span>
+          <span id="pageLabel" class="foot-page"></span>
+        </footer>
+      </div>
     </main>
   </div>
+
   <div id="status" class="status">研墨中…</div>
   <script src="history.js"></script>
 </body>

@@ -2,18 +2,18 @@
 
 > 状态：MVP 已实机验证；Phase A（HistoryArchive 抽离）已完成，Phase B 代码级边界/权限回归已完成（进游戏回归待做）。正史改为 Markdown 渲染，谏言/诏令/密陈保持纯文本。
 >
-> 用户已确认：目录也 Web 化；MCM 默认关闭、验证后开启；初版只读。
+> 用户已确认：目录也 Web 化；新版 Web 阅读页默认开启，保留原生 fallback；初版只读。
 
 ## 1. 已完成
 
 | 项 | 实现 |
 |---|---|
-| MCM 开关 | 史书使用 CEF 阅读页（实验性），默认关闭 |
+| MCM 开关 | 史书使用 Web 阅读页，默认开启；关闭后回原生史书 |
 | H 入口 | 开启后 H 打开 HistoryCefScreen；失败/关闭时打开原生 HistoryScreen |
 | 全 Web 目录 | history.html 左侧目录，分组/选中/滚动 |
-| 正文 | history.html 右侧纸张正文，Markdown 渲染、MCM 字号 |
+| 正文 | history.html 右侧书页正文，Markdown 渲染、MCM 字号；古籍式目录/页眉/阅读进度/字数 |
 | 数据桥 | 目录点击 → aiChronicle.dispatch(select, index) → C# 读文件 → showArticle(json) |
-| 窗口 | CefWebScreen 窗口模式：1100×700 纹理 + 原生标题栏，居中，不再铺满 |
+| 窗口 | CefWebScreen 窗口模式：1100×700 内容区 + 原生标题栏，页面铺满无外框，居中 |
 | 输入 | 鼠标点击/悬停；滚轮按鼠标命中目录或正文，分别平滑滚动 |
 | fallback | CEF 初始化失败或 MCM 关闭 → 原生史书 |
 | 数据层 | HistoryArchive + HistoryViewer；原生/CEF 共用目录、体例分组、权限、正文读取 |
@@ -74,7 +74,7 @@ HistoryArchive 已抽出，原生 HistoryScreenVM 与 CEF HistoryCefScreen 都�
 
 ## 4. 窗口与清晰度
 
-- 史书窗口 1100×700，比之前 1280 全屏更接近 1:1，文字更清楚。
+- 史书内容区 1100×700（原生标题栏另计），比之前 1280 全屏更接近 1:1，文字更清楚。
 - 浏览器路径：按 devicePixelRatio 直接栅格化，GPU 合成 1:1。
 - 本路径：CEF 固定 1100×700 位图 → 纹理 → Gauntlet 绘制；若 UI scale 不是 1，仍会二次采样。
 - 当前 DeviceScaleFactor=1；没有超采样。
@@ -118,7 +118,7 @@ HistoryArchive 已抽出，原生 HistoryScreenVM 与 CEF HistoryCefScreen 都�
 
 ## 6. 验收
 
-- H 打开 1100×700 居中窗口，不铺满全屏。
+- H 打开 1100×700 内容区（原生标题栏另计），居中，不铺满全屏；页面无外层画框。
 - 目录分组/选中正确；点击切换正文；长文可滚动。
 - 目录和正文都可滚，滚轮不误滚另一个区域。
 - 正文章节、空行、首行标题处理正确。

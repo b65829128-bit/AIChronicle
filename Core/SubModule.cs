@@ -193,7 +193,7 @@ namespace AIChronicle
                     }
                 }
 
-                // 处决无惩罚（MCM「处决无惩罚」默认开）：禁用处决的荣誉与好感代价。手动注册防 PatchAll 静默跳过。
+                // 处决无惩罚（MCM「处决无惩罚」默认关）：开启时禁用处决的荣誉与好感代价。手动注册防 PatchAll 静默跳过。
                 var execHarmony = new Harmony("AIChronicle.ExecutionNoPenalty");
                 var traitType = Type.GetType("TaleWorlds.CampaignSystem.CharacterDevelopment.TraitLevelingHelper, TaleWorlds.CampaignSystem");
                 if (traitType != null)

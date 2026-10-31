@@ -10,7 +10,7 @@
 - 默认页面 1280×720（16:9）、30fps，软件渲染（`--disable-gpu` / `--no-sandbox`）。
 - 实机：`Cef.Initialize` 约 0.8s，首帧约 1.6s；浏览器关闭后 CEF 保持初始化，可直接重开。
 - 入口：大地图按 **F8** → Kit Gallery →「打开 CEF」/「打开 CEF 史书」（演示/编年史示例）。
-- 全 Web 史书：MCM 开启「史书使用 CEF 阅读页（实验性）」后按 H；关闭/失败回退原生史书。正文按 Markdown 渲染，谏言/诏令/密陈保持纯文本。
+- 全 Web 史书：默认按 H 打开新版 Web 阅读页；MCM 关闭或 CEF 失败时回退原生史书。正文按 Markdown 渲染，谏言/诏令/密陈保持纯文本。
 - CEF 原生运行时约 395MB（`libcef.dll` 236MB + locales + subprocess + paks）。
 
 ## 2. 架构
@@ -52,7 +52,7 @@ CefBridge.ActionReceived
 | `UI/Web/HistoryCefScreen.cs` | 史书入口：调用 `HistoryArchive` 取目录/正文、条目选择、原生 fallback |
 | `Systems/HistoryArchive.cs` | 史册数据层：目录扫描、体例分组、权限过滤、正文读取（原生/CEF 共用） |
 | `Systems/HistoryMarkdown.cs` | Markdown → 原生纯文本（CEF 失败时的 fallback） |
-| `_Module/WebUI/history.html/css/js` | 全 Web 史书：1100×700 目录 + 纸张正文 |
+| `_Module/WebUI/history.html/css/js` | 全 Web 史书：1100×700 古籍式目录 + 书页正文、阅读进度/字数，页面铺满无外框 |
 | `_Module/WebUI/history.js` | 目录渲染、Markdown/纯文本正文渲染、dispatch、逐元素平滑滚动 |
 | `UI/Kit/KitTexture.cs` | `KitTextureWidget`：动态纹理、BGRA/raw 帧、指针/滚轮事件、旧纹理延迟释放 |
 | `_Module/WebUI/live.html` | CEF 演示页：CSS 动画、JS 时钟、`ping` 桥测试按钮 |
@@ -100,20 +100,21 @@ CefBridge.ActionReceived
 
 ## 7. 页面与排版
 
-- 全幅 CEF viewport 1280×720（16:9）；史书窗口 1100×700；页面按对应尺寸设计。
+- 全幅 CEF viewport 1280×720（16:9）；史书内容区 1100×700（原生标题栏另计）；页面按对应尺寸设计。
 - `cef.css` 覆盖 `theme.css` 的 1040px/1400px 长图版式：纸张贴满、正文 17.5px、可滚动。
 - 史书示例由 C# `BuildChronicleData()` 注入，包含北境/朝议/盟变/岁末/诸国纪事/史官附记。
 - 页面背景与纸张同色，纹理内部无黑边；屏幕边缘的暗区来自固定纹理尺寸/原生面板留白，不是页面版式留边。
-- 中文字体使用系统衬线栈（Noto Serif SC / Source Han Serif / SimSun）；目标机器缺字体时需打包字体或调整字体栈。
+- 中文字体使用系统衬线栈（Noto Serif CJK SC / Source Han Serif / SimSun）；目标机器缺字体时需打包字体或调整字体栈。
 
 ### 7.1 史书全 Web（已实现 MVP）
 
-- MCM「史书使用 CEF 阅读页（实验性）」默认关闭；开启后 H 打开全 Web 史书。
+- MCM「史书使用 Web 阅读页」默认开启；关闭后 H 打开原生史书。
 - HistoryCefScreen + _Module/WebUI/history.html/css/js：
-  - 左侧 Web 目录（分组/选中/滚动）；
-  - 右侧纸张正文（Markdown 渲染、MCM 字号、滚动）；
+  - 古籍式版式：深色木纹/皮革目录栏 + 书脊 + 暖色书页，页面直接铺满；
+  - 左侧 Web 目录（分组/选中/滚动、篇数统计）；
+  - 右侧书页正文（Markdown 渲染、MCM 字号、滚动、字数/纪年/阅读进度）；
   - 点击目录 → aiChronicle.dispatch("select", index) → C# 读取 → showArticle。
-- 窗口模式 1100×700，居中，不再是 1280 全屏；原生只保留标题/关闭。
+- 内容区 1100×700，页面铺满 CEF 纹理，**不再有页面边距/外层画框**；原生只保留标题/关闭，不显示技术状态行。
 - 原生 HistoryScreen 保留为 fallback；CEF 初始化失败/MCM 关闭时 H 仍打开原生史书。
 - 目录/正文数据已抽到 `HistoryArchive`（HistoryCefScreen 不再持有 HistoryScreenVM）；两套入口共用同一份目录顺序、权限与正文读取。
 - 正史正文按 Markdown 渲染：`##` 分节、`**` 强调、`>` 史官曰引用块、`- ` 列表；页面用 DOM 节点构造，不拼 `innerHTML`。谏言/诏令/密陈按 `format=plain` 原样显示，`*`/`#` 等字符不被解释。
@@ -131,7 +132,7 @@ CefBridge.ActionReceived
 
 ## 9. 性能与限制
 
-- 当前 30fps；全幅 CEF 页为 1280×720（约 3.7MB/帧、110MB/s），史书窗口为 1100×700（约 3.1MB/帧、92MB/s）；实机无明显卡顿，但仍不如浏览器 60fps 顺滑。
+- 当前 30fps；全幅 CEF 页为 1280×720（约 3.7MB/帧、110MB/s），史书内容区为 1100×700（约 3.1MB/帧、92MB/s）；实机无明显卡顿，但仍不如浏览器 60fps 顺滑。
 - 每帧成本：CEF 软件渲染 + BGRA→RGBA 逐像素交换 + `CreateFromByteArray` + Brush 更新。
 - 引擎 `Texture` 没有 in-place update；不能只更新脏矩形。
 - 可选优化：
@@ -173,6 +174,6 @@ CefBridge.ActionReceived
 4. 页面动作 `dispatch` 与真实决策/投票流程对接（游戏功能 session）。
 5. 长期评估原生共享纹理桥。
 
-![史书页面预览（1200px 静态版）](ui-preview-chronicle.png)
+![史书页面预览（新版古籍式版式）](ui-preview-chronicle.png)
 
-> 上图为 `_Module/WebUI/preview.html` 在 Chrome 的静态预览；游戏内全幅 CEF 页为 1280×720，史书页为 1100×700，数据由 C# 注入。
+> 上图为 `_Module/WebUI/history.html` 在 Chrome 中注入示例数据的预览（1100×700）；游戏内由 C# 注入真实目录与正文。

@@ -1,8 +1,8 @@
 namespace AIChronicle
 {
     /// <summary>
-    /// 处决无惩罚（MCM「处决无惩罚」控制，默认开）：
-    /// 禁用处决贵族带来的荣誉与好感代价，玩家与 NPC 均生效，配合家族补充系统让世界经得起大屠杀。
+    /// 处决无惩罚（MCM「处决无惩罚」控制，默认关且不推荐开启）：
+    /// 开启时禁用处决贵族带来的荣誉与好感代价，玩家与 NPC 均生效。
     /// 两个补丁在 OnGameStart 手动注册（参照 KDPB/册封补丁模式，避免 PatchAll 静默跳过）。
     /// </summary>
     public static class ExecutionNoPenaltyPatch

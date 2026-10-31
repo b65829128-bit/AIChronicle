@@ -62,7 +62,7 @@
 | `request_items` | 社交 | 向任意人物索要物品（NPC 直接划转，玩家弹确认框，60 秒倒计时超时视为拒绝） |
 | `let_go` | 社交 | 遭遇战中放走玩家（仅当己方兵力占优时可用，含冷却期） |
 | `release_prisoner` | 军事 | 释放自己部队中的俘虏（贵族英雄→逃亡者回领地，普通士兵→移除；支持按名单个释放或 all 全放） |
-| `execute_prisoner` | 军事 | 处决自己部队中的贵族俘虏（仅限贵族；受 MCM「处决无惩罚」控制，默认开=无惩罚） |
+| `execute_prisoner` | 军事 | 处决自己部队中的贵族俘虏（仅限贵族；受 MCM「处决无惩罚」控制，默认关=有惩罚，不建议开启无惩罚） |
 | `create_clan` | 通用 | 天意建族（家族补充系统）：建新贵族家族（成员 3-6 人程序生成、家族等级 2、族长带兵、旗帜随机、入原始史料但不激活史官）。仅 `__fate__` 实体可用（能力门控）。**代码强制每次激活只建一族**（LLM 可能连建多族，曾致原生崩溃）；英雄创建对齐游戏叛乱建族模式（先建英雄→注册进族→置 Active）；成员模板用 `CultureObject.RebelliousHeroTemplates`（Lord 模板不在 NotableTemplates，`GetRandomTemplateByOccupation(Lord)` 恒 null 的死路径已弃）；**预算只在建族成功后才占用**（失败不消耗、可重试） |
 | `create_kingdom` | 外交 | 封臣/独立氏族领袖自立建国（**实验性功能：未经实机测试，为未来功能提前做的准备**）。门槛对齐原版 KingdomCreationModel（tier4 + 城镇/城堡≥1 + 兵≥100）；排除玩家（走原版总督对话）/国王/雇佣兵；封臣建国先叛乱脱离旧国（保封地、对旧国及其交战方宣战）再建国；文化参数精确优先再模糊匹配，不自创文化（CultureObject 是 XML 静态内容）；国号查重；史官自动入史 + 建国纪事；称王后 `EntityManager.RefreshEntity` 补 Diplomat 能力 |
 

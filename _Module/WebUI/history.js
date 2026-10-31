@@ -6,10 +6,19 @@
   var bound = false;
   var binding = false;
   var catalogList = document.getElementById('catalogList');
+  var catalogCount = document.getElementById('catalogCount');
   var reader = document.getElementById('reader');
   var articleTitle = document.getElementById('articleTitle');
   var articleMeta = document.getElementById('articleMeta');
+  var articleCategory = document.getElementById('articleCategory');
+  var articleYear = document.getElementById('articleYear');
+  var mastDot = document.getElementById('mastDot');
+  var articleNumber = document.getElementById('articleNumber');
+  var articleTotal = document.getElementById('articleTotal');
   var articleBody = document.getElementById('articleBody');
+  var articleEnd = document.getElementById('articleEnd');
+  var progressBar = document.getElementById('progressBar');
+  var pageLabel = document.getElementById('pageLabel');
   var statusEl = document.getElementById('status');
   var scrollStates = new WeakMap();
 
@@ -21,6 +30,10 @@
     } else {
       statusEl.classList.remove('hidden');
     }
+  }
+
+  function setText(node, text) {
+    if (node) node.textContent = text == null ? '' : String(text);
   }
 
   function bindBridge() {
@@ -52,9 +65,45 @@
     while (node && node.firstChild) node.removeChild(node.firstChild);
   }
 
+  function selectableEntries() {
+    return entries.filter(function (entry) { return !entry.header; });
+  }
+
+  function pad2(value) {
+    return value < 10 ? '0' + value : String(value);
+  }
+
+  function categoryFor(index) {
+    var category = '史册';
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].index === index) return category;
+      if (entries[i].header) category = entries[i].title || category;
+    }
+    return category;
+  }
+
+  function countCharacters(body) {
+    return String(body || '').replace(/\s+/g, '').length;
+  }
+
+  function formatNumber(value) {
+    return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
   function renderCatalog() {
     if (!catalogList) return;
     clear(catalogList);
+
+    var selectable = selectableEntries();
+    setText(catalogCount, selectable.length > 0 ? selectable.length + ' 篇' : '');
+
+    if (entries.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'catalog-empty';
+      empty.textContent = '史官尚未落笔。' + String.fromCharCode(10) + '待天下有事，自有记载。';
+      catalogList.appendChild(empty);
+      return;
+    }
 
     entries.forEach(function (entry) {
       if (entry.header) {
@@ -107,9 +156,10 @@
     articleBody.appendChild(h);
   }
 
-  function appendParagraph(text) {
+  function appendParagraph(text, lead) {
     if (!text) return;
     var p = document.createElement('p');
+    if (lead) p.className = 'lead';
     p.textContent = text;
     articleBody.appendChild(p);
   }
@@ -197,6 +247,18 @@
     var lines = String(body || '').replace(/\r/g, '').split('\n');
     var i = 0;
     var firstBlock = true;
+    var leadAssigned = false;
+
+    function appendBodyParagraph(text) {
+      if (!text) return;
+      var p = document.createElement('p');
+      if (!leadAssigned) {
+        p.className = 'lead';
+        leadAssigned = true;
+      }
+      appendInline(p, text);
+      articleBody.appendChild(p);
+    }
 
     while (i < lines.length) {
       var line = lines[i];
@@ -237,7 +299,9 @@
       if (heading) {
         var level = Math.min(3, Math.max(2, heading[1].length));
         var node = document.createElement('h' + level);
-        appendInline(node, heading[2]);
+        var label = document.createElement('span');
+        appendInline(label, heading[2]);
+        node.appendChild(label);
         articleBody.appendChild(node);
         i++;
         continue;
@@ -301,9 +365,7 @@
         i++;
       }
 
-      var paragraph = document.createElement('p');
-      appendInline(paragraph, joinLines(buffer));
-      articleBody.appendChild(paragraph);
+      appendBodyParagraph(joinLines(buffer));
 
       if (i < lines.length && !lines[i].trim()) i++;
     }
@@ -315,10 +377,17 @@
     var lines = String(body || '').replace(/\r/g, '').split('\n');
     var buffer = [];
     var skippedTitle = false;
+    var leadAssigned = false;
 
     function flush() {
       if (buffer.length > 0) {
-        appendParagraph(buffer.join(' '));
+        var p = document.createElement('p');
+        if (!leadAssigned) {
+          p.className = 'lead';
+          leadAssigned = true;
+        }
+        p.textContent = buffer.join(' ');
+        articleBody.appendChild(p);
         buffer = [];
       }
     }
@@ -353,9 +422,13 @@
   function renderArticleBody(data) {
     if (!articleBody) return;
     clear(articleBody);
+    if (articleEnd) articleEnd.classList.add('hidden');
 
     if (data.error) {
-      appendParagraph('（读取失败：' + String(data.error) + '）');
+      var error = document.createElement('p');
+      error.className = 'error';
+      error.textContent = '（读取失败：' + String(data.error) + '）';
+      articleBody.appendChild(error);
       return;
     }
 
@@ -369,7 +442,17 @@
 
     if (articleBody.childNodes.length === 0) {
       appendParagraph('（此篇暂无正文）');
+      return;
     }
+
+    if (articleEnd) articleEnd.classList.remove('hidden');
+  }
+
+  function updateProgress() {
+    if (!reader || !progressBar) return;
+    var max = Math.max(0, reader.scrollHeight - reader.clientHeight);
+    var ratio = max > 0 ? Math.max(0, Math.min(1, reader.scrollTop / max)) : 0;
+    progressBar.style.width = (ratio * 100).toFixed(2) + '%';
   }
 
   function renderArticle(data) {
@@ -380,16 +463,39 @@
       renderCatalog();
     }
 
-    var fontSize = Number(data.fontSize) || 18;
-    fontSize = Math.max(14, Math.min(34, fontSize));
-    document.documentElement.style.setProperty('--reader-font-size', fontSize + 'px');
+    var nativeSize = Number(data.fontSize) || 28;
+    nativeSize = Math.max(14, Math.min(36, nativeSize));
+    // 原生 MCM 字号是 Gauntlet 单位；Web 页按阅读区宽度重映射，28 → 22px。
+    var webSize = Math.round(16 + (nativeSize - 14) * 0.4);
+    document.documentElement.style.setProperty('--reader-font-size', webSize + 'px');
 
-    articleTitle.textContent = data.title || '无题';
-    articleMeta.textContent = '史册 · 第 ' + ((selectedIndex >= 0 ? selectedIndex : 0) + 1) + ' 篇';
+    var selectable = selectableEntries();
+    var category = data.category || categoryFor(selectedIndex) || '史册';
+    var position = Number(data.position) || 0;
+    var total = Number(data.total) || selectable.length;
+    var year = Number(data.year) || 0;
+    var body = String(data.body || '');
+    var characters = countCharacters(body);
+
+    if (articleTitle) articleTitle.textContent = data.title || '无题';
+    setText(articleCategory, category);
+    setText(articleYear, year > 0 ? '第 ' + year + ' 年' : '');
+    if (mastDot) mastDot.style.display = year > 0 ? '' : 'none';
+    setText(articleNumber, pad2(position || (selectedIndex + 1)));
+    setText(articleTotal, pad2(total || selectable.length));
+    setText(articleMeta, (characters > 0 ? '约 ' + formatNumber(characters) + ' 字 · ' : '') +
+      (String(data.format || '').toLowerCase() === 'markdown' ? '史官手稿' : '档案原件'));
+
+    var pages = total > 0 && position > 0
+      ? '第 ' + position + ' 篇 · 共 ' + total + ' 篇'
+      : '';
+    setText(pageLabel, pages);
+
     renderArticleBody(data);
     setStatus('', true);
 
     if (reader) reader.scrollTop = 0;
+    updateProgress();
   }
 
   function smoothScroll(el, delta) {
@@ -435,7 +541,7 @@
       if (data.article) {
         renderArticle(data.article);
       } else {
-        setStatus('尚未选择史册条目');
+        setStatus(entries.length ? '选择左侧一篇史册开始阅读' : '史官尚未落笔');
       }
     },
     showArticle: function (data) {
@@ -445,6 +551,8 @@
       setStatus('史册读取失败：' + (message || '未知错误'));
     }
   };
+
+  if (reader) reader.addEventListener('scroll', updateProgress, { passive: true });
 
   bindBridge();
   setStatus('研墨中…');

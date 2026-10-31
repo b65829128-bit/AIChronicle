@@ -591,10 +591,10 @@ namespace AIChronicle
             }
         }
 
-        private bool _biographyAllNobles = true;
+        private bool _biographyAllNobles = false;
 
         [SettingPropertyBool("所有贵族立传", Order = 15, RequireRestart = false,
-            HintText = "勾选：所有有氏族的贵族死后都立传。\n不勾选：仅氏族领袖和国王死后立传。")]
+            HintText = "默认关闭：仅氏族领袖和国王死后立传，史官负担较轻。\n开启：所有有氏族的贵族死后都立传，会增加史官调用与成文数量。")]
         [SettingPropertyGroup("游戏设置")]
         public bool BiographyAllNobles
         {
@@ -612,7 +612,7 @@ namespace AIChronicle
         private int _chronicleFontSize = 28;
 
         [SettingPropertyInteger("史书字体大小", 14, 36, Order = 12, RequireRestart = false,
-            HintText = "史书 UI 中编年史正文的字体大小。")]
+            HintText = "史书 UI 中编年史正文的字号；Web 阅读页会按版面换算成更合适的像素字号。")]
         [SettingPropertyGroup("游戏设置")]
         public int ChronicleFontSize
         {
@@ -627,10 +627,10 @@ namespace AIChronicle
             }
         }
 
-        private bool _useCefHistory;
+        private bool _useCefHistory = true;
 
-        [SettingPropertyBool("史书使用 CEF 阅读页（实验性）", Order = 13, RequireRestart = false,
-            HintText = "开启：H 键打开 CEF 全 Web 史书（目录 + 正文，正文按 Markdown 渲染），排版接近网页。\n关闭：使用现有原生史书。CEF 初始化失败或非 Steam 版会自动回退原生。")]
+        [SettingPropertyBool("史书使用 Web 阅读页", Order = 13, RequireRestart = false,
+            HintText = "默认开启：H 键打开新版 Web 史书（古籍式目录 + Markdown 正文排版）。\n关闭：使用原生史书。CEF 初始化失败或非 Steam 版会自动回退原生。")]
         [SettingPropertyGroup("游戏设置")]
         public bool UseCefHistory
         {
@@ -645,10 +645,10 @@ namespace AIChronicle
             }
         }
 
-        private bool _executionNoPenalty = true;
+        private bool _executionNoPenalty = false;
 
-        [SettingPropertyBool("处决无惩罚", Order = 16, RequireRestart = false,
-            HintText = "开启：处决贵族俘虏不承受任何政治代价——斩首者名誉不降、全图贵族好感不降（玩家与 NPC 均生效）。\n关闭：恢复原版/模组处决惩罚（名誉大降 + 受害者氏族/亲友/同阵营贵族好感大降）。")]
+        [SettingPropertyBool("处决无惩罚（不推荐开启）", Order = 16, RequireRestart = false,
+            HintText = "默认关闭，不建议开启。开启后处决贵族俘虏没有任何政治代价——斩首者名誉不降、全图贵族好感不降（玩家与 NPC 均生效），会明显削弱处决的分量与乱世残酷感。\n关闭：恢复原版/模组处决惩罚（名誉大降 + 受害者氏族/亲友/同阵营贵族好感大降）。")]
         [SettingPropertyGroup("游戏设置")]
         public bool ExecutionNoPenalty
         {

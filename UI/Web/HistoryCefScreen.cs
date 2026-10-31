@@ -44,13 +44,15 @@ namespace AIChronicle
                 object pageData = BuildPageData(article);
                 var screen = new CefWebScreen(
                     "history.html",
-                    "史书 · 编年史",
-                    "1100×700 · CEF · 只读 · 目录与正文均由 Web 渲染",
+                    "卡拉迪亚编年史",
+                    "史官所录 · 只读",
                     pageData,
                     30,
                     1100,
                     700,
-                    windowed: true);
+                    windowed: true,
+                    contentPadding: 0f,
+                    showStatus: false);
                 screen.PageAction += OnPageAction;
                 screen.Closed += OnScreenClosed;
                 _screen = screen;
@@ -160,6 +162,34 @@ namespace AIChronicle
 
         private static object BuildArticle(HistoryArticle article)
         {
+            string category = "史册";
+            int year = 0;
+            int position = 0;
+            int total = 0;
+
+            var catalog = _catalog;
+            if (catalog != null)
+            {
+                string currentCategory = "史册";
+                for (int i = 0; i < catalog.Entries.Count; i++)
+                {
+                    var entry = catalog.Entries[i];
+                    if (entry.IsHeader)
+                    {
+                        currentCategory = entry.Title;
+                        continue;
+                    }
+
+                    total++;
+                    if (i == article.Index)
+                    {
+                        category = currentCategory;
+                        year = entry.Year;
+                        position = total;
+                    }
+                }
+            }
+
             return new Dictionary<string, object?>
             {
                 ["index"] = article.Index,
@@ -167,7 +197,11 @@ namespace AIChronicle
                 ["body"] = article.Body,
                 ["format"] = article.Format == HistoryTextFormat.Markdown ? "markdown" : "plain",
                 ["error"] = article.Error ?? "",
-                ["fontSize"] = _fontSize
+                ["fontSize"] = _fontSize,
+                ["category"] = category,
+                ["year"] = year,
+                ["position"] = position,
+                ["total"] = total
             };
         }
     }

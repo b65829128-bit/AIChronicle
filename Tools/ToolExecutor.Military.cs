@@ -813,7 +813,7 @@ namespace AIChronicle
             // isForced=true：无论"死亡模式"是否开启都强制执行（参考原版叛乱清除成员的用法）。
             KillCharacterAction.ApplyByExecution(victim, hero, true, true);
 
-            // 政治代价——受 MCM「处决无惩罚」控制（默认开启 = 无惩罚，玩家与 NPC 都可随便处决）：
+            // 政治代价——受 MCM「处决无惩罚」控制（默认关闭 = 有惩罚；开启后玩家与 NPC 处决均无代价）：
             // 仅 NPC 执行者手动施加（玩家执行者的处决代价由原版行为处理，避免叠加；原版惩罚由 Harmony 补丁禁用）。
             if (MySettings.Instance?.ExecutionNoPenalty != true && !hero.IsHumanPlayerCharacter)
             {
