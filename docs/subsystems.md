@@ -169,7 +169,7 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 > 设计契约见 `docs/plan-curia.md`。核心：**九类行动经王国公开表决；文本是理由，类型+参数是机制；通过执行、不通过无事发生。**
 
 - **九类议题**：`declare_war` / `propose_peace` / `propose_trade` / `propose_alliance` / `break_alliance` / `enact_policy` / `revoke_policy` / `transfer_fief` / `expel_clan`。
-- **选民**：所有封臣家族领袖（含无地）；雇佣兵无票。国王/玩家必召；被针对家族不投票但单独陈情。玩家与国王被俘/流亡仍保留席位；其他 AI 被俘/逃亡不召；国王已故则议程失效。
+- **选民**：所有封臣家族领袖（含无地）；雇佣兵无票。国王/玩家必召；被针对家族不投票但单独陈情。玩家作为普通封臣被俘/流亡仍保留投票权；国王被俘/流亡不保留席位（界面显示原因）；其他 AI 被俘/逃亡不召；国王已故则议程失效。
 - **权重**：`DiplomacyModel.GetClanStrength`（原版选王同款），公开；国王无额外票权。
 - **全量/应召**：合格封臣数 ≤ `CuriaFullCouncilThreshold`（默认 6）或强制全量时全部投票；否则固定（国王/玩家/提议者）+ 利害前 3 + 权重补到 quorum 50% + 轮换 1-2，软上限 `CuriaAttendanceCap`（默认 6，quorum 优先）。每人记录 `SummonReason`（固定/利害/权重/轮换），未出席记 `未获召见`。
 - **门槛**：战/和/贸/结盟/政策 50%；封地/驱逐/背盟 2/3。quorum 不足 → 流会。

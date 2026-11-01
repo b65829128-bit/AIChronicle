@@ -265,9 +265,11 @@ namespace AIChronicle
             var policyEffects = CuriaPolicyEffects.DescribeKingdom(agendaKingdom);
             var playerVote = a.Votes.FirstOrDefault(v => v.ClanId == playerClanId);
             var kingMissingReason = "";
-            if (a.Votes.Count > 0 && !a.Votes.Any(v => v.IsKing))
+            var king = CuriaStore.GetKing(agendaKingdom);
+            var hasKingVote = a.Votes.Any(v => v.IsKing);
+            var kingUnavailable = king == null || !king.IsAlive || king.IsPrisoner || king.IsFugitive;
+            if (!hasKingVote && (kingUnavailable || a.Status != CuriaAgendaStatus.Proposed))
             {
-                var king = CuriaStore.GetKing(agendaKingdom);
                 kingMissingReason = king == null ? "王国没有统治者"
                     : !king.IsAlive ? "国王已故"
                     : king.IsPrisoner ? "国王被俘"
@@ -398,9 +400,12 @@ namespace AIChronicle
             if (!string.IsNullOrEmpty(a.PolicyEffect)) sb.AppendLine($"政策效果：{a.PolicyEffect}");
             var policyEffects = CuriaPolicyEffects.DescribeKingdom(CuriaStore.FindKingdom(a.KingdomName));
             if (!string.IsNullOrEmpty(policyEffects)) sb.AppendLine($"当前朝议政策修正：{policyEffects}");
-            if (a.Votes.Count > 0 && !a.Votes.Any(v => v.IsKing))
+            var agendaKingdom = CuriaStore.FindKingdom(a.KingdomName);
+            var king = CuriaStore.GetKing(agendaKingdom);
+            var hasKingVote = a.Votes.Any(v => v.IsKing);
+            var kingUnavailable = king == null || !king.IsAlive || king.IsPrisoner || king.IsFugitive;
+            if (!hasKingVote && (kingUnavailable || a.Status != CuriaAgendaStatus.Proposed))
             {
-                var king = CuriaStore.GetKing(CuriaStore.FindKingdom(a.KingdomName));
                 var reason = king == null ? "王国没有统治者"
                     : !king.IsAlive ? "国王已故"
                     : king.IsPrisoner ? "国王被俘"
