@@ -44,8 +44,8 @@
 | `propose_agenda` | 朝议 | 朝议提议：宣战/议和提议/贸易提议/结盟提议/退出盟约/提出政策/废除政策/封地转让/驱逐家族；封臣/国王可用，雇佣兵不可；页面只列前提成立的类型/目标，AI 需先查询核对，服务端拒绝重复/无对象议题；一个王国一个活跃议程 |
 | `respond_to_agenda` | 朝议 | 应召投票：支持/反对/弃权 + 可选一句理由；公开，入档/日记/史书 |
 | `defend_agenda` | 朝议 | 被针对家族陈情；不投票，只陈述理由，公开给所有投票者 |
-| `query_agenda` | 查询 | 查看本国进行中/历史朝议：提议者、理由、票数、权重、各家族立场与理由、缺席、结果 |
-| `query_policies` | 查询 | 查看全王国政策的名称、StringId、是否已实施、实际效果（SecondaryEffects）、当前是否可提议/废除 |
+| `query_agenda` | 查询 | 默认简版：当前/最近 5 条朝议的提议者、理由、票数、门槛、结果；`detail=true` 才列全部票数与缺席 |
+| `query_policies` | 查询 | 默认摘要：政策名、StringId、是否已实施、一行实际效果、朝议修正；指定 `policy_name` 才返回完整说明/效果 |
 | `query_pending_proposals` | 查询 | 列出当前王国待处理的外交提案（无需参数，自动按当前 Entity 过滤） |
 | `declare_war` | 外交 | 向另一王国宣战（单向，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="declare_war")` |
 | `propose_peace` | 外交 | 向另一王国提议议和（双向，附赔偿方案，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="propose_peace")` |
