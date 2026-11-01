@@ -769,12 +769,12 @@
   {
     "name": "propose_agenda",
     "category": "council",
-    "description": "Propose a formal agenda (朝议) to the kingdom's council. Only clan leaders of a kingdom may propose; mercenaries cannot. The proposal is public and its reason is shown to every summoned clan leader and the historian.\n\nUsage:\n- Before calling, verify the precondition: declare_war only against a kingdom you are NOT at war with; propose_peace only against a kingdom you ARE at war with; propose_trade only if not at war and no existing trade agreement; propose_alliance only if not at war and not already allied; break_alliance only if already allied. Do not propose duplicate or precondition-false agendas; the service will reject them.\n- Call this when you want the kingdom to take one of seven formal actions: declare war, propose peace, propose trade, propose alliance, break alliance, transfer a vassal fief, or expel a clan.\n- type must be one of: declare_war, propose_peace, propose_trade, propose_alliance, break_alliance, transfer_fief, expel_clan.\n- For declare_war/propose_peace/propose_trade/propose_alliance/break_alliance: set target_kingdom to the other kingdom's Chinese name or StringId.\n- For transfer_fief: set settlement_name to the town/castle and new_owner_entity_id to the new owner clan leader's entity id or name. Only the king (confiscation/reassignment) or the fief's current owner clan leader (voluntary transfer) may propose. The ruler clan's own fiefs are free to transfer and cannot be targeted by an agenda.\n- For expel_clan: set target_clan_name; only the king may propose; the target clan's clan leader is summoned to defend but does not vote.\n- reason is mandatory: write the political justification in Chinese, as it will be recorded in the agenda archive and the chronicle.\n- Only one agenda may be active per kingdom; the proposer automatically supports the proposal.\n- Do NOT call this for responding to a foreign proposal or for routine military movement. Alliance proposals and breaking alliances are agenda types here.",
+    "description": "Propose a formal agenda (朝议) to the kingdom's council. Only clan leaders of a kingdom may propose; mercenaries cannot. The proposal is public and its reason is shown to every summoned clan leader and the historian.\n\nUsage:\n- Before calling, verify the precondition: declare_war only against a kingdom you are NOT at war with; propose_peace only against a kingdom you ARE at war with; propose_trade only if not at war and no existing trade agreement; propose_alliance only if not at war and not already allied; break_alliance only if already allied; enact_policy only if not active; revoke_policy only if active. Do not propose duplicate or precondition-false agendas; the service will reject them.\n- Call this when you want the kingdom to take one of nine formal actions: declare war, propose peace, propose trade, propose alliance, break alliance, enact a policy, revoke a policy, transfer a vassal fief, or expel a clan.\n- type must be one of: declare_war, propose_peace, propose_trade, propose_alliance, break_alliance, enact_policy, revoke_policy, transfer_fief, expel_clan.\n- For declare_war/propose_peace/propose_trade/propose_alliance/break_alliance: set target_kingdom to the other kingdom's Chinese name or StringId.\n- For enact_policy/revoke_policy: call query_policies first, then set policy_name to the policy name or StringId; enact only if not already active, revoke only if active. The policy effect is shown to voters.\n- For transfer_fief: set settlement_name to the town/castle and new_owner_entity_id to the new owner clan leader's entity id or name. Only the king (confiscation/reassignment) or the fief's current owner clan leader (voluntary transfer) may propose. The ruler clan's own fiefs are free to transfer and cannot be targeted by an agenda.\n- For expel_clan: set target_clan_name; only the king may propose; the target clan's clan leader is summoned to defend but does not vote.\n- reason is mandatory: write the political justification in Chinese, as it will be recorded in the agenda archive and the chronicle.\n- Only one agenda may be active per kingdom; the proposer automatically supports the proposal.\n- Do NOT call this for responding to a foreign proposal or for routine military movement. Alliance proposals and breaking alliances are agenda types here.",
     "parameters": [
       {
         "name": "type",
         "type": "string",
-        "description": "Agenda type: declare_war | propose_peace | propose_trade | transfer_fief | expel_clan"
+        "description": "Agenda type: declare_war | propose_peace | propose_trade | propose_alliance | break_alliance | enact_policy | revoke_policy | transfer_fief | expel_clan"
       },
       {
         "name": "target_kingdom",
@@ -795,6 +795,11 @@
         "name": "target_clan_name",
         "type": "string",
         "description": "Target clan name for expel_clan. Use empty string otherwise."
+      },
+      {
+        "name": "policy_name",
+        "type": "string",
+        "description": "Policy name or StringId for enact_policy/revoke_policy. Use empty string otherwise."
       },
       {
         "name": "reason",
@@ -858,5 +863,11 @@
         "description": "If true, list recent resolved agendas instead of the active one."
       }
     ]
+  },
+  {
+    "name": "query_policies",
+    "category": "query",
+    "description": "Query all kingdom policies and their actual effects (朝议政策). Returns whether each policy is active, its StringId, description, effect text, and whether it can currently be proposed/revoked.\n\nUsage:\n- Call this before proposing enact_policy/revoke_policy, or when voting on a policy agenda, to verify the actual effect.\n- The effect text comes from the game's PolicyObject.SecondaryEffects, not a model guess.",
+    "parameters": []
   }
 ]

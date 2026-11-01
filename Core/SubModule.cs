@@ -199,6 +199,9 @@ namespace AIChronicle
                             postfix: new HarmonyMethod(typeof(FiefAssignmentPatch).GetMethod(nameof(FiefAssignmentPatch.PostfixOnSettlementOwnerChanged), BindingFlags.Static | BindingFlags.Public)));
                 }
 
+                // 朝议接管原版影响力投票：政策/封地/驱逐的原生 UI 与 Election 一并禁用。
+                PatchCuriaVanillaDecisions();
+
                 var diplomVmType = Type.GetType("TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Diplomacy.KingdomDiplomacyVM, TaleWorlds.CampaignSystem.ViewModelCollection");
                 if (diplomVmType != null)
                 {
@@ -507,6 +510,48 @@ namespace AIChronicle
                 return false; // 跳过原 IsAllowed → 决策在触发前被取消，不再出现国内投票
             }
             return true;
+        }
+
+        private static void PatchCuriaVanillaDecisions()
+        {
+            var harmony = new Harmony("AIChronicle.CuriaVanillaDecisions");
+
+            // Election：政策、封地归属（含 preliminary）不再允许原版表决。
+            PatchBool(harmony, "TaleWorlds.CampaignSystem.Election.KingdomPolicyDecision, TaleWorlds.CampaignSystem", "IsAllowed");
+            PatchBool(harmony, "TaleWorlds.CampaignSystem.Election.SettlementClaimantDecision, TaleWorlds.CampaignSystem", "IsAllowed");
+            PatchBool(harmony, "TaleWorlds.CampaignSystem.Election.SettlementClaimantPreliminaryDecision, TaleWorlds.CampaignSystem", "IsAllowed");
+
+            // ViewModel：禁用按钮并拦截 Execute，避免旧存档/快捷键绕过。
+            PatchBool(harmony, "TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Policies.KingdomPoliciesVM, TaleWorlds.CampaignSystem.ViewModelCollection", "get_CanProposeOrDisavowPolicy");
+            PatchExecute(harmony, "TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Policies.KingdomPoliciesVM, TaleWorlds.CampaignSystem.ViewModelCollection", "ExecuteProposeOrDisavow");
+
+            PatchBool(harmony, "TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Clans.KingdomClanVM, TaleWorlds.CampaignSystem.ViewModelCollection", "get_CanExpelCurrentClan");
+            PatchExecute(harmony, "TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Clans.KingdomClanVM, TaleWorlds.CampaignSystem.ViewModelCollection", "ExecuteExpelCurrentClan");
+
+            PatchBool(harmony, "TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Settlements.KingdomSettlementVM, TaleWorlds.CampaignSystem.ViewModelCollection", "get_CanAnnexCurrentSettlement");
+            PatchExecute(harmony, "TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Settlements.KingdomSettlementVM, TaleWorlds.CampaignSystem.ViewModelCollection", "ExecuteAnnex");
+
+            PatchExecute(harmony, "TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.KingdomGiftFiefPopupVM, TaleWorlds.CampaignSystem.ViewModelCollection", "ExecuteGiftSettlement");
+        }
+
+        private static void PatchBool(Harmony harmony, string typeName, string methodName)
+        {
+            var type = Type.GetType(typeName);
+            var method = type?.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (method == null) return;
+            harmony.Patch(method,
+                prefix: new HarmonyMethod(typeof(VanillaDecisionBanPatch).GetMethod(
+                    nameof(VanillaDecisionBanPatch.BlockBoolResult), BindingFlags.Static | BindingFlags.Public)));
+        }
+
+        private static void PatchExecute(Harmony harmony, string typeName, string methodName)
+        {
+            var type = Type.GetType(typeName);
+            var method = type?.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (method == null) return;
+            harmony.Patch(method,
+                prefix: new HarmonyMethod(typeof(VanillaDecisionBanPatch).GetMethod(
+                    nameof(VanillaDecisionBanPatch.BlockExecute), BindingFlags.Static | BindingFlags.Public)));
         }
 
         /// <summary>朝议启用时取消原版驱逐家族决策（改由朝议 expel_clan 议题处理）。</summary>

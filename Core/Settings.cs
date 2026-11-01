@@ -758,7 +758,7 @@ namespace AIChronicle
         private bool _curiaEnabled = true;
 
         [SettingPropertyBool("启用朝议", Order = 0, RequireRestart = false,
-            HintText = "开启后，宣战/议和提议/贸易提议/结盟提议/退出盟约/封臣封地转让/驱逐家族七类行动经由王国朝议表决；公开谏言与诏令被朝议取代。\n关闭则恢复旧工具（不推荐）。")]
+            HintText = "开启后，宣战/议和提议/贸易提议/结盟提议/退出盟约/提出政策/废除政策/封臣封地转让/驱逐家族九类行动经由王国朝议表决；公开谏言与诏令被朝议取代。\n关闭则恢复旧工具（不推荐）。")]
         [SettingPropertyGroup("朝议")]
         public bool CuriaEnabled
         {
@@ -930,6 +930,24 @@ namespace AIChronicle
                 if (_curiaHistoryKeep != value)
                 {
                     _curiaHistoryKeep = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private float _curiaPolicyThreshold = 0.5f;
+
+        [SettingPropertyFloatingInteger("政策门槛", 0.5f, 0.9f, Order = 11, RequireRestart = false,
+            HintText = "提出/废除政策的通过门槛：支持权重 /（支持+反对）≥ 此值。默认 0.5。")]
+        [SettingPropertyGroup("朝议")]
+        public float CuriaPolicyThreshold
+        {
+            get => _curiaPolicyThreshold;
+            set
+            {
+                if (Math.Abs(_curiaPolicyThreshold - value) > 0.001f)
+                {
+                    _curiaPolicyThreshold = value;
                     OnPropertyChanged();
                 }
             }

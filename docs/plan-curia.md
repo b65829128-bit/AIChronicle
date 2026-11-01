@@ -10,7 +10,7 @@
 
 ## 2. 范围
 
-### v1 做的七类议题
+### v1 做的九类议题
 
 | 类型 | 提议者 | 目标参数 | 通过后的动作 | 门槛 |
 |---|---|---|---|---|
@@ -19,6 +19,8 @@
 | `propose_trade` 贸易提议 | 国王或任一封臣家族领袖 | 目标王国 | 以国王名义创建贸易提案（对方国王仍要同意） | 50% |
 | `propose_alliance` 结盟提议 | 国王或任一封臣家族领袖 | 目标王国 | 以国王名义创建同盟提案（对方国王仍要同意） | 50% |
 | `break_alliance` 退出盟约 | 国王或任一封臣家族领袖 | 目标王国 | `DiplomacyService.ExecuteEndAlliance(king, target)`，立即解除盟约 | 2/3 |
+| `enact_policy` 提出政策 | 国王或任一封臣家族领袖 | 政策 | `Kingdom.AddPolicy(policy)`；效果文本来自 `PolicyObject.SecondaryEffects` | 50% |
+| `revoke_policy` 废除政策 | 国王或任一封臣家族领袖 | 政策 | `Kingdom.RemovePolicy(policy)` | 50% |
 | `transfer_fief` 封地转让 | 国王（夺封/再分配）或该封地所属家族领袖（自愿转让） | 定居点 + 新主家族领袖 | `ChangeOwnerOfSettlementAction.ApplyByKingDecision`；被夺方触发 `FiefReview` | 2/3 |
 | `expel_clan` 驱逐家族 | 仅国王 | 目标家族 | `ChangeKingdomAction.ApplyByLeaveKingdom`（家族带封地离开王国） | 2/3 |
 
@@ -26,7 +28,7 @@
 
 - 不做私战、局部战争、王国级战争之外的战争状态。
 - 不做合法性数值、威望条、名分分数。
-- 不做国王“独断绕过”：上述七类行动在 v1 只有朝议一条合法路径（国王自己的封地、新城封赏除外）。
+- 不做国王“独断绕过”：上述九类行动在 v1 只有朝议一条合法路径（国王自己的封地、新城封赏除外）。
 - 不做征税/政策/忠诚度改造；不碰原版繁荣度与忠诚度。
 - 不做玩家快速加入别国/当雇佣兵的便捷入口；使用原版界面。
 - 不做文化专属门槛；先用一套通用规则，文化风味留到后续。
@@ -180,7 +182,7 @@ Agenda {
 | 公开谏言/诏令文件 | 旧档保留为只读历史；新系统不写 |
 
 - 外交“接受/拒绝外国提案”（`respond_to_diplomacy_proposal`）保留为国王的对外回应，不需要内部朝议。
-- 同盟与背盟已并入七类朝议；贸易终止 `end_trade_agreement` 仍保留为国王直接工具。
+- 同盟、背盟、政策已并入九类朝议；贸易终止 `end_trade_agreement` 仍保留为国王直接工具。
 
 ## 10. 数据与文件
 
@@ -210,6 +212,7 @@ Agenda {
 | 投票天数 | 5 | 1–15 |
 | 出席 quorum | 0.5 | 0.3–0.9 |
 | 战/和/贸/结盟门槛 | 0.5 | 0.5–0.9 |
+| 政策门槛 | 0.5 | 0.5–0.9 |
 | 封地/驱逐/背盟门槛 | 0.66 | 0.5–0.9 |
 | 议程期间暂停随机激活 | 开 | — |
 | 提议冷却（天） | 3 | 0–30 |
@@ -222,7 +225,7 @@ Agenda {
 - `Systems/CuriaModels.cs`：枚举、`CuriaVote`、`CuriaAgenda`、`CuriaState`。
 - `Systems/CuriaStore.cs`：读写 JSON/TXT、目录、权限辅助、日记、史料、通知。
 - `Systems/CuriaService.cs`：验证、提议、应召、投票、陈情、结算、执行器、页面数据、查询文本。
-- `Systems/CuriaEffects.cs`（可并入 Service）：七类执行器与重校验。
+- `Systems/CuriaEffects.cs`（可并入 Service）：九类执行器与重校验。
 - `Agents/AgentScheduler.Curia.cs`：`CuriaVote`/`CuriaDefense` 事件、队列、暂停随机激活、Tick 结算。
 - `Tools/ToolExecutor.Curia.cs`：`propose_agenda`、`respond_to_agenda`、`defend_agenda`、`query_agenda`。
 - `UI/Web/CuriaCefScreen.cs`：M 键 CEF 参政页宿主；页面动作回主线程；原生文本输入；刷新。

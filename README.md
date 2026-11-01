@@ -51,7 +51,7 @@ Key design principles:
 
 ### Curia (Council)
 - **M** opens the CEF political hub: **Curia / Diplomacy / Fiefs / Secret Counsel / Secretary**.
-- Seven agenda types: declare war, propose peace, propose trade, propose alliance, break alliance, transfer a vassal fief, expel a clan. Vassal clan leaders vote (mercenaries cannot); the king and player are always summoned; the targeted clan defends instead of voting.
+- Nine agenda types: declare war, propose peace, propose trade, propose alliance, break alliance, enact a policy, revoke a policy, transfer a vassal fief, expel a clan. Vassal clan leaders vote (mercenaries cannot); the king and player are always summoned; the targeted clan defends instead of voting.
 - Weighted by `DiplomacyModel.GetClanStrength`; 50% threshold for war/peace/trade, 2/3 for fief/expel; quorum 50%; configurable full-council threshold (default 6) and attendance cap.
 - Passed agendas execute real game actions; rejected ones do nothing. Every record is public within the realm, readable by the historian, written into AI diaries and the chronicle.
 

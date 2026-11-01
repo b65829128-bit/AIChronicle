@@ -57,6 +57,7 @@ namespace AIChronicle
             data["fiefs"] = BuildFiefs(kingdom, player, isKing);
             data["clans"] = BuildClans(kingdom, player);
             data["kingdoms"] = BuildKingdoms(kingdom);
+            data["policies"] = BuildPolicies(kingdom);
             data["secretAdvisory"] = isKing ? CuriaStore.ReadSecretAdvisoryText(kingdom) : "";
             data["consultThreads"] = isKing
                 ? CuriaStore.ReadConsultThreads(kingdom).Select(t => (object)new Dictionary<string, object?>
@@ -197,6 +198,32 @@ namespace AIChronicle
             return result;
         }
 
+        private static List<object> BuildPolicies(Kingdom kingdom)
+        {
+            var result = new List<object>();
+            try
+            {
+                if (Campaign.Current == null) return result;
+                var permission = Campaign.Current.Models.KingdomDecisionPermissionModel;
+                var all = PolicyObject.All;
+                if (all == null) return result;
+                foreach (var policy in all)
+                {
+                    result.Add(new Dictionary<string, object?>
+                    {
+                        ["id"] = policy.StringId ?? "",
+                        ["name"] = policy.Name?.ToString() ?? "",
+                        ["description"] = policy.Description?.ToString() ?? "",
+                        ["effect"] = policy.SecondaryEffects?.ToString() ?? "",
+                        ["active"] = kingdom.HasPolicy(policy),
+                        ["allowed"] = permission == null || permission.IsPolicyDecisionAllowed(policy)
+                    });
+                }
+            }
+            catch { }
+            return result;
+        }
+
         private static List<object> BuildKingdoms(Kingdom kingdom)
         {
             var result = new List<object>();
@@ -292,6 +319,10 @@ namespace AIChronicle
                 ["targetDefenseBy"] = a.TargetDefenseBy,
                 ["kingStance"] = a.KingStance,
                 ["kingReason"] = a.KingReason,
+                ["targetPolicyId"] = a.TargetPolicyId,
+                ["targetPolicyName"] = a.TargetPolicyName,
+                ["policyEffect"] = a.PolicyEffect,
+                ["policyDescription"] = a.PolicyDescription,
                 ["outcome"] = a.Outcome,
                 ["effect"] = a.EffectResult,
                 ["failure"] = a.FailureReason,
@@ -347,6 +378,8 @@ namespace AIChronicle
             sb.AppendLine($"目标：{CuriaText.TargetSummary(a)}");
             sb.AppendLine($"理由：{a.Reason}");
             if (!string.IsNullOrEmpty(a.Terms)) sb.AppendLine($"条款：{a.Terms}");
+            if (!string.IsNullOrEmpty(a.PolicyDescription)) sb.AppendLine($"政策说明：{a.PolicyDescription}");
+            if (!string.IsNullOrEmpty(a.PolicyEffect)) sb.AppendLine($"政策效果：{a.PolicyEffect}");
             sb.AppendLine($"门槛：{a.Threshold:P0}    quorum：{a.SummonedWeight:F1}/{a.QuorumWeight:F1}（总权重 {a.TotalWeight:F1}）");
             sb.AppendLine($"票数：支持 {a.SupportWeight:F1} / 反对 {a.OpposeWeight:F1} / 弃权 {a.AbstainWeight:F1}");
             if (!string.IsNullOrEmpty(a.TargetDefense))
@@ -378,6 +411,28 @@ namespace AIChronicle
             return sb.ToString().TrimEnd();
         }
 
+        public static string BuildPolicyQueryText(Hero hero)
+        {
+            var kingdom = CuriaStore.GetHeroKingdom(hero);
+            if (kingdom == null) return "你不属于任何王国，无法查看政策。";
+            if (Campaign.Current == null) return "政策数据尚未就绪。";
+            var permission = Campaign.Current.Models.KingdomDecisionPermissionModel;
+            var sb = new StringBuilder();
+            sb.AppendLine($"【{kingdom.Name} · 政策】");
+            var listed = 0;
+            foreach (var policy in PolicyObject.All)
+            {
+                var active = kingdom.HasPolicy(policy);
+                var allowed = permission == null || permission.IsPolicyDecisionAllowed(policy);
+                sb.AppendLine($"- {(active ? "已实施" : "未实施")}：{policy.Name}（{policy.StringId}）" +
+                              (allowed ? "" : "（当前不可提议）"));
+                sb.AppendLine($"  效果：{policy.SecondaryEffects}");
+                listed++;
+            }
+            if (listed == 0) sb.AppendLine("（没有可查看的政策）");
+            return sb.ToString().TrimEnd();
+        }
+
         public static string BuildVotePrompt(CuriaAgenda agenda, CuriaVote voter)
         {
             var sb = new StringBuilder();
@@ -388,6 +443,8 @@ namespace AIChronicle
             sb.AppendLine($"提议者：{agenda.ProposerName}");
             sb.AppendLine($"理由：{agenda.Reason}");
             if (!string.IsNullOrEmpty(agenda.Terms)) sb.AppendLine($"条款：{agenda.Terms}");
+            if (!string.IsNullOrEmpty(agenda.PolicyDescription)) sb.AppendLine($"政策说明：{agenda.PolicyDescription}");
+            if (!string.IsNullOrEmpty(agenda.PolicyEffect)) sb.AppendLine($"政策效果：{agenda.PolicyEffect}");
             if (!string.IsNullOrEmpty(agenda.TargetDefense))
                 sb.AppendLine($"被针对家族陈情（{agenda.TargetDefenseBy}）：{agenda.TargetDefense}");
             sb.AppendLine();

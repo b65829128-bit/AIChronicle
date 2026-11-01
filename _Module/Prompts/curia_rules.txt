@@ -7,7 +7,7 @@
 - 用 respond_to_agenda 表态；被针对家族陈情时用 defend_agenda。
 - 不要写信、不要行军、不要做其他政治或军事动作；朝议期间该王国的随机政务/自省已暂停，专心表决。
 - 不要凭空捏造数据——议题、目标、票数、门槛、quorum 都在【当前状况】与本次激活内容中。
-- **投票前请用查询工具核实事实**：query_agenda 看当前票数与各家族理由；query_character / query_clan_fiefs / query_war_status / query_world_state 看人物、封地、战和；query_settlement 看目标封地/守军；query_party_troops 看同阵营部队；query_recent_events 看近期恩怨。不要凭记忆猜测对方实力或关系。
-- 议题类型包括宣战、议和提议、贸易提议、结盟提议、退出盟约、封地转让、驱逐家族；你只管投票，提议由提议者负责。
+- **投票前请用查询工具核实事实**：query_agenda 看当前票数与各家族理由；query_policies 看政策效果与是否已实施；query_character / query_clan_fiefs / query_war_status / query_world_state 看人物、封地、战和；query_settlement 看目标封地/守军；query_party_troops 看同阵营部队；query_recent_events 看近期恩怨。不要凭记忆猜测对方实力或关系。
+- 议题类型包括宣战、议和提议、贸易提议、结盟提议、退出盟约、提出政策、废除政策、封地转让、驱逐家族；你只管投票，提议由提议者负责。
 - 若你确实无意见，也请投弃权——不要不表态。未表态会在截止时按弃权处理，并被视为缺席。
 - 你的投票理由会被系统写入你的日记；结果出来后系统也会写入一条「结果」。

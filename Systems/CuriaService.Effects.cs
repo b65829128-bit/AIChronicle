@@ -83,6 +83,47 @@ namespace AIChronicle
                     case CuriaAgendaType.BreakAlliance:
                         result = DiplomacyService.ExecuteEndAlliance(agenda.TargetKingdomName);
                         break;
+                    case CuriaAgendaType.EnactPolicy:
+                    case CuriaAgendaType.RevokePolicy:
+                        {
+                            var policy = FindPolicy(agenda.TargetPolicyId);
+                            if (policy == null)
+                            {
+                                result = "[错误] 政策已不存在：" + agenda.TargetPolicyName;
+                                break;
+                            }
+                            var active = kingdom.HasPolicy(policy);
+                            if (agenda.Type == CuriaAgendaType.EnactPolicy)
+                            {
+                                if (active)
+                                {
+                                    result = $"政策「{policy.Name}」已经处于实施状态。";
+                                }
+                                else
+                                {
+                                    kingdom.AddPolicy(policy);
+                                    result = $"已实施政策「{policy.Name}」。效果：{policy.SecondaryEffects}";
+                                    CuriaStore.RecordHistory("policy_enacted",
+                                        $"{kingdom.Name}实施政策「{policy.Name}」：{policy.SecondaryEffects}");
+                                }
+                            }
+                            else
+                            {
+                                if (!active)
+                                {
+                                    result = $"政策「{policy.Name}」已经处于废除状态。";
+                                }
+                                else
+                                {
+                                    kingdom.RemovePolicy(policy);
+                                    result = $"已废除政策「{policy.Name}」。";
+                                    CuriaStore.RecordHistory("policy_revoked",
+                                        $"{kingdom.Name}废除政策「{policy.Name}」");
+                                }
+                            }
+                            break;
+                        }
+
                     case CuriaAgendaType.TransferFief:
                         {
                             var settlement = CuriaStore.FindSettlement(agenda.TargetSettlementName);

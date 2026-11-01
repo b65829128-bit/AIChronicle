@@ -6,11 +6,11 @@ namespace AIChronicle
     public static partial class ToolExecutor
     {
         private static string ExecuteProposeAgenda(string type, string targetKingdom, string settlementName,
-            string newOwnerEntityId, string targetClanName, string reason)
+            string newOwnerEntityId, string targetClanName, string targetPolicy, string reason)
         {
             var hero = AIChatClient.CurrentHero;
             if (hero == null) return "[错误] 无当前领主";
-            return CuriaService.Propose(hero, type, targetKingdom, settlementName, newOwnerEntityId, targetClanName, reason, out var message)
+            return CuriaService.Propose(hero, type, targetKingdom, settlementName, newOwnerEntityId, targetClanName, targetPolicy, reason, out var message)
                 ? message
                 : message;
         }
@@ -33,6 +33,13 @@ namespace AIChronicle
             return CuriaService.SubmitDefense(hero, agendaId, reason, out var message)
                 ? message
                 : message;
+        }
+
+        private static string ExecuteQueryPolicies()
+        {
+            var hero = AIChatClient.CurrentHero;
+            if (hero == null) return "[错误] 无当前领主";
+            return CuriaService.QueryPoliciesForHero(hero);
         }
 
         private static string ExecuteQueryAgenda(string agendaId, bool history)

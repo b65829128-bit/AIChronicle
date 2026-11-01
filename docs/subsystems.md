@@ -159,13 +159,13 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 
 ## 6. 朝议（Curia）
 
-> 设计契约见 `docs/plan-curia.md`。核心：**七类行动经王国公开表决；文本是理由，类型+参数是机制；通过执行、不通过无事发生。**
+> 设计契约见 `docs/plan-curia.md`。核心：**九类行动经王国公开表决；文本是理由，类型+参数是机制；通过执行、不通过无事发生。**
 
-- **七类议题**：`declare_war` / `propose_peace` / `propose_trade` / `propose_alliance` / `break_alliance` / `transfer_fief` / `expel_clan`。
+- **九类议题**：`declare_war` / `propose_peace` / `propose_trade` / `propose_alliance` / `break_alliance` / `enact_policy` / `revoke_policy` / `transfer_fief` / `expel_clan`。
 - **选民**：所有封臣家族领袖（含无地）；雇佣兵无票。国王/玩家必召；被针对家族不投票但单独陈情。玩家被俘仍可投票；AI 被俘/逃亡不召。
 - **权重**：`DiplomacyModel.GetClanStrength`（原版选王同款），公开；国王无额外票权。
 - **全量/应召**：合格封臣数 ≤ `CuriaFullCouncilThreshold`（默认 6）或强制全量时全部投票；否则固定（国王/玩家/提议者）+ 利害前 3 + 权重补到 quorum 50% + 轮换 1-2，软上限 `CuriaAttendanceCap`（默认 6，quorum 优先）。每人记录 `SummonReason`（固定/利害/权重/轮换），未出席记 `未获召见`。
-- **门槛**：战/和/贸/结盟 50%；封地/驱逐/背盟 2/3。quorum 不足 → 流会。
+- **门槛**：战/和/贸/结盟/政策 50%；封地/驱逐/背盟 2/3。quorum 不足 → 流会。
 - **状态机**：`Proposed`（待陈情，1 天）→ `Voting`（默认 5 天）→ `Passed/Rejected` → `Applied/Failed`。提议者默认支持且计入最终票数；投票一经提交不可更改；全部应召者表态可提前结算，截止日强制按已有票数结算（未表态=弃权）。一个王国同一时间一个活跃议程。
 - **暂停随机激活**：`AgentScheduler.CheckKingActivations` / `CheckSelfReviewActivations` 发现该王国有活跃议程且 `CuriaPauseRandomActivations` 开启时跳过；`CuriaVote`/`CuriaDefense` 为 P1。
 - **稳定执行**：`CuriaService.Propose` 校验；`CuriaService.Effects` 结算前重校验；执行器调用 `DiplomacyService` 的现有动作；`AIChatClient.CurrentHero` 临时设为国王以复用 `GetDiplomacyHero`；失败标记 `Failed`，不崩游戏。
@@ -173,4 +173,6 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 - **日记/史书**：代码代写 AI 投票者「决定」、参与者「结果」、未出席者「情报」；`HistoryRecorder.RecordCuriaEvent` 写 `curia_proposed/passed/rejected/applied/failed`；史官可读 `World/curia/` 并在编年史写朝议场景。
 - **玩家入口**：M 键 `CuriaCefScreen`（CEF；朝议/外交/封地/密陈/秘书）；页面动作经 `CefBridge` + `MainThreadExecutor`；文本输入走原生 `InformationManager.ShowTextInquiry`；CEF 失败回退秘书处查询。秘书处 `chancery` 只保留 query + 只读文件工具。
 - **前提过滤**：`BuildKingdoms` 输出 `canWar/canPeace/canTrade/canAlliance/canBreakAlliance`；CEF 只列当前有效类型与目标，AI 提示词要求先查询，`CuriaService.Propose` 硬校验并拒绝重复/无对象议题。
+- **政策效果**：`enact_policy` / `revoke_policy` 直接 `Kingdom.AddPolicy` / `RemovePolicy`；提案、投票、公开档案都带 `PolicyObject.SecondaryEffects` 的实际效果文本；AI 可用 `query_policies` 查询。
+- **接管原版投票**：朝议启用时，`KingdomPolicyDecision` / `SettlementClaimantDecision` / `SettlementClaimantPreliminaryDecision` 的 `IsAllowed()` 返回 false；政策/封地/驱逐的 VM 按钮 getter 与 Execute 也被 Harmony 拦截，AI 原版政策表决不会发生。
 - **旧入口**：`submit_advisory`/`submit_edict` 删除；`declare_war`/`propose_peace`/`propose_trade`/`propose_alliance`/`end_alliance` 在朝议启用时拒绝；`gift_fief` 仅国王自己封地；玩家 `change_kingdom` 拒绝；原版 `ExpelClanFromKingdomDecision` 在朝议启用时取消（手动 Harmony）。贸易终止 `end_trade_agreement` 仍直接。

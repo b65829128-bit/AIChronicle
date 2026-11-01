@@ -464,6 +464,7 @@ namespace AIChronicle
                                     "respond_to_agenda" => "在朝议中表了态",
                                     "defend_agenda" => "在朝议中作了陈情",
                                     "query_agenda" => "查看了朝议记录",
+                                    "query_policies" => "查看了王国政策",
                                     "submit_secret_advisory" => "向国王密陈了",
                                     "write_chronicle" => $"落盘了史文：{a["name"]?.ToString()}{a["genre"]?.ToString()}",
                                     "consult_king" => "遣使问询了",

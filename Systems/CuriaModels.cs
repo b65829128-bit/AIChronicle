@@ -13,6 +13,8 @@ namespace AIChronicle
         ProposeTrade,
         ProposeAlliance,
         BreakAlliance,
+        EnactPolicy,
+        RevokePolicy,
         TransferFief,
         ExpelClan
     }
@@ -43,7 +45,8 @@ namespace AIChronicle
         External,
         VoluntaryTransfer,
         ImposedTransfer,
-        Expulsion
+        Expulsion,
+        Policy
     }
 
     /// <summary>一个应召投票者。Stance 为 null 表示尚未表态。</summary>
@@ -94,6 +97,12 @@ namespace AIChronicle
         // 外交类目标
         public string TargetKingdomId { get; set; } = "";
         public string TargetKingdomName { get; set; } = "";
+
+        // 政策类目标
+        public string TargetPolicyId { get; set; } = "";
+        public string TargetPolicyName { get; set; } = "";
+        public string PolicyEffect { get; set; } = "";
+        public string PolicyDescription { get; set; } = "";
 
         // 封地类目标
         public string TargetSettlementId { get; set; } = "";

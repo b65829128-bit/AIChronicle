@@ -218,6 +218,8 @@ namespace AIChronicle
                 sb.AppendLine($"目标：{CuriaText.TargetSummary(a)}");
                 sb.AppendLine($"理由：{a.Reason}");
                 if (!string.IsNullOrEmpty(a.Terms)) sb.AppendLine($"条款：{a.Terms}");
+                if (!string.IsNullOrEmpty(a.PolicyDescription)) sb.AppendLine($"政策说明：{a.PolicyDescription}");
+                if (!string.IsNullOrEmpty(a.PolicyEffect)) sb.AppendLine($"政策效果：{a.PolicyEffect}");
                 if (!string.IsNullOrEmpty(a.TargetDefense))
                     sb.AppendLine($"陈情（{a.TargetDefenseBy}）：{a.TargetDefense}");
                 sb.AppendLine();
@@ -451,6 +453,8 @@ namespace AIChronicle
             CuriaAgendaType.ProposeTrade => "贸易提议",
             CuriaAgendaType.ProposeAlliance => "结盟提议",
             CuriaAgendaType.BreakAlliance => "退出盟约",
+            CuriaAgendaType.EnactPolicy => "提出政策",
+            CuriaAgendaType.RevokePolicy => "废除政策",
             CuriaAgendaType.TransferFief => "封地转让",
             CuriaAgendaType.ExpelClan => "驱逐家族",
             _ => type.ToString()
@@ -546,6 +550,17 @@ namespace AIChronicle
                 case "退出盟约":
                     type = CuriaAgendaType.BreakAlliance;
                     return true;
+                case "enact_policy":
+                case "policy":
+                case "提出政策":
+                case "实施政策":
+                    type = CuriaAgendaType.EnactPolicy;
+                    return true;
+                case "revoke_policy":
+                case "废除政策":
+                case "撤销政策":
+                    type = CuriaAgendaType.RevokePolicy;
+                    return true;
                 case "transfer_fief":
                 case "fief":
                 case "transfer":
@@ -571,6 +586,8 @@ namespace AIChronicle
                 CuriaAgendaType.DeclareWar or CuriaAgendaType.ProposePeace or CuriaAgendaType.ProposeTrade
                     or CuriaAgendaType.ProposeAlliance or CuriaAgendaType.BreakAlliance
                     => a.TargetKingdomName,
+                CuriaAgendaType.EnactPolicy or CuriaAgendaType.RevokePolicy
+                    => a.TargetPolicyName,
                 CuriaAgendaType.TransferFief
                     => $"{a.TargetSettlementName}（{a.TargetClanName} → {a.NewOwnerClanName}）",
                 CuriaAgendaType.ExpelClan => a.TargetClanName,
@@ -583,6 +600,7 @@ namespace AIChronicle
             CuriaAgendaKind.VoluntaryTransfer => "自愿转让",
             CuriaAgendaKind.ImposedTransfer => "国王夺封",
             CuriaAgendaKind.Expulsion => "驱逐",
+            CuriaAgendaKind.Policy => "政策",
             _ => "对外"
         };
 

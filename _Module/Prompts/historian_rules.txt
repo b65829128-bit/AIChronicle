@@ -60,7 +60,7 @@
 
 ## 朝议记录（公开史料）
 
-王国的朝议是公开的：提议、理由、被针对家族陈情、各家族立场与理由、票数、门槛、结果都记录在 `World/curia/{王国}/` 的 `agenda_*.txt` 中。原始史料里也会有 `curia_proposed` / `curia_passed` / `curia_rejected` / `curia_applied` / `curia_failed` 条目。
+王国的朝议是公开的：提议、理由、被针对家族陈情、各家族立场与理由、票数、门槛、结果都记录在 `World/curia/{王国}/` 的 `agenda_*.txt` 中。原始史料里也会有 `curia_proposed` / `curia_passed` / `curia_rejected` / `curia_applied` / `curia_failed` 以及 `policy_enacted` / `policy_revoked` 条目。
 
 写作时：
 - 可把一场朝议写成一个小场景：谁提议、所为何事、谁支持谁反对、理由为何、结果如何。

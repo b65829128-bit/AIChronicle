@@ -153,9 +153,10 @@ namespace AIChronicle
                         var settlement = args["settlementName"]?.ToString() ?? "";
                         var newOwner = args["newOwnerEntityId"]?.ToString() ?? "";
                         var targetClan = args["targetClanName"]?.ToString() ?? "";
+                        var targetPolicy = args["policyName"]?.ToString() ?? "";
                         PromptText("提出朝议 · 理由", "写下这项议题的政治理由（会公开给所有封臣与史官）。", reason =>
                         {
-                            if (CuriaService.Propose(Hero.MainHero, type, targetKingdom, settlement, newOwner, targetClan, reason, out var msg))
+                            if (CuriaService.Propose(Hero.MainHero, type, targetKingdom, settlement, newOwner, targetClan, targetPolicy, reason, out var msg))
                                 CuriaStore.Notify("[朝议] " + msg, Colors.Green);
                             else
                                 CuriaStore.Notify("[朝议] " + msg, Colors.Red);

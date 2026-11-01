@@ -349,3 +349,10 @@ pre.secret {
 .card.dropdown-open .form-actions {
   z-index: 2;
 }
+
+.field-help {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #6b5a45;
+}

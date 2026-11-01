@@ -14,7 +14,7 @@
 
 > Linux 上 dnSpy 不可用；用 `ilspycmd` 生成/更新 `BLSource/`，或用 Rider 内置反编译。游戏运行经 Steam/Proton，见 `docs/linux-dev.md`。
 
-## 2. 游戏工具（tools.json，55 个）
+## 2. 游戏工具（tools.json，56 个）
 
 | 工具 | 类别 | 说明 |
 |------|------|------|
@@ -41,10 +41,11 @@
 | `go_around_party` | 行军 | 绕行回避某支部队 |
 | `query_war_status` | 查询 | 查询王国战争统计（双方阵亡/攻城/劫掠数） |
 | `query_influence` | 查询 | 查询本族当前影响力（政治资财，主要用于拉军团[超 100 可召集]与推行政策） |
-| `propose_agenda` | 朝议 | 朝议提议：宣战/议和提议/贸易提议/结盟提议/退出盟约/封地转让/驱逐家族；封臣/国王可用，雇佣兵不可；页面只列前提成立的类型/目标，AI 需先查询核对，服务端拒绝重复/无对象议题；一个王国一个活跃议程 |
+| `propose_agenda` | 朝议 | 朝议提议：宣战/议和提议/贸易提议/结盟提议/退出盟约/提出政策/废除政策/封地转让/驱逐家族；封臣/国王可用，雇佣兵不可；页面只列前提成立的类型/目标，AI 需先查询核对，服务端拒绝重复/无对象议题；一个王国一个活跃议程 |
 | `respond_to_agenda` | 朝议 | 应召投票：支持/反对/弃权 + 可选一句理由；公开，入档/日记/史书 |
 | `defend_agenda` | 朝议 | 被针对家族陈情；不投票，只陈述理由，公开给所有投票者 |
 | `query_agenda` | 查询 | 查看本国进行中/历史朝议：提议者、理由、票数、权重、各家族立场与理由、缺席、结果 |
+| `query_policies` | 查询 | 查看全王国政策的名称、StringId、是否已实施、实际效果（SecondaryEffects）、当前是否可提议/废除 |
 | `query_pending_proposals` | 查询 | 列出当前王国待处理的外交提案（无需参数，自动按当前 Entity 过滤） |
 | `declare_war` | 外交 | 向另一王国宣战（单向，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="declare_war")` |
 | `propose_peace` | 外交 | 向另一王国提议议和（双向，附赔偿方案，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="propose_peace")` |
@@ -99,7 +100,7 @@
 | 分类 | 包含工具 | 默认激活场景 |
 |------|---------|:--|
 | universal | update_knowledge, cancel_action, create_clan（仅天意） | 全部 |
-| query | query_character, query_settlement, query_settlement_geography, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_clan_fiefs, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills, query_influence, query_agenda | 全部 |
+| query | query_character, query_settlement, query_settlement_geography, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_clan_fiefs, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills, query_influence, query_agenda, query_policies | 全部 |
 | council | propose_agenda, respond_to_agenda, defend_agenda | conversation / diplomacy / self_review / fief_review / curia |
 | social | change_relation, give_gold, request_gold, give_item, request_items, let_go | conversation |
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous（conversation 亦激活） |

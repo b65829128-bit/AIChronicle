@@ -28,7 +28,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **书信模式** | 支持书信 intent，O 键唤起书信往来面板（统一线程列表 + 未读角标） |
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 72 个工具定义在 `tools.json`（55 个游戏工具，含 `propose_agenda`/`respond_to_agenda`/`defend_agenda`/`query_agenda`）和 `agent_tools.json`（17 个文件/通信工具，含 `write_chronicle`/`submit_secret_advisory`/`consult_king`/`send_envoy`/`reply_envoy`/`record_resolve`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
+| **工具定义文件化** | 73 个工具定义在 `tools.json`（56 个游戏工具，含 `propose_agenda`/`respond_to_agenda`/`defend_agenda`/`query_agenda`）和 `agent_tools.json`（17 个文件/通信工具，含 `write_chronicle`/`submit_secret_advisory`/`consult_king`/`send_envoy`/`reply_envoy`/`record_resolve`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
 | **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁。**玩家发起的聊天（conversation）是全功能通道——全部分类默认激活**（AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全则对话里达成的承诺无法兑现；能力门控照旧，国王专属工具仍只有国王拿到） |
 | **提示词全部可编辑** | `context_template.txt`、`persona_generation.txt`、`chancery_rules.txt`、`world_info.txt`、`game_rules.txt` 等均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环，模型调用工具 → 执行 → 追加结果 → 重请求，直到模型自然停止（无轮数限制，仅保留极高安全阀防死循环） |
@@ -342,7 +342,7 @@ Usage:
 
 ### 当前实现
 
-所有 72 个工具（55 个游戏工具 + 17 个文件/通信工具）定义在 `tools.json`/`agent_tools.json`（热重载，不硬编码）。每次 API 请求都附带能力过滤后的工具定义。模型自行判断是否需要调用。返回的 `ChatResponse` 包含：
+所有 73 个工具（56 个游戏工具 + 17 个文件/通信工具）定义在 `tools.json`/`agent_tools.json`（热重载，不硬编码）。每次 API 请求都附带能力过滤后的工具定义。模型自行判断是否需要调用。返回的 `ChatResponse` 包含：
 - `Content`：角色扮演文本回复
 - `LearnedKnowledge`：如果模型调用了 `update_knowledge`，这里包含新认知
 - `ToolCalls`：原始工具调用数据（用于构建反馈闭环）

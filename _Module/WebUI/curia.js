@@ -32,6 +32,8 @@
     propose_trade: '贸易提议',
     propose_alliance: '结盟提议',
     break_alliance: '退出盟约',
+    enact_policy: '提出政策',
+    revoke_policy: '废除政策',
     transfer_fief: '封地转让',
     expel_clan: '驱逐家族'
   };
@@ -340,6 +342,18 @@
       terms.appendChild(el('div', 'field-value', a.terms));
       card.appendChild(terms);
     }
+    if (a.policyDescription) {
+      var pd = el('div', 'field');
+      pd.appendChild(el('div', 'field-label', '政策说明'));
+      pd.appendChild(el('div', 'field-value', a.policyDescription));
+      card.appendChild(pd);
+    }
+    if (a.policyEffect) {
+      var pe = el('div', 'field');
+      pe.appendChild(el('div', 'field-label', '政策效果'));
+      pe.appendChild(el('div', 'field-value reason', a.policyEffect));
+      card.appendChild(pe);
+    }
 
     card.appendChild(el('div', 'divider'));
     card.appendChild(renderVoteBar(a));
@@ -521,6 +535,9 @@
     if (ks.some(function (k) { return !!k.canTrade; })) types.push('propose_trade');
     if (ks.some(function (k) { return !!k.canAlliance; })) types.push('propose_alliance');
     if (ks.some(function (k) { return !!k.canBreakAlliance; })) types.push('break_alliance');
+    var policies = d.policies || [];
+    if (policies.some(function (p) { return p.allowed && !p.active; })) types.push('enact_policy');
+    if (policies.some(function (p) { return p.allowed && p.active; })) types.push('revoke_policy');
 
     var fiefs = d.player.isKing
       ? (d.fiefs && d.fiefs.vassal ? d.fiefs.vassal : [])
@@ -528,6 +545,14 @@
     if (transferableFiefs(fiefs, d.clans).length > 0) types.push('transfer_fief');
     if (d.player.isKing && (d.clans || []).some(function (c) { return !c.isRulerClan; })) types.push('expel_clan');
     return types;
+  }
+
+  function policyOptionsForType(d, type) {
+    return (d.policies || []).filter(function (p) {
+      return p.allowed && (type === 'enact_policy' ? !p.active : !!p.active);
+    }).map(function (p) {
+      return { value: p.id, label: p.name };
+    });
   }
 
   function kingdomOptionsForType(d, type) {
@@ -599,6 +624,26 @@
     cField.appendChild(cSel.el);
     grid.appendChild(cField);
 
+    var pField = el('div', 'field full');
+    pField.appendChild(el('div', 'field-label', '政策'));
+    var pSel = createDropdown(policyOptionsForType(d, types[0]), '');
+    pField.appendChild(pSel.el);
+    var pEffect = el('div', 'field-help', '');
+    pField.appendChild(pEffect);
+    grid.appendChild(pField);
+
+    function updatePolicyEffect() {
+      var selected = null;
+      var policies = d.policies || [];
+      for (var i = 0; i < policies.length; i++) {
+        if (String(policies[i].id) === String(pSel.value)) { selected = policies[i]; break; }
+      }
+      pEffect.textContent = selected
+        ? '效果：' + (selected.effect || '（游戏未提供说明）') + (selected.description ? '　' + selected.description : '')
+        : '';
+    }
+    pSel.onChange = updatePolicyEffect;
+
     sSel.onChange = function () {
       var f = null;
       for (var i = 0; i < fiefList.length; i++) if (fiefList[i].name === sSel.value) { f = fiefList[i]; break; }
@@ -616,11 +661,17 @@
       var t = typeSel.value;
       var external = t === 'declare_war' || t === 'propose_peace' || t === 'propose_trade'
         || t === 'propose_alliance' || t === 'break_alliance';
+      var isPolicy = t === 'enact_policy' || t === 'revoke_policy';
       kField.classList.toggle('hidden', !external);
       if (external) kSel.setOptions(kingdomOptionsForType(d, t), kSel.value);
       sField.classList.toggle('hidden', t !== 'transfer_fief');
       nField.classList.toggle('hidden', t !== 'transfer_fief');
       cField.classList.toggle('hidden', t !== 'expel_clan');
+      pField.classList.toggle('hidden', !isPolicy);
+      if (isPolicy) {
+        pSel.setOptions(policyOptionsForType(d, t), pSel.value);
+        updatePolicyEffect();
+      }
     }
     typeSel.onChange = updateFields;
     updateFields();
@@ -631,7 +682,8 @@
         targetKingdom: kSel.value || '',
         settlementName: sSel.value || '',
         newOwnerEntityId: nSel.value || '',
-        targetClanName: cSel.value || ''
+        targetClanName: cSel.value || '',
+        policyName: pSel.value || ''
       };
       dispatch('propose', payload);
       setStatus('请在弹窗中填写议题理由…');

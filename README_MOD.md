@@ -117,12 +117,12 @@
 
 > **朝议是王国层面的公开表决：封臣或国王提出一段有明确目标的议题，应召的封臣家族领袖投票，通过则执行原版动作，不通过则无事发生；结果写入公开档案、Agent 日记与史书。**
 
-- **七类议题**：`declare_war` 宣战、`propose_peace` 议和提议、`propose_trade` 贸易提议、`propose_alliance` 结盟提议、`break_alliance` 退出盟约、`transfer_fief` 封地转让/夺封、`expel_clan` 驱逐家族。
+- **九类议题**：`declare_war` 宣战、`propose_peace` 议和提议、`propose_trade` 贸易提议、`propose_alliance` 结盟提议、`break_alliance` 退出盟约、`enact_policy` 提出政策、`revoke_policy` 废除政策、`transfer_fief` 封地转让/夺封、`expel_clan` 驱逐家族。
 - **谁能提议**：国王或任一封臣家族领袖（宣战/议和/贸易/结盟/背盟）；封地转让由国王（夺封/再分配）或该封地所属家族领袖（自愿转让）提出；驱逐家族仅国王。雇佣兵无权提议、投票或参政。页面只列出当前前提成立的类型/目标：未交战才列宣战，交战中才列议和，无贸易才列贸易，未结盟才列结盟，已结盟才列背盟；服务端同样校验，AI 不合前提的提议会被拒绝。
 - **谁能投票**：所有封臣家族领袖（含无地者）；雇佣兵无票。国王与玩家必然被应召；被针对的家族**不投票**，但会单独获得陈情机会（陈情公开给所有投票者）。玩家即使被俘/逃亡仍保留投票权。
 - **权重**：`DiplomacyModel.GetClanStrength`（原版选王同款，含影响力/封地/部队/金币/技能），公开显示。国王的家族没有额外票权。
 - **全量/应召**：合格封臣数 ≤「全量阈值」（默认 6）时全部投票；超过则启用应召制：国王/玩家/提议者固定，加上利害相关、权重最高、最久未应召的家族，直到应召权重 ≥ 全国权重 50%（quorum）或达到软上限（默认 6）。所有出席理由（固定/利害/权重/轮换）与未出席者都会记录。
-- **门槛**：宣战/议和/贸易/结盟 50%；封地转让/驱逐/背盟 2/3。出席权重不足 quorum → 流会，不通过。
+- **门槛**：宣战/议和/贸易/结盟/政策 50%；封地转让/驱逐/背盟 2/3。出席权重不足 quorum → 流会，不通过。
 - **生命周期**：提议（理由必填）→ 被针对家族陈情（1 游戏天）→ 投票（默认 5 游戏天；应召者全部表态可提前结算；到期未表态=弃权，自动按已有票数结算）→ 结算 → 执行 → 入档/入史/写日记。提议者默认支持且计入最终票数；玩家投票一经提交不可更改。一个王国同时只有一个活跃议程；提议有冷却。
 - **议程期间暂停该王国的随机国王政务/封臣自省**，专心处理议程；其他王国不受影响。
 - **稳定生效**：文本只是理由；类型+目标参数决定效果，提案时校验、结算时再校验、执行器只调用现有游戏动作、幂等与审计；不会出现“文字通过了但游戏里没发生”。
@@ -132,6 +132,8 @@
 - **秘书处只查询**：`M` 页签的秘书只保留 `query_*` + `query_agenda` + 只读文件工具；不再提供公开谏言、诏令、换国、外交动作。
 - **公开谏言/诏令已移除**：`submit_advisory` / `submit_edict` 工具删除；国王的“评价”=在议程上的投票+理由，国王的“宣示”=自己提的议程。密陈（`submit_secret_advisory`）保留为只呈国王的私人渠道。
 - **玩家家族动作**：加入别国/当雇佣兵/脱离王国使用原版家族/王国界面；`change_kingdom` 对玩家直接拒绝（AI 仍可用）。
+- **政策**：`enact_policy` / `revoke_policy` 是九类议程的一部分；页面只列可提出/可废除政策，并在提交前显示 `PolicyObject.SecondaryEffects` 的实际效果。AI 提案前用 `query_policies` 查看效果，投票提示词也会带上政策说明与效果。
+- **接管原版影响力投票**：朝议启用时，原版政策、封地归属/转让、驱逐家族的 UI 按钮与底层 Election 都被禁用；AI 自动发起的原版政策表决同样被 `KingdomPolicyDecision.IsAllowed()` 拦截。
 - **旧工具限制**：`declare_war` / `propose_peace` / `propose_trade` / `propose_alliance` / `end_alliance` 在朝议启用时拒绝执行并提示改用 `propose_agenda`；`gift_fief` 只允许国王转让自己家族的封地；其他封地走朝议。贸易终止 `end_trade_agreement` 仍是国王直接工具。
 
 ### 盟约/贸易协定到期记录
@@ -155,7 +157,7 @@
 - 战役地图上按 **H 键**打开史书 UI（1100×700 内容区，默认新版 Web 阅读页：古籍式目录 + 书页正文，无外层画框），**目录按体例分组显示**（本纪 → 世家 → 列传 → 编年史 → 纪事 → 其他 → 政务文献，编年史按年份倒序），字体大小可调，并显示篇目序号、纪年、字数与阅读进度。**史官编年史按 Markdown 渲染**（`##` 分节、`**` 强调、`>` 史官曰引用块；Web 页不可用/关闭时原生 fallback 去标记显示）；密陈（以及旧档谏言/诏令）仍是实体角色扮演产出的纯文本，不做 Markdown 解释
 - NPC Agent 可通过 `read_file` 阅读编年史——历史成为 NPC 的共同知识
 - 史官提示词（`historian_rules.txt`、`yearly_chronicle_prompt.txt`、`biography_prompt.txt`、`special_chronicle_prompt.txt`）全部热重载
-- 史料记录类型：war_declared（含宣战宣言）/ peace_made / siege_started / siege_failed / siege_abandoned / battle_fought（野战/解围野战大会战，双方总兵力≥600 才入史，附兵力与胜负）/ settlement_captured / fief_granted（国王册封，含册封宣言）/ kingdom_destroyed / kingdom_created / hero_killed / clan_changed_kingdom / clan_leader_changed / marriage / clan_created（天意建族）/ alliance_made（结盟）/ alliance_broken（单方背盟）/ alliance_expired（盟约期满而罢，与背盟区分）/ trade_made（订立贸易协定）/ trade_broken（单方终止贸易协定）/ trade_expired（贸易协定期满而罢，与毁约区分）/ curia_proposed / curia_passed / curia_rejected / curia_applied / curia_failed（朝议的提议/通过/未通过/执行/失败）
+- 史料记录类型：war_declared（含宣战宣言）/ peace_made / siege_started / siege_failed / siege_abandoned / battle_fought（野战/解围野战大会战，双方总兵力≥600 才入史，附兵力与胜负）/ settlement_captured / fief_granted（国王册封，含册封宣言）/ kingdom_destroyed / kingdom_created / hero_killed / clan_changed_kingdom / clan_leader_changed / marriage / clan_created（天意建族）/ alliance_made（结盟）/ alliance_broken（单方背盟）/ alliance_expired（盟约期满而罢，与背盟区分）/ trade_made（订立贸易协定）/ trade_broken（单方终止贸易协定）/ trade_expired（贸易协定期满而罢，与毁约区分）/ curia_proposed / curia_passed / curia_rejected / curia_applied / curia_failed（朝议的提议/通过/未通过/执行/失败）/ policy_enacted / policy_revoked（朝议通过的政策实施/废除）
 
 > 史文文件扩展名仍为 `.txt`（内容为 Markdown），避免破坏既有战役目录扫描与 NPC 的 `read_file` 路径；旧纯文本史文仍可正常阅读（无 Markdown 标记的段落照常显示）。
 
@@ -243,7 +245,7 @@
 | 分类 | 包含工具 | 默认激活场景 |
 |------|---------|:--|
 | universal | update_knowledge, cancel_action, create_clan（仅天意） | 全部 |
-| query | query_character, query_settlement, query_settlement_geography, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_clan_fiefs, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills, query_influence, query_agenda | 全部 |
+| query | query_character, query_settlement, query_settlement_geography, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_clan_fiefs, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills, query_influence, query_agenda, query_policies | 全部 |
 | social | change_relation, give_gold, request_gold, give_item, request_items, let_go | conversation |
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous（conversation 亦激活） |
 | military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops, form_army, release_prisoner, execute_prisoner | autonomous（conversation 亦激活） |
@@ -488,13 +490,14 @@ _Module/Prompts/
 
 | 设置项 | 说明 | 默认值 |
 |--------|------|--------|
-| 启用朝议 | 七类行动经朝议表决；关闭恢复旧工具（不推荐） | 开启 |
+| 启用朝议 | 九类行动经朝议表决；关闭恢复旧工具（不推荐） | 开启 |
 | 全量阈值（家族数） | 合格封臣数 ≤ 此值时全部投票；超过则启用应召制 | `6` |
 | 应召上限（家族数） | 应召制下最多激活的 AI 投票家族；软上限，quorum 优先 | `6` |
 | 强制全量朝议 | 每次朝议激活所有合格封臣（成本高） | 关闭 |
 | 投票天数 | 表决窗口（游戏天）；到期未表态=弃权 | `5` |
 | 出席 quorum | 应召权重占全国权重的最低比例；不足则流会 | `0.5` |
 | 战/和/贸/结盟门槛 | 支持/(支持+反对) 的通过门槛 | `0.5` |
+| 政策门槛 | 提出/废除政策的通过门槛 | `0.5` |
 | 封地/驱逐/背盟门槛 | 保护封臣财产与盟约，默认 2/3 | `0.66` |
 | 提议冷却（天） | 同一家族领袖两次提议的最小间隔 | `3` |
 | 保留朝议记录 | 每王国保留最近 N 条已结束朝议；旧 JSON/TXT 自动清理，避免长期存档无限积累 | `200` |
@@ -598,7 +601,7 @@ AIChronicle/
 ├── Entities/                # Entity 统一抽象
 │   ├── Entity.cs            # Entity 数据模型（统一玩家/NPC，附能力标签）
 │   └── EntityManager.cs     # Entity 生命周期管理、查找与缓存
-├── Tools/                   # 工具执行器（55 个游戏工具 + 17 个文件/通信工具，按领域拆 partial）
+├── Tools/                   # 工具执行器（56 个游戏工具 + 17 个文件/通信工具，按领域拆 partial）
 │   ├── ToolExecutor.cs      # 基类（工具入口 ExecuteToolCall + 共享助手）
 │   ├── ToolExecutor.Query.cs / Intel.cs / Military.cs / Social.cs / Diplomacy.cs / Fate.cs / Curia.cs
 ├── UI/                      # 界面层
@@ -679,10 +682,10 @@ AIChronicle/
 
 ### v2.4.0 更新要点
 
-- **朝议（Curia）**：七类议程（宣战/议和提议/贸易提议/结盟提议/退出盟约/封地转让/驱逐家族）经王国公开表决；朝议取代公开谏言与诏令，成为国王与封臣之间的正式政治程序。
+- **朝议（Curia）**：九类议程（宣战/议和提议/贸易提议/结盟提议/退出盟约/提出政策/废除政策/封地转让/驱逐家族）经王国公开表决；朝议取代公开谏言与诏令，成为国王与封臣之间的正式政治程序。
 - **应召制**：封臣家族领袖（含无地）投票，雇佣兵无权；全量阈值 6（MCM 可调），超过则按固定/利害/权重/轮换应召，quorum 50%、软上限；被针对家族不投票但可陈情。
 - **结盟/背盟入朝议**：`propose_alliance` 与 `end_alliance` 直连工具在朝议启用时拒绝；结盟提议 50%，退出盟约 2/3。贸易终止仍是国王直接工具。
-- **国王权力边界**：国王自己的封地自由处置；封臣封地只能通过 2/3 朝议夺封/再分配；主动宣战/议和/贸易/结盟/背盟/驱逐也须朝议；旧 `declare_war`/`propose_peace`/`propose_trade`/`propose_alliance`/`end_alliance` 直连工具在朝议启用时拒绝。
+- **国王权力边界**：国王自己的封地自由处置；封臣封地只能通过 2/3 朝议夺封/再分配；主动宣战/议和/贸易/结盟/背盟/政策/驱逐也须朝议；旧 `declare_war`/`propose_peace`/`propose_trade`/`propose_alliance`/`end_alliance` 直连工具在朝议启用时拒绝。
 - **玩家入口**：M 键参政页（CEF 五页签：朝议/外交/封地/密陈/秘书）；秘书处只查询；CEF 失败回退查询聊天；玩家快速换国/雇佣兵入口移除，改用原版界面。
 - **公开与记忆**：`World/curia/` 档案（JSON+TXT）本国成员与史官可读；AI 投票/结果/缺席写日记；史官可读朝议并在编年史中写“朝议”场景；原始史料新增 `curia_*` 类型。
 - **稳定执行**：类型+目标结构化参数、提案/结算双重校验、幂等、执行失败入档并在左下角提示；议程期间暂停该王国的随机政务/自省。

@@ -155,7 +155,7 @@ namespace AIChronicle
         // ================= 提议 =================
 
         public static bool Propose(Hero proposer, string typeText, string targetKingdom, string settlementName,
-            string newOwnerEntityId, string targetClanName, string reason, out string message)
+            string newOwnerEntityId, string targetClanName, string targetPolicy, string reason, out string message)
         {
             message = "";
             if (!Enabled)
@@ -175,7 +175,7 @@ namespace AIChronicle
             }
             if (!CuriaText.TryParseType(typeText, out var type))
             {
-                message = "[错误] 未知议题类型。可选：declare_war / propose_peace / propose_trade / propose_alliance / break_alliance / transfer_fief / expel_clan";
+                message = "[错误] 未知议题类型。可选：declare_war / propose_peace / propose_trade / propose_alliance / break_alliance / enact_policy / revoke_policy / transfer_fief / expel_clan";
                 return false;
             }
             if (proposer.Clan == null || proposer.Clan.Leader != proposer)
@@ -347,6 +347,43 @@ namespace AIChronicle
                         break;
                     }
 
+                case CuriaAgendaType.EnactPolicy:
+                case CuriaAgendaType.RevokePolicy:
+                    {
+                        var policy = FindPolicy(targetPolicy);
+                        if (policy == null)
+                        {
+                            message = "[错误] 找不到政策：" + targetPolicy;
+                            return false;
+                        }
+                        var permission = Campaign.Current?.Models?.KingdomDecisionPermissionModel;
+                        if (permission != null && !permission.IsPolicyDecisionAllowed(policy))
+                        {
+                            message = "[错误] 当前不允许提出或废除该政策";
+                            return false;
+                        }
+                        var isActive = kingdom.HasPolicy(policy);
+                        if (type == CuriaAgendaType.EnactPolicy && isActive)
+                        {
+                            message = $"[错误] 政策「{policy.Name}」已经实施";
+                            return false;
+                        }
+                        if (type == CuriaAgendaType.RevokePolicy && !isActive)
+                        {
+                            message = $"[错误] 政策「{policy.Name}」尚未实施";
+                            return false;
+                        }
+                        agenda.Kind = CuriaAgendaKind.Policy;
+                        agenda.TargetPolicyId = policy.StringId ?? "";
+                        agenda.TargetPolicyName = policy.Name?.ToString() ?? "";
+                        agenda.PolicyEffect = policy.SecondaryEffects?.ToString() ?? "";
+                        agenda.PolicyDescription = policy.Description?.ToString() ?? "";
+                        agenda.Terms = type == CuriaAgendaType.EnactPolicy
+                            ? $"在{kingdom.Name}实施政策「{agenda.TargetPolicyName}」"
+                            : $"废除{kingdom.Name}的政策「{agenda.TargetPolicyName}」";
+                        break;
+                    }
+
                 case CuriaAgendaType.TransferFief:
                     {
                         var settlement = CuriaStore.FindSettlement(settlementName);
@@ -488,9 +525,22 @@ namespace AIChronicle
             return true;
         }
 
+        private static PolicyObject? FindPolicy(string policyText)
+        {
+            if (string.IsNullOrWhiteSpace(policyText)) return null;
+            var key = policyText.Trim();
+            if (Campaign.Current == null) return null;
+            var all = PolicyObject.All;
+            if (all == null) return null;
+            return all.FirstOrDefault(p => string.Equals(p.StringId, key, StringComparison.OrdinalIgnoreCase))
+                ?? all.FirstOrDefault(p => string.Equals(p.Name?.ToString(), key, StringComparison.OrdinalIgnoreCase));
+        }
+
         private static float GetThreshold(CuriaAgendaType type)
         {
             var s = MySettings.Instance;
+            if (type == CuriaAgendaType.EnactPolicy || type == CuriaAgendaType.RevokePolicy)
+                return s?.CuriaPolicyThreshold ?? 0.5f;
             return type == CuriaAgendaType.TransferFief || type == CuriaAgendaType.ExpelClan
                    || type == CuriaAgendaType.BreakAlliance
                 ? (s?.CuriaFiefThreshold ?? 0.66f)
@@ -886,6 +936,11 @@ namespace AIChronicle
             var player = Hero.MainHero;
             if (player == null || kingdom == null) return false;
             return player.Clan?.Kingdom == kingdom || player.MapFaction == kingdom;
+        }
+
+        public static string QueryPoliciesForHero(Hero hero)
+        {
+            return CuriaPageBuilder.BuildPolicyQueryText(hero);
         }
 
         public static string QueryForHero(Hero hero, string agendaId, bool history)

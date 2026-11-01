@@ -200,6 +200,7 @@ namespace AIChronicle
                             args["settlement_name"]?.ToString() ?? "",
                             args["new_owner_entity_id"]?.ToString() ?? "",
                             args["target_clan_name"]?.ToString() ?? "",
+                            args["policy_name"]?.ToString() ?? "",
                             args["reason"]?.ToString() ?? "");
 
                     case "respond_to_agenda":
@@ -217,6 +218,9 @@ namespace AIChronicle
                         return ExecuteQueryAgenda(
                             args["agenda_id"]?.ToString() ?? "",
                             args["history"]?.ToObject<bool>() ?? false);
+
+                    case "query_policies":
+                        return ExecuteQueryPolicies();
 
                     case "end_alliance":
                         if (CuriaService.Enabled)
