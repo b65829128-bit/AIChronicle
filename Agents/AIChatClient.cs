@@ -153,7 +153,54 @@ namespace AIChronicle
             }
         };
 
-        private static object BuildTools()
+        private static readonly Dictionary<string, int> RoundBudgets = new()
+        {
+            ["curia"] = 3,
+            ["curia_defense"] = 3,
+            ["self_review"] = 5,
+            ["diplomacy"] = 6,
+            ["king_consult"] = 4,
+            ["envoy_reply"] = 4,
+            ["chat"] = 10,
+            ["historian"] = 12,
+            ["letter"] = 4,
+            ["fief_review"] = 4,
+            ["clan_replenishment"] = 4,
+            ["chancery"] = 6
+        };
+
+        private static readonly Dictionary<string, int> QueryBudgets = new()
+        {
+            ["curia"] = 1,
+            ["curia_defense"] = 1,
+            ["self_review"] = 4,
+            ["diplomacy"] = 4,
+            ["king_consult"] = 3,
+            ["envoy_reply"] = 3,
+            ["chat"] = 6,
+            ["historian"] = 5,
+            ["letter"] = 3,
+            ["fief_review"] = 3,
+            ["clan_replenishment"] = 3,
+            ["chancery"] = 4
+        };
+
+        private static readonly HashSet<string> CuriaQueryTools = new(StringComparer.Ordinal)
+        {
+            "query_agenda", "query_policies", "query_character", "query_clan_fiefs",
+            "query_war_status", "query_settlement", "query_party_troops", "query_world_state"
+        };
+
+        private static int RoundBudget(string intent)
+            => RoundBudgets.TryGetValue(intent, out var n) ? n : 6;
+
+        private static int QueryBudget(string intent)
+            => QueryBudgets.TryGetValue(intent, out var n) ? n : 4;
+
+        private static bool IsQueryTool(string name)
+            => name.StartsWith("query_", StringComparison.Ordinal) || name == "browse_tools";
+
+        private static object BuildTools(bool allowQueries = true)
         {
             if (ActivatedCategories.Count == 0)
                 ActivatedCategories = new HashSet<string>(GetDefaultCategories("conversation"));
@@ -183,6 +230,12 @@ namespace AIChronicle
             // intent 级工具排除：按场景收窄工具集（如自省剔除链式/级联工具）
             if (excluded.Count > 0)
                 toolDefs = toolDefs.Where(t => !excluded.Contains(t.Name)).ToList();
+            // Curia 投票者只保留少量补充查询（议程事实已预置在激活内容里）
+            if (CurrentIntent == "curia" || CurrentIntent == "curia_defense")
+                toolDefs.RemoveAll(t => IsQueryTool(t.Name) && !CuriaQueryTools.Contains(t.Name));
+            // 查询预算用尽/最后一轮：从工具数组中移除查询与 browse_tools
+            if (!allowQueries)
+                toolDefs.RemoveAll(t => IsQueryTool(t.Name));
             // 严格单向防环：被问询方（king_consult 会话）拿不到 consult_king，不能发起新问询，只能 reply_consult 回复
             if (CurrentIntent == "king_consult")
                 toolDefs.RemoveAll(t => t.Name == "consult_king");
@@ -194,8 +247,8 @@ namespace AIChronicle
                 toolDefs.RemoveAll(t => t.Name == "create_kingdom");
             // 秘书处不提供 browse_tools（防止解锁被限制的分类绕过权限收窄）；
             // 自省/密使回应/朝议投票也不提供（固定动作菜单，避免注意力分散）
-            if (CurrentIntent != "chancery" && CurrentIntent != "self_review"
-                && CurrentIntent != "envoy_reply" && CurrentIntent != "curia" && CurrentIntent != "curia_defense")
+            // browse_tools 会改变工具数组并破坏前缀缓存；只保留给玩家主动对话。
+            if (allowQueries && (CurrentIntent == "chat" || CurrentIntent == "conversation" || CurrentIntent == "letter"))
                 toolDefs.Add(BrowseToolsDef);
             return BuildTools(toolDefs);
         }
@@ -463,9 +516,11 @@ namespace AIChronicle
             long totalCacheHit = 0;
             long totalCacheMiss = 0;
 
-            // 不再限制工具调用轮数——模型直到自然停止。
-            // 仅保留一个极高的安全阀（50 轮），防止病态死循环。
-            const int MaxSafetyRounds = 50;
+            // 按场景限制轮次与查询次数：后台可以慢，但不能无休止地查。
+            var roundBudget = RoundBudget(intent);
+            var queryBudget = QueryBudget(intent);
+            var queryCalls = 0;
+            var budgetNoticeSent = false;
 
             // reasoning_effort：史官固定 high（文笔核心；high 正是 API 默认值 → 不发送该参数，最大兼容性）。
             // 其余 intent 用 MCM 设置（默认 low）——这是成本大头，见设置面板说明。
@@ -488,10 +543,22 @@ namespace AIChronicle
                 };
             }
 
-            for (int round = 0; round < MaxSafetyRounds; round++)
+            for (int round = 0; round < roundBudget; round++)
             {
                 if (MainThreadExecutor.CampaignEpoch != campaignEpoch)
                     return CampaignEnded();
+
+                var isLastRound = round == roundBudget - 1;
+                var queriesDisabled = isLastRound || queryCalls >= queryBudget;
+                if (queriesDisabled && !budgetNoticeSent)
+                {
+                    budgetNoticeSent = true;
+                    messageList.Add(new JObject
+                    {
+                        ["role"] = "system",
+                        ["content"] = $"（系统预算：本次行动最多 {roundBudget} 轮、{queryBudget} 次查询。查询预算已用尽或被锁定。停止查询和 browse_tools，立即调用行动工具或直接回复；这是你最后一次调查机会。）"
+                    });
+                }
 
                 // 构建请求：全部厂商差异（参数/字段名）由 provider 依据能力声明处理
                 var request = provider.BuildRequest(new LLMRequest
@@ -504,7 +571,7 @@ namespace AIChronicle
                     Temperature = settings.Temperature,
                     Stream = true,
                     IncludeTools = includeTools,
-                    Tools = includeTools ? JToken.FromObject(BuildTools()) : null,
+                    Tools = includeTools ? JToken.FromObject(BuildTools(!queriesDisabled)) : null,
                     ReasoningEffort = reasoningEffort
                 });
 
@@ -559,6 +626,7 @@ namespace AIChronicle
 
                     totalCacheHit += chunk.CacheHit;
                     totalCacheMiss += chunk.CacheMiss;
+                    TokenBudget.Record(chunk.CacheHit + chunk.CacheMiss);
                     if (!string.IsNullOrEmpty(chunk.RawUsageJson))
                         DebugLogger.Log($"LLM usage intent={intent} agent={hero?.Name?.ToString() ?? "?"} round={round} {chunk.RawUsageJson}");
                     if (!string.IsNullOrEmpty(chunk.FinishReason))
@@ -699,7 +767,26 @@ namespace AIChronicle
                     }
                     else
                     {
-                        var toolResult = ToolExecutor.ExecuteToolCall(funcName, argsStr);
+                        string toolResult;
+                        if (IsQueryTool(funcName))
+                        {
+                            if (queriesDisabled || queryCalls >= queryBudget)
+                            {
+                                toolResult = "[预算] 本次行动的查询预算已用尽。停止查询，直接使用已给事实、调用行动工具或回复。";
+                            }
+                            else
+                            {
+                                queryCalls++;
+                                toolResult = ToolExecutor.ExecuteToolCall(funcName, argsStr);
+                            }
+                        }
+                        else
+                        {
+                            toolResult = ToolExecutor.ExecuteToolCall(funcName, argsStr);
+                        }
+                        var toolCap = MySettings.Instance?.MaxToolResultChars ?? 4000;
+                        if (toolCap > 0 && toolResult.Length > toolCap)
+                            toolResult = toolResult.Substring(0, toolCap) + "\n…（工具结果过长，已截断；请用更精确的查询或读取具体文件）";
                         toolResults[callId] = toolResult;
                         messageList.Add(new JObject { ["role"] = "tool", ["tool_call_id"] = callId, ["content"] = toolResult });
                     }
@@ -709,7 +796,7 @@ namespace AIChronicle
             var hitRateFinal = (totalCacheHit + totalCacheMiss) > 0
                 ? ((double)totalCacheHit / (totalCacheHit + totalCacheMiss)).ToString("P1")
                 : "N/A";
-            DebugLogger.Log($"LLM 完成(安全阀) intent={intent} agent={hero?.Name?.ToString() ?? "?"} 缓存命中={totalCacheHit} 未命中={totalCacheMiss} 命中率={hitRateFinal}");
+            DebugLogger.Log($"LLM 完成(轮次预算) intent={intent} agent={hero?.Name?.ToString() ?? "?"} 缓存命中={totalCacheHit} 未命中={totalCacheMiss} 命中率={hitRateFinal}");
             return new ChatResponse
             {
                 Content = !string.IsNullOrEmpty(lastMeaningfulText) ? lastMeaningfulText

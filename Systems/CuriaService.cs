@@ -943,14 +943,14 @@ namespace AIChronicle
             return player.Clan?.Kingdom == kingdom || player.MapFaction == kingdom;
         }
 
-        public static string QueryPoliciesForHero(Hero hero)
+        public static string QueryPoliciesForHero(Hero hero, string policyName)
         {
-            return CuriaPageBuilder.BuildPolicyQueryText(hero);
+            return CuriaPageBuilder.BuildPolicyQueryText(hero, policyName);
         }
 
-        public static string QueryForHero(Hero hero, string agendaId, bool history)
+        public static string QueryForHero(Hero hero, string agendaId, bool history, bool detail)
         {
-            return CuriaPageBuilder.BuildQueryText(hero, agendaId, history);
+            return CuriaPageBuilder.BuildQueryText(hero, agendaId, history, detail);
         }
 
         public static object BuildPageData(Hero player) => CuriaPageBuilder.BuildPageData(player);

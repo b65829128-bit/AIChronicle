@@ -16,8 +16,8 @@ OnApplicationTick → AgentScheduler.Tick() → 若并发槽未满 → 取最高
 
 | P | 事件类型 | 说明 |
 |---|---------|------|
-| 0 | YearlyChronicle / SpecialChronicle（史官） | 最高，**永不跳过**（生成不受队列门槛限制，永远先出队） |
-| 1 | KingDiplomacy / CuriaVote / CuriaDefense（国王内外政务/提案/朝议投票/陈情） | 高优先，外交提案与朝议不积压；议程期间该国随机政务/自省暂停 |
+| 0 | YearlyChronicle / SpecialChronicle（史官）/ CuriaVote / CuriaDefense（朝议投票/陈情） | 最高；史官永不跳过；朝议有截止日，优先于随机政务 |
+| 1 | KingDiplomacy（国王内外政务/提案） | 高优先，外交提案不积压；议程期间该国随机政务/自省暂停 |
 | 2 | LetterReceived / EnvoyReceived（来信/密使） | 中 |
 | 3 | BehaviorCheckIn / PlanCheckIn / FiefReview（签到/封地审视） | 低 |
 | 4 | SelfReview（概率激活的自省） | 最低，只在无更高优先工作时处理 |
@@ -157,6 +157,13 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 - 防止重复生成：已存在编年史的年份跳过
 
 
+## 5.1 成本预算与后台节流
+
+- **每次激活**：`AIChatClient` 按 intent 限制 LLM 轮次和查询调用——朝议 3 轮/1 查询、自省 5/4、外交 6/4、国王问询 4/3、密使回应 4/3、聊天 10/6、史官 12/5；最后一轮移除 `query_*`/`browse_tools`，注入“停止查询、立即行动”的系统提示。
+- **结果压缩**：单次工具结果超过 `MaxToolResultChars`（默认 4000）截断；`query_policies` 默认一行式摘要，指定 `policy_name` 才返回完整说明；`query_agenda` 默认简版，`detail=true` 才列全部票数与缺席。
+- **Curia 预置事实**：投票提示词直接带目标战和/同盟/贸易、封地守军、家族影响力/封地、关系、当前票数/权重/门槛；最多允许 1 次补充查询。
+- **全局预算**：`TokenBudget` 统计滚动 5 分钟 prompt token；超过 MCM「后台 token 预算」时，调度器推迟可延迟的后台事件（自省/国王政务/问询/密使等），事件留在队列；朝议投票/史官因有截止或年度节点不推迟。玩家聊天不经过调度器，不受影响。
+
 ## 6. 朝议（Curia）
 
 > 设计契约见 `docs/plan-curia.md`。核心：**九类行动经王国公开表决；文本是理由，类型+参数是机制；通过执行、不通过无事发生。**
@@ -167,7 +174,7 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 - **全量/应召**：合格封臣数 ≤ `CuriaFullCouncilThreshold`（默认 6）或强制全量时全部投票；否则固定（国王/玩家/提议者）+ 利害前 3 + 权重补到 quorum 50% + 轮换 1-2，软上限 `CuriaAttendanceCap`（默认 6，quorum 优先）。每人记录 `SummonReason`（固定/利害/权重/轮换），未出席记 `未获召见`。
 - **门槛**：战/和/贸/结盟/政策 50%；封地/驱逐/背盟 2/3。quorum 不足 → 流会。
 - **状态机**：`Proposed`（待陈情，1 天）→ `Voting`（默认 5 天）→ `Passed/Rejected` → `Applied/Failed`。提议者默认支持且计入最终票数；投票一经提交不可更改；全部应召者表态可提前结算，截止日强制按已有票数结算（未表态=弃权）。一个王国同一时间一个活跃议程。
-- **暂停随机激活**：`AgentScheduler.CheckKingActivations` / `CheckSelfReviewActivations` 发现该王国有活跃议程且 `CuriaPauseRandomActivations` 开启时跳过；`CuriaVote`/`CuriaDefense` 为 P1。
+- **暂停随机激活**：`AgentScheduler.CheckKingActivations` / `CheckSelfReviewActivations` 发现该王国有活跃议程且 `CuriaPauseRandomActivations` 开启时跳过；`CuriaVote`/`CuriaDefense` 为 P0（有截止日，优先于随机政务）。
 - **稳定执行**：`CuriaService.Propose` 校验；`CuriaService.Effects` 结算前重校验；执行器调用 `DiplomacyService` 的现有动作；`AIChatClient.CurrentHero` 临时设为国王以复用 `GetDiplomacyHero`；失败标记 `Failed`，不崩游戏。
 - **数据**：`World/curia/{王国}/state.json` + `agenda_{id}.json` + `agenda_{id}.txt`（公开摘要）。权限 `AgentManager.IsCuriaAllowed`：本国成员 + 史官；他国不可读。已结束议程默认每国保留最近 200 条（`CuriaHistoryKeep`），旧档在 `FinishAgenda` 后清理，读档时也会清理一次；`query_agenda` 只读最近 10/30 条，不随存档无限增长。
 - **日记/史书**：代码代写 AI 投票者「决定」、参与者「结果」、未出席者「情报」；`HistoryRecorder.RecordCuriaEvent` 写 `curia_proposed/passed/rejected/applied/failed`；史官可读 `World/curia/` 并在编年史写朝议场景。

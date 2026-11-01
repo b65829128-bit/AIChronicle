@@ -850,7 +850,7 @@
   {
     "name": "query_agenda",
     "category": "query",
-    "description": "Query the public agenda record of your kingdom (朝议). Returns the active agenda or the recent history, including proposer, reason, terms, target defense, every summoned clan's weight/stance/reason, absent clans, quorum, threshold, and outcome.\n\nUsage:\n- Call this when you need to know what the kingdom is currently voting on, why, who supports or opposes it, or how a past agenda ended.\n- Omit agenda_id to get the active agenda; set history=true for recent resolved agendas; set agenda_id to read a specific record.\n- The same record is public to all vassals of the kingdom and to the historian; other kingdoms cannot read it.\n- Clan leaders who were not summoned can still read the record; they simply do not vote.",
+    "description": "Query the public agenda record of your kingdom (朝议). By default returns a compact summary of the active agenda (or 5 recent resolved agendas); set detail=true for every summoned clan's weight/stance/reason and absences.\n\nUsage:\n- Omit agenda_id for the active agenda; set history=true for 5 recent resolved agendas; set agenda_id to read a specific record.\n- Use detail=true only when you actually need per-clan voting detail; default compact output is cheaper.\n- The same record is public to all vassals of the kingdom and to the historian.",
     "parameters": [
       {
         "name": "agenda_id",
@@ -861,13 +861,24 @@
         "name": "history",
         "type": "boolean",
         "description": "If true, list recent resolved agendas instead of the active one."
+      },
+      {
+        "name": "detail",
+        "type": "boolean",
+        "description": "Optional: true to include every summoned clan's weight/stance/reason and absent clans. Default false for a compact summary."
       }
     ]
   },
   {
     "name": "query_policies",
     "category": "query",
-    "description": "Query all kingdom policies and their actual effects (朝议政策). Returns whether each policy is active, its StringId, description, effect text, and whether it can currently be proposed/revoked.\n\nUsage:\n- Call this before proposing enact_policy/revoke_policy, or when voting on a policy agenda, to verify the actual effect.\n- The effect text comes from the game's PolicyObject.SecondaryEffects, not a model guess.",
-    "parameters": []
+    "description": "Query kingdom policies in a compact form (朝议政策). By default returns one line per policy: active/inactive, name, StringId, a one-line effect, and the Curia modifier. Pass policy_name for full description/effect of one policy.\n\nUsage:\n- Call this before proposing enact_policy/revoke_policy, or when voting on a policy agenda.\n- Default output is intentionally compact; do NOT expect all descriptions.\n- Set policy_name to a policy name or StringId only when you need full details for one policy.",
+    "parameters": [
+      {
+        "name": "policy_name",
+        "type": "string",
+        "description": "Optional policy name or StringId for full details; leave empty for a compact list of all policies."
+      }
+    ]
   }
 ]

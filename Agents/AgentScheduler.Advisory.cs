@@ -15,7 +15,7 @@ namespace AIChronicle
         /// </summary>
         private static void CheckSelfReviewActivations()
         {
-            if (Campaign.Current == null) return;
+            if (Campaign.Current == null || TokenBudget.IsOverBudget) return;
             if (_warmupFrames > 0) return;
             if (MySettings.Instance?.AdvisoryEnabled != true) return;
 

@@ -343,7 +343,7 @@ namespace AIChronicle
             };
         }
 
-        public static string BuildQueryText(Hero hero, string agendaId, bool history)
+        public static string BuildQueryText(Hero hero, string agendaId, bool history, bool detail)
         {
             var kingdom = CuriaStore.GetHeroKingdom(hero);
             if (kingdom == null) return "你不属于任何王国，无法查看朝议。";
@@ -352,12 +352,12 @@ namespace AIChronicle
             {
                 var agenda = CuriaStore.LoadAgenda(kingdom.Name?.ToString() ?? "", agendaId);
                 if (agenda == null) return $"未找到朝议：{agendaId}";
-                return BuildAgendaText(agenda, detailed: true);
+                return BuildAgendaText(agenda, detailed: detail);
             }
 
             if (history)
             {
-                var list = CuriaStore.ListAgendas(kingdom.Name?.ToString() ?? "", 10)
+                var list = CuriaStore.ListAgendas(kingdom.Name?.ToString() ?? "", 5)
                     .Where(a => CuriaService.IsTerminal(a.Status)).ToList();
                 if (list.Count == 0) return "本国暂无已结束的朝议记录。";
                 var sb = new StringBuilder();
@@ -369,7 +369,7 @@ namespace AIChronicle
 
             var active = CuriaService.GetActiveAgenda(kingdom);
             if (active == null) return "本国当前没有进行中的朝议。";
-            return BuildAgendaText(active, detailed: true);
+            return BuildAgendaText(active, detailed: detail);
         }
 
         public static string BuildAgendaText(CuriaAgenda a, bool detailed)
@@ -417,24 +417,48 @@ namespace AIChronicle
             return sb.ToString().TrimEnd();
         }
 
-        public static string BuildPolicyQueryText(Hero hero)
+        public static string BuildPolicyQueryText(Hero hero, string policyName)
         {
             var kingdom = CuriaStore.GetHeroKingdom(hero);
             if (kingdom == null) return "你不属于任何王国，无法查看政策。";
             if (Campaign.Current == null) return "政策数据尚未就绪。";
             var permission = Campaign.Current.Models.KingdomDecisionPermissionModel;
             var sb = new StringBuilder();
-            sb.AppendLine($"【{kingdom.Name} · 政策】");
+
+            if (!string.IsNullOrWhiteSpace(policyName))
+            {
+                var key = policyName.Trim();
+                var selected = PolicyObject.All.FirstOrDefault(p =>
+                    string.Equals(p.StringId, key, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(p.Name?.ToString(), key, StringComparison.OrdinalIgnoreCase));
+                if (selected == null) return $"未找到政策：{policyName}";
+                var active = kingdom.HasPolicy(selected);
+                var allowed = permission == null || permission.IsPolicyDecisionAllowed(selected);
+                sb.AppendLine($"【政策详情 · {kingdom.Name}】");
+                sb.AppendLine($"{selected.Name}（{selected.StringId}）");
+                sb.AppendLine($"状态：{(active ? "已实施" : "未实施")}；{(allowed ? "当前可提议" : "当前不可提议")}");
+                sb.AppendLine($"说明：{selected.Description}");
+                sb.AppendLine($"原版效果：{selected.SecondaryEffects}");
+                var curiaEffect = CuriaPolicyEffects.DescribePolicy(selected);
+                if (!string.IsNullOrEmpty(curiaEffect)) sb.AppendLine($"朝议修正：{curiaEffect}");
+                return sb.ToString().TrimEnd();
+            }
+
+            sb.AppendLine($"【{kingdom.Name} · 政策摘要】");
+            sb.AppendLine("只列名称、状态、一行效果和朝议修正；要看完整说明请用 policy_name 查询单条。");
             var listed = 0;
             foreach (var policy in PolicyObject.All)
             {
                 var active = kingdom.HasPolicy(policy);
                 var allowed = permission == null || permission.IsPolicyDecisionAllowed(policy);
-                sb.AppendLine($"- {(active ? "已实施" : "未实施")}：{policy.Name}（{policy.StringId}）" +
-                              (allowed ? "" : "（当前不可提议）"));
-                sb.AppendLine($"  效果：{policy.SecondaryEffects}");
+                var effect = (policy.SecondaryEffects?.ToString() ?? "").Replace("{newline}", "；").Replace("\n", "；").Trim();
+                if (effect.Length > 160) effect = effect.Substring(0, 160) + "…";
+                sb.Append($"- {(active ? "已实施" : "未实施")}：{policy.Name}（{policy.StringId}）");
+                if (!allowed) sb.Append("（当前不可提议）");
+                if (!string.IsNullOrEmpty(effect)) sb.Append($" — {effect}");
                 var curiaEffect = CuriaPolicyEffects.DescribePolicy(policy);
-                if (!string.IsNullOrEmpty(curiaEffect)) sb.AppendLine($"  朝议修正：{curiaEffect}");
+                if (!string.IsNullOrEmpty(curiaEffect)) sb.Append($"；朝议：{curiaEffect}");
+                sb.AppendLine();
                 listed++;
             }
             if (listed == 0) sb.AppendLine("（没有可查看的政策）");
@@ -457,6 +481,7 @@ namespace AIChronicle
             if (!string.IsNullOrEmpty(agenda.PolicyEffect)) sb.AppendLine($"政策效果：{agenda.PolicyEffect}");
             if (!string.IsNullOrEmpty(agenda.TargetDefense))
                 sb.AppendLine($"被针对家族陈情（{agenda.TargetDefenseBy}）：{agenda.TargetDefense}");
+            AppendVoterFacts(sb, agenda, voter);
             sb.AppendLine();
             sb.AppendLine($"你的家族权重：{voter.Weight:F1}；应召原因：{voter.SummonReason}。" +
                           (voter.IsKing && CuriaPolicyEffects.KingVoteWeightMultiplier(CuriaStore.FindKingdom(agenda.KingdomName)) > 1f
@@ -465,11 +490,61 @@ namespace AIChronicle
             sb.AppendLine($"当前票数：支持 {agenda.SupportWeight:F1} / 反对 {agenda.OpposeWeight:F1} / 弃权 {agenda.AbstainWeight:F1}。");
             sb.AppendLine();
             sb.AppendLine("请根据你的家族利益、封地安危、贸易与盟约、你与提议者/国王/被针对家族的关系、以及你的性格，决定你的立场。");
-            sb.AppendLine("需要事实时先用查询工具核实：query_agenda（当前票数/理由）、query_character（人物/家族/关系）、query_clan_fiefs（封地）、query_war_status / query_world_state（战和）、query_settlement（目标封地/守军）、query_party_troops（同阵营兵力）。不要凭记忆猜测。");
+            sb.AppendLine("上方已预置关键事实。只有确实缺少某项事实时，才做一次补充查询（query_agenda / query_character / query_clan_fiefs / query_war_status / query_settlement / query_party_troops 中选一个）；不要重复查询。");
             sb.AppendLine("调用 respond_to_agenda(stance=\"support\"|\"oppose\"|\"abstain\", reason=\"可选的一句话理由\")。");
             sb.AppendLine("只做这一件事，不要写信、不要行军、不要做其他动作。你的投票与理由会被公开记录，史官与所有封臣可见。");
             sb.AppendLine("若你确实无意见，也请投弃权——不要不表态。");
             return sb.ToString().TrimEnd();
+        }
+
+        private static void AppendVoterFacts(StringBuilder sb, CuriaAgenda agenda, CuriaVote voter)
+        {
+            var kingdom = CuriaStore.FindKingdom(agenda.KingdomName);
+            if (kingdom == null) return;
+            var voterHero = CuriaStore.FindHeroByEntityId(voter.LeaderEntityId);
+            var voterClan = voterHero?.Clan;
+            if (voterClan != null)
+            {
+                sb.AppendLine($"你的家族现状：影响力 {voterClan.Influence:F0}，封地 {voterClan.Settlements.Count} 处。");
+                var proposer = CuriaStore.FindHeroByEntityId(agenda.ProposerEntityId);
+                if (proposer != null)
+                    sb.AppendLine($"你与提议者{proposer.Name}的家族关系：{voterHero.GetRelation(proposer):F0}。");
+                var king = CuriaStore.GetKing(kingdom);
+                if (king != null && king != voterHero)
+                    sb.AppendLine($"你与国王{king.Name}的关系：{voterHero.GetRelation(king):F0}。");
+            }
+
+            try
+            {
+                if (agenda.Kind == CuriaAgendaKind.External)
+                {
+                    var target = CuriaStore.FindKingdom(agenda.TargetKingdomName);
+                    if (target != null)
+                    {
+                        var alliance = Campaign.Current?.GetCampaignBehavior<IAllianceCampaignBehavior>();
+                        var trade = Campaign.Current?.GetCampaignBehavior<ITradeAgreementsCampaignBehavior>();
+                        var isAlly = alliance != null && alliance.IsAllyWithKingdom(kingdom, target);
+                        var hasTrade = trade != null && trade.HasTradeAgreement(kingdom, target, out _);
+                        sb.AppendLine($"目标现状：{target.Name}；交战={kingdom.IsAtWarWith(target)}，同盟={isAlly}，贸易={hasTrade}。");
+                    }
+                }
+                else if (agenda.Type == CuriaAgendaType.TransferFief)
+                {
+                    var settlement = CuriaStore.FindSettlement(agenda.TargetSettlementName);
+                    if (settlement != null)
+                    {
+                        var garrison = settlement.Town?.GarrisonParty?.Party?.MemberRoster?.TotalManCount ?? 0;
+                        sb.AppendLine($"封地现状：{settlement.Name}（{settlement.OwnerClan?.Name}），守军约 {garrison}；新主 {agenda.NewOwnerClanName}。");
+                    }
+                }
+                else if (agenda.Type == CuriaAgendaType.ExpelClan)
+                {
+                    var targetClan = CuriaStore.FindClan(agenda.TargetClanId);
+                    if (targetClan != null)
+                        sb.AppendLine($"目标家族现状：{targetClan.Name}，封地 {targetClan.Settlements.Count} 处，领袖 {targetClan.Leader?.Name}。");
+                }
+            }
+            catch { }
         }
 
         public static string BuildDefensePrompt(CuriaAgenda agenda)

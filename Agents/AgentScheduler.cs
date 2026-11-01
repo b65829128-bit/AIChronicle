@@ -39,9 +39,9 @@ namespace AIChronicle
         /// <summary>调度优先级：0 最高（史官，永不跳过），4 最低（概率激活的自省）。</summary>
         public int Priority => Type switch
         {
-            ActivationEventType.YearlyChronicle or ActivationEventType.SpecialChronicle => 0,
-            ActivationEventType.KingDiplomacy or ActivationEventType.KingConsult
-                or ActivationEventType.CuriaVote or ActivationEventType.CuriaDefense => 1,
+            ActivationEventType.YearlyChronicle or ActivationEventType.SpecialChronicle
+                or ActivationEventType.CuriaVote or ActivationEventType.CuriaDefense => 0,
+            ActivationEventType.KingDiplomacy or ActivationEventType.KingConsult => 1,
             ActivationEventType.LetterReceived or ActivationEventType.EnvoyReceived => 2,
             ActivationEventType.BehaviorCheckIn or ActivationEventType.PlanCheckIn or ActivationEventType.FiefReview or ActivationEventType.ClanReplenishment => 3,
             _ => 4
@@ -133,6 +133,7 @@ namespace AIChronicle
             _warmupFrames = 120;
             _warmupFramesHistorian = 60;
             CuriaService.ResetForNewCampaign();
+            TokenBudget.Reset();
         }
 
         public static void RecordProposalActivation(string entityId)
@@ -301,6 +302,17 @@ namespace AIChronicle
             return false;
         }
 
+        private static bool TryPeekHighestPriority(out ActivationEvent evt)
+        {
+            for (int p = 0; p < _priorityQueues.Length; p++)
+            {
+                if (_priorityQueues[p].TryPeek(out evt!))
+                    return true;
+            }
+            evt = null!;
+            return false;
+        }
+
         private static int PendingEventCount()
         {
             int count = 0;
@@ -432,6 +444,16 @@ namespace AIChronicle
 
             CheckDelayedEvents();
 
+            // 全局后台 token 预算：超限时只推迟可延迟的后台事件；
+            // 朝议投票/史官有截止或年度节点，不推迟。事件留在队列里，预算恢复后继续。
+            if (TokenBudget.IsOverBudget
+                && TryPeekHighestPriority(out var throttled)
+                && TokenBudget.IsDeferrable(throttled.Type))
+            {
+                TokenBudget.LogDeferral();
+                return;
+            }
+
             if (!TryDequeueHighestPriority(out var evt))
             {
                 CheckYearAdvance();
@@ -458,7 +480,7 @@ namespace AIChronicle
 
         private static void CheckKingActivations()
         {
-            if (Campaign.Current == null) return;
+            if (Campaign.Current == null || TokenBudget.IsOverBudget) return;
             if (_warmupFrames > 0)
             {
                 _warmupFrames--;

@@ -217,10 +217,11 @@ namespace AIChronicle
                     case "query_agenda":
                         return ExecuteQueryAgenda(
                             args["agenda_id"]?.ToString() ?? "",
-                            args["history"]?.ToObject<bool>() ?? false);
+                            args["history"]?.ToObject<bool>() ?? false,
+                            args["detail"]?.ToObject<bool>() ?? false);
 
                     case "query_policies":
-                        return ExecuteQueryPolicies();
+                        return ExecuteQueryPolicies(args["policy_name"]?.ToString() ?? "");
 
                     case "end_alliance":
                         if (CuriaService.Enabled)

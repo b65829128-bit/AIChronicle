@@ -339,6 +339,42 @@ namespace AIChronicle
             }
         }
 
+        private int _backgroundTokenBudgetPer5Min = 500000;
+
+        [SettingPropertyInteger("后台 token 预算（每5分钟）", 0, 2000000, Order = 6, RequireRestart = false,
+            HintText = "滚动 5 分钟内后台 Agent 的 prompt token 上限。超限时推迟自省/国王政务/问询/密使等后台事件；玩家聊天、朝议投票与史官不受推迟。0 = 不限制。默认 500000。")]
+        [SettingPropertyGroup("游戏设置")]
+        public int BackgroundTokenBudgetPer5Min
+        {
+            get => _backgroundTokenBudgetPer5Min;
+            set
+            {
+                if (_backgroundTokenBudgetPer5Min != value)
+                {
+                    _backgroundTokenBudgetPer5Min = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _maxToolResultChars = 4000;
+
+        [SettingPropertyInteger("工具结果截断（字符）", 1000, 12000, Order = 7, RequireRestart = false,
+            HintText = "单次工具结果超过此长度时截断并提示 AI 用更精确的查询/读取；防止一次工具输出把后续每轮上下文撑大。默认 4000。")]
+        [SettingPropertyGroup("游戏设置")]
+        public int MaxToolResultChars
+        {
+            get => _maxToolResultChars;
+            set
+            {
+                if (_maxToolResultChars != value)
+                {
+                    _maxToolResultChars = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private int _chatHistoryLimit = 20;
 
         [SettingPropertyInteger("聊天历史上限（条）", 5, 100, Order = 5, RequireRestart = false,

@@ -35,18 +35,18 @@ namespace AIChronicle
                 : message;
         }
 
-        private static string ExecuteQueryPolicies()
+        private static string ExecuteQueryPolicies(string policyName)
         {
             var hero = AIChatClient.CurrentHero;
             if (hero == null) return "[错误] 无当前领主";
-            return CuriaService.QueryPoliciesForHero(hero);
+            return CuriaService.QueryPoliciesForHero(hero, policyName);
         }
 
-        private static string ExecuteQueryAgenda(string agendaId, bool history)
+        private static string ExecuteQueryAgenda(string agendaId, bool history, bool detail)
         {
             var hero = AIChatClient.CurrentHero;
             if (hero == null) return "[错误] 无当前领主";
-            return CuriaService.QueryForHero(hero, agendaId, history);
+            return CuriaService.QueryForHero(hero, agendaId, history, detail);
         }
     }
 }
