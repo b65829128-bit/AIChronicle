@@ -49,8 +49,14 @@ Key design principles:
 - **O** key: unified correspondence panel — every lord you've ever spoken to, unread badge counters.
 - Writing a letter sends a *real* letter; delivery takes real game time based on distance. Replies arrive in the same thread.
 
+### Curia (Council)
+- **M** opens the CEF political hub: **Curia / Diplomacy / Fiefs / Secret Counsel / Secretary**.
+- Seven agenda types: declare war, propose peace, propose trade, propose alliance, break alliance, transfer a vassal fief, expel a clan. Vassal clan leaders vote (mercenaries cannot); the king and player are always summoned; the targeted clan defends instead of voting.
+- Weighted by `DiplomacyModel.GetClanStrength`; 50% threshold for war/peace/trade, 2/3 for fief/expel; quorum 50%; configurable full-council threshold (default 6) and attendance cap.
+- Passed agendas execute real game actions; rejected ones do nothing. Every record is public within the realm, readable by the historian, written into AI diaries and the chronicle.
+
 ### AI Diplomacy
-- AI kings declare war, propose peace / alliance / trade, grant fiefs — the other king's agent reviews and responds.
+- AI kings initiate war / peace / trade through the Curia; alliance remains a direct royal proposal. The other king's agent reviews and responds.
 - Proposals are stored in `World/diplomacy/` and processed asynchronously by the scheduler.
 - Vanilla diplomacy can be fully replaced ("Ban Vanilla Diplomacy") so all diplomacy flows through the mod.
 
@@ -109,7 +115,7 @@ Each scenario (conversation / historian / diplomacy / correspondence / etc.) can
 |---|---|
 | **O** | Correspondence panel |
 | **H** | History (chronicle) screen |
-| **M** | Secretariate (player administrative assistant) |
+| **M** | Political hub: Curia / diplomacy / fiefs / secret counsel / secretary (query-only) |
 
 ## Project Structure
 

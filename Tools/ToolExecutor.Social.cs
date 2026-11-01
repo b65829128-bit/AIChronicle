@@ -458,7 +458,7 @@ namespace AIChronicle
         }
 
         /// <summary>国王外交问询：遣使问询另一王国国王，激活对方（KingConsult 事件）。问询落盘 World/diplomacy/consults/，史官可读。</summary>
-        private static string ExecuteConsultKing(string targetKingdomName, string message)
+        internal static string ExecuteConsultKing(string targetKingdomName, string message)
         {
             if (string.IsNullOrWhiteSpace(message))
                 return "[错误] 问询内容不能为空";
@@ -516,7 +516,7 @@ namespace AIChronicle
         }
 
         /// <summary>回复外交问询：向另一王国国王回话，落盘到双方问询线程。</summary>
-        private static string ExecuteReplyConsult(string targetKingdomName, string message)
+        internal static string ExecuteReplyConsult(string targetKingdomName, string message)
         {
             if (string.IsNullOrWhiteSpace(message))
                 return "[错误] 答复内容不能为空";

@@ -98,9 +98,9 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | 引擎层 | `Core/` | SubModule 入口、MCM 设置、LLM Provider 抽象、TTS、基础设施 |
 | Agent 核心 | `Agents/` | ContextBuilder、AIChatClient、AgentManager、调度器、记忆 |
 | Entity | `Entities/` | 玩家/NPC 统一抽象 |
-| 工具执行 | `Tools/` | 51 游戏工具 + 19 文件/通信工具（按领域拆 partial） |
-| 界面 | `UI/` | 原生 Kit（`UI/Kit`）+ CEF 页面宿主/全 Web 史书（`UI/Web`）+ 聊天/书信 ViewModel |
-| 游戏系统 | `Systems/` | 外交、历史记录、Harmony 补丁 |
+| 工具执行 | `Tools/` | 55 游戏工具 + 17 文件/通信工具（按领域拆 partial；含 `ToolExecutor.Curia.cs`） |
+| 界面 | `UI/` | 原生 Kit（`UI/Kit`）+ CEF 页面宿主/全 Web 史书/朝议参政页（`UI/Web`）+ 聊天/书信 ViewModel |
+| 游戏系统 | `Systems/` | 外交、朝议（`Curia*.cs`）、历史记录、Harmony 补丁 |
 
 完整目录结构见 `docs/architecture.md` 第 17 节。
 
@@ -155,14 +155,15 @@ stat -c '%s' "$BANNERLORD_GAME_DIR/Modules/AIChronicle/SubModule.xml"
 | 文档 | 内容 |
 |------|------|
 | `docs/architecture.md` | 架构详解（单一模型/场景连接/Provider 抽象/信息隔离完整表/扩展方式/提示词克制原则/记忆系统/流式架构/完整目录结构） |
-| `docs/subsystems.md` | 子系统机制（信件激活/封臣自省/内政/盟约到期/历史系统） |
-| `docs/tools-reference.md` | 70 工具完整清单 + 工具分类系统 |
+| `docs/subsystems.md` | 子系统机制（信件激活/封臣自省/朝议/内政/盟约到期/历史系统） |
+| `docs/tools-reference.md` | 72 工具完整清单 + 工具分类系统 |
 | `docs/debugging.md` | 调试方法/日志位置/生命周期陷阱/故障排查 |
 | `docs/harmony.md` | Harmony 补丁模式/BLSource 搜索指南/创建新模组 |
 | `docs/linux-dev.md` | Linux 开发工作流（环境/构建/部署/打包/Proton 运行/日志/调试边界） |
 | `docs/ui-framework.md` | 原生 Kit UI 框架（主题/组件/屏幕基类/Gallery/迁移规则） |
 | `docs/ui-web.md` | CEF live 页面（CefSharp/CefBridge/输入/BGRA 转换/性能与限制） |
 | `docs/plan-history-cef.md` | 全 Web 史书 MVP 状态与收尾计划（HistoryArchive/边界/清晰度） |
+| `docs/plan-curia.md` | 朝议（Curia）设计契约（议程/应召/权重/门槛/执行器/UI/提示词/测试） |
 | `docs/i18n-plan.md` | 中英双语（i18n）长线方案（规划，不实现） |
 
 ## 7. Git 提交

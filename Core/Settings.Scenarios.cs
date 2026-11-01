@@ -321,7 +321,7 @@ namespace AIChronicle
 
         [SettingPropertyText("URL", Order = 1, RequireRestart = false,
             HintText = "本场景专属 API 地址。留空则使用「连接设置（兜底）」中的地址。")]
-        [SettingPropertyGroup("封臣谏言场景", GroupOrder = 5)]
+        [SettingPropertyGroup("封臣自省场景", GroupOrder = 5)]
         public string AdvisoryApiUrl
         {
             get => _advisoryApiUrl;
@@ -339,7 +339,7 @@ namespace AIChronicle
 
         [SettingPropertyText("模型", Order = 2, RequireRestart = false,
             HintText = "本场景专属模型名称。留空则使用「连接设置（兜底）」中的模型。")]
-        [SettingPropertyGroup("封臣谏言场景", GroupOrder = 5)]
+        [SettingPropertyGroup("封臣自省场景", GroupOrder = 5)]
         public string AdvisoryModel
         {
             get => _advisoryModel;
@@ -357,7 +357,7 @@ namespace AIChronicle
 
         [SettingPropertyText("API 密钥", Order = 3, RequireRestart = false,
             HintText = "本场景专属 API 密钥。留空则使用「连接设置（兜底）」中的密钥。")]
-        [SettingPropertyGroup("封臣谏言场景", GroupOrder = 5)]
+        [SettingPropertyGroup("封臣自省场景", GroupOrder = 5)]
         public string AdvisoryApiKey
         {
             get => _advisoryApiKey;
@@ -375,7 +375,7 @@ namespace AIChronicle
 
         [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
             HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
-        [SettingPropertyGroup("封臣谏言场景", GroupOrder = 5)]
+        [SettingPropertyGroup("封臣自省场景", GroupOrder = 5)]
         public MCM.Common.Dropdown<string> AdvisoryProviderType
         {
             get => _advisoryProviderType;
@@ -391,7 +391,7 @@ namespace AIChronicle
 
         [SettingPropertyButton("测试", Content = "测试此场景", Order = 5,
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
-        [SettingPropertyGroup("封臣谏言场景", GroupOrder = 5)]
+        [SettingPropertyGroup("封臣自省场景", GroupOrder = 5)]
         public Action AdvisoryTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("advisory"); };
 
         private string _clanReplenishmentApiUrl = "";
@@ -778,5 +778,82 @@ namespace AIChronicle
             RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
         [SettingPropertyGroup("秘书处场景", GroupOrder = 10)]
         public Action ChanceryTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("chancery"); };
+
+        private string _curiaApiUrl = "";
+
+        [SettingPropertyText("URL", Order = 1, RequireRestart = false,
+            HintText = "朝议场景专属 API 地址。留空则使用「连接设置（兜底）」中的地址。")]
+        [SettingPropertyGroup("朝议场景", GroupOrder = 11)]
+        public string CuriaApiUrl
+        {
+            get => _curiaApiUrl;
+            set
+            {
+                if (_curiaApiUrl != value)
+                {
+                    _curiaApiUrl = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _curiaModel = "";
+
+        [SettingPropertyText("模型", Order = 2, RequireRestart = false,
+            HintText = "朝议场景专属模型名称。留空则使用「连接设置（兜底）」中的模型。投票题很短，建议配便宜模型。")]
+        [SettingPropertyGroup("朝议场景", GroupOrder = 11)]
+        public string CuriaModel
+        {
+            get => _curiaModel;
+            set
+            {
+                if (_curiaModel != value)
+                {
+                    _curiaModel = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _curiaApiKey = "";
+
+        [SettingPropertyText("API 密钥", Order = 3, RequireRestart = false,
+            HintText = "朝议场景专属 API 密钥。留空则使用「连接设置（兜底）」中的密钥。")]
+        [SettingPropertyGroup("朝议场景", GroupOrder = 11)]
+        public string CuriaApiKey
+        {
+            get => _curiaApiKey;
+            set
+            {
+                if (_curiaApiKey != value)
+                {
+                    _curiaApiKey = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private MCM.Common.Dropdown<string> _curiaProviderType = new(new[] { "跟随兜底", "OpenAI 兼容", "DeepSeek", "GLM", "MiMo", "Qwen（百炼）" }, 0);
+
+        [SettingPropertyDropdown("接口类型", Order = 4, RequireRestart = false,
+            HintText = "本场景接口方言。跟随兜底 = 用全局「接口类型」；其余为显式覆盖。")]
+        [SettingPropertyGroup("朝议场景", GroupOrder = 11)]
+        public MCM.Common.Dropdown<string> CuriaProviderType
+        {
+            get => _curiaProviderType;
+            set
+            {
+                if (_curiaProviderType != value)
+                {
+                    _curiaProviderType = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        [SettingPropertyButton("测试", Content = "测试此场景", Order = 5,
+            RequireRestart = false, HintText = "用本场景生效配置（留空字段回退到兜底）测试 API 连通性与 function calling 支持。")]
+        [SettingPropertyGroup("朝议场景", GroupOrder = 11)]
+        public Action CuriaTestConnection { get; set; } = () => { _ = AIChatClient.TestConnection("curia"); };
     }
 }

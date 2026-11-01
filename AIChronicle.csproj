@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>2.3.0</Version>
+    <Version>2.4.0</Version>
     <!-- Linux 只编 Steam 版 net472；Windows 仍可编 net472 + net6(Xbox/Store) -->
     <TargetFrameworks>net472</TargetFrameworks>
     <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">net472;net6</TargetFrameworks>

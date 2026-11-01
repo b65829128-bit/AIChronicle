@@ -27,6 +27,9 @@ namespace AIChronicle
         {
             var hero = AIChatClient.CurrentHero;
             if (hero == null) return "[错误] 无当前领主";
+            // 玩家快速换国/雇佣兵入口已移除：使用原版家族/王国界面，避免绕过朝议与外交
+            if (hero == Hero.MainHero)
+                return "[错误] 玩家快速换国/雇佣兵入口已移除，请使用原版家族/王国界面。";
             if (hero.Clan == null) return "[错误] 你不属于任何氏族";
             if (hero.Clan.Leader != hero) return "[错误] 只有氏族领袖才能改变阵营";
             var clan = hero.Clan;

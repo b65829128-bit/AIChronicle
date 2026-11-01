@@ -92,11 +92,12 @@ namespace AIChronicle
             // 新战役开始：递增主线程队列 epoch，丢弃上一局未消费的动作。
             // 放在 base 之前，确保 base/行为初始化期间投递的动作也属于新 epoch。
             MainThreadExecutor.BeginCampaign();
+            CuriaService.ResetForNewCampaign();
 
             base.OnGameStart(game, gameStarter);
 
             InformationManager.DisplayMessage(new InformationMessage(
-                "[AI编年史] O键=书信往来 | H键=史书 | M键=秘书处",
+                "[AI编年史] O键=书信往来 | H键=史书 | M键=参政（朝议/外交/封地/密陈/秘书查询）",
                 Colors.Green));
 
             if (game.GameType is Campaign && gameStarter is CampaignGameStarter starter)
@@ -165,6 +166,19 @@ namespace AIChronicle
                         var dialogHarmony = new Harmony("AIChronicle.CallToWarDialog");
                         dialogHarmony.Patch(callToWarDialogM,
                             prefix: new HarmonyMethod(typeof(SubModule).GetMethod(nameof(BlockCallToWarDialog), BindingFlags.Static | BindingFlags.NonPublic)));
+                    }
+                }
+
+                // 朝议接管驱逐家族：启用朝议时取消原版 ExpelClanFromKingdomDecision（Election 类，PatchAll 会静默跳过）
+                var expelType = Type.GetType("TaleWorlds.CampaignSystem.Election.ExpelClanFromKingdomDecision, TaleWorlds.CampaignSystem");
+                if (expelType != null)
+                {
+                    var isAllowedM = expelType.GetMethod("IsAllowed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (isAllowedM != null)
+                    {
+                        var expelHarmony = new Harmony("AIChronicle.CuriaExpel");
+                        expelHarmony.Patch(isAllowedM,
+                            prefix: new HarmonyMethod(typeof(SubModule).GetMethod(nameof(BlockExpelClanDecision), BindingFlags.Static | BindingFlags.NonPublic)));
                     }
                 }
 
@@ -271,8 +285,28 @@ namespace AIChronicle
             var mDown = Input.IsKeyDown(InputKey.M);
             if (mDown && !_prevChanceryP && IsPlayerFreeOnMap())
             {
+#if NET472
+                if (CuriaCefScreen.IsOpen)
+                {
+                    CuriaCefScreen.Close();
+                }
+                else if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen && !HistoryScreen.IsOpen && !KitScreen.AnyOpen)
+                {
+                    if (MySettings.Instance?.CuriaEnabled != false && CuriaCefScreen.Open())
+                    {
+                        // 参政页已打开
+                    }
+                    else
+                    {
+                        AIChatScreen.OpenChancery();
+                        InformationManager.DisplayMessage(new InformationMessage(
+                            "[AI编年史] 参政页不可用，已回退为秘书处查询（仅查询）。", Colors.Yellow));
+                    }
+                }
+#else
                 if (!AIChatScreen.IsOpen && !LetterListScreen.IsOpen && !HistoryScreen.IsOpen && !KitScreen.AnyOpen)
                     AIChatScreen.OpenChancery();
+#endif
             }
             _prevChanceryP = mDown;
 
@@ -454,7 +488,7 @@ namespace AIChronicle
         {
             if (MySettings.Instance?.BanVanillaDiplomacy == true)
             {
-                disabledReason = new TextObject("外交已被接管，请使用 M 键秘书处处理外交事务。");
+                disabledReason = new TextObject("外交已被接管，请使用 M 键参政页（朝议）处理外交事务。");
                 __result = false;
                 return false;
             }
@@ -471,6 +505,17 @@ namespace AIChronicle
             {
                 __result = false;
                 return false; // 跳过原 IsAllowed → 决策在触发前被取消，不再出现国内投票
+            }
+            return true;
+        }
+
+        /// <summary>朝议启用时取消原版驱逐家族决策（改由朝议 expel_clan 议题处理）。</summary>
+        private static bool BlockExpelClanDecision(ref bool __result)
+        {
+            if (CuriaService.Enabled)
+            {
+                __result = false;
+                return false;
             }
             return true;
         }

@@ -352,7 +352,7 @@
   {
     "name": "declare_war",
     "category": "diplomacy",
-    "description": "Declare war on another kingdom. This is a unilateral action — no consent needed from the target.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom (king/queen).\n- The target_kingdom is the kingdom to declare war on, by Chinese or English name.\n- message: a declaration statement explaining your reasons. This will be publicly known.\n- This takes effect immediately. All current trade agreements with the target will be terminated.\n- Use query_war_status first to evaluate whether war is advisable.\n- Do NOT declare war on your own kingdom or your allies.",
+    "description": "[CURIA] 主动宣战在朝议启用时被拒绝；请用 propose_agenda(type=\"declare_war\", target_kingdom=..., reason=...)。本工具只保留给朝议关闭时的旧模式。\n\nDeclare war on another kingdom. This is a unilateral action — no consent needed from the target.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom (king/queen).\n- The target_kingdom is the kingdom to declare war on, by Chinese or English name.\n- message: a declaration statement explaining your reasons. This will be publicly known.\n- This takes effect immediately. All current trade agreements with the target will be terminated.\n- Use query_war_status first to evaluate whether war is advisable.\n- Do NOT declare war on your own kingdom or your allies.",
     "parameters": [
       {
         "name": "target_kingdom",
@@ -369,7 +369,7 @@
   {
     "name": "propose_peace",
     "category": "diplomacy",
-    "description": "Propose a peace treaty to end a war with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You must be at war with the target kingdom.\n- tribute_amount: daily tribute to transfer. Positive = you pay them, negative = they pay you. 0 for no tribute.\n- tribute_days: how many days the tribute lasts.\n- message: a personal statement to the other ruler. Explain why you want peace, any terms, etc.\n- This is NOT unilateral — the other ruler decides. Be prepared for rejection.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
+    "description": "[CURIA] 主动议和在朝议启用时被拒绝；请用 propose_agenda(type=\"propose_peace\", target_kingdom=..., reason=...)。\n\nPropose a peace treaty to end a war with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You must be at war with the target kingdom.\n- tribute_amount: daily tribute to transfer. Positive = you pay them, negative = they pay you. 0 for no tribute.\n- tribute_days: how many days the tribute lasts.\n- message: a personal statement to the other ruler. Explain why you want peace, any terms, etc.\n- This is NOT unilateral — the other ruler decides. Be prepared for rejection.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
     "parameters": [
       {
         "name": "target_kingdom",
@@ -396,7 +396,7 @@
   {
     "name": "propose_alliance",
     "category": "diplomacy",
-    "description": "Propose a military alliance with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You cannot propose alliance if you are at war with the target.\n- Each kingdom can have at most 2 alliances (game rule).\n- An alliance lasts for a limited duration (84 days default).\n- message: a personal statement to the other ruler explaining why you seek this alliance.\n- This is NOT unilateral — the other ruler decides.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
+    "description": "[CURIA] 结盟/背盟在朝议启用时被拒绝；请用 propose_agenda(type=\"propose_alliance\", target_kingdom=..., reason=...)。\n\nPropose a military alliance with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You cannot propose alliance if you are at war with the target.\n- Each kingdom can have at most 2 alliances (game rule).\n- An alliance lasts for a limited duration (84 days default).\n- message: a personal statement to the other ruler explaining why you seek this alliance.\n- This is NOT unilateral — the other ruler decides.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
     "parameters": [
       {
         "name": "target_kingdom",
@@ -413,7 +413,7 @@
   {
     "name": "propose_trade",
     "category": "diplomacy",
-    "description": "Propose a trade agreement with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You cannot propose trade if you are at war with the target.\n- Each kingdom can have at most 2 trade agreements (game rule).\n- Trade agreements generate gold when caravans visit partner towns.\n- message: a personal statement to the other ruler explaining why you seek this trade agreement.\n- This is NOT unilateral — the other ruler decides.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
+    "description": "[CURIA] 主动贸易提议在朝议启用时被拒绝；请用 propose_agenda(type=\"propose_trade\", target_kingdom=..., reason=...)。\n\nPropose a trade agreement with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You cannot propose trade if you are at war with the target.\n- Each kingdom can have at most 2 trade agreements (game rule).\n- Trade agreements generate gold when caravans visit partner towns.\n- message: a personal statement to the other ruler explaining why you seek this trade agreement.\n- This is NOT unilateral — the other ruler decides.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
     "parameters": [
       {
         "name": "target_kingdom",
@@ -430,7 +430,7 @@
   {
     "name": "end_alliance",
     "category": "diplomacy",
-    "description": "Unilaterally end an alliance with another kingdom. No confirmation from the other ruler is needed.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- The target must currently be your ally.\n- This is a unilateral sovereign decision — it takes effect immediately.\n- Use this when an alliance has outlived its purpose, is no longer trustworthy, or you no longer want to be bound to the ally's wars.\n- Consider the 名分 (justification): ending an alliance is a serious diplomatic act that may be seen as betraying a friend.",
+    "description": "[CURIA] 结盟/背盟在朝议启用时被拒绝；请用 propose_agenda(type=\"break_alliance\", target_kingdom=..., reason=...)。\n\nUnilaterally end an alliance with another kingdom. No confirmation from the other ruler is needed.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- The target must currently be your ally.\n- This is a unilateral sovereign decision — it takes effect immediately.\n- Use this when an alliance has outlived its purpose, is no longer trustworthy, or you no longer want to be bound to the ally's wars.\n- Consider the 名分 (justification): ending an alliance is a serious diplomatic act that may be seen as betraying a friend.",
     "parameters": [
       {
         "name": "target_kingdom",
@@ -477,7 +477,7 @@
   {
     "name": "gift_fief",
     "category": "diplomacy",
-    "description": "Transfer a fief (town or castle) from one clan to another within your kingdom. This is a unilateral king's decree — no voting or election.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom (king/queen).\n- The settlement_name is the fief to transfer (town or castle name, in Chinese or English). Villages cannot be transferred independently — they follow their bound town/castle.\n- The target_entity_id specifies WHICH clan leader receives the fief, by entity ID or Chinese name.\n- The target must be a non-mercenary clan leader in your kingdom.\n- The fief must currently belong to some clan within your kingdom.\n- Do NOT use this for mercenary clans — mercenaries cannot hold fiefs.\n- This takes effect immediately with no election or voting process.\n- If you take a fief away from its current owner (not yourself), you must be able to justify it — provide a clear reason in the 'reason' parameter (师出有名). The deprived clan will learn of your reason and may react.\n- Call query_kingdom_settlements first to see what fiefs are available, and query_kingdom_clans to see eligible recipients.",
+    "description": "[CURIA] 只能转让统治者自己家族的封地；转让其他家族封地会被拒绝，请用 propose_agenda(type=\"transfer_fief\", ...)。\n\nTransfer a fief (town or castle) from one clan to another within your kingdom. This is a unilateral king's decree — no voting or election.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom (king/queen).\n- The settlement_name is the fief to transfer (town or castle name, in Chinese or English). Villages cannot be transferred independently — they follow their bound town/castle.\n- The target_entity_id specifies WHICH clan leader receives the fief, by entity ID or Chinese name.\n- The target must be a non-mercenary clan leader in your kingdom.\n- The fief must currently belong to some clan within your kingdom.\n- Do NOT use this for mercenary clans — mercenaries cannot hold fiefs.\n- This takes effect immediately with no election or voting process.\n- If you take a fief away from its current owner (not yourself), you must be able to justify it — provide a clear reason in the 'reason' parameter (师出有名). The deprived clan will learn of your reason and may react.\n- Call query_kingdom_settlements first to see what fiefs are available, and query_kingdom_clans to see eligible recipients.",
     "parameters": [
       {
         "name": "settlement_name",
@@ -763,6 +763,99 @@
         "name": "is_mercenary",
         "type": "boolean",
         "description": "true = serve the kingdom as a mercenary band; false/omit = become a vassal clan."
+      }
+    ]
+  },
+  {
+    "name": "propose_agenda",
+    "category": "council",
+    "description": "Propose a formal agenda (朝议) to the kingdom's council. Only clan leaders of a kingdom may propose; mercenaries cannot. The proposal is public and its reason is shown to every summoned clan leader and the historian.\n\nUsage:\n- Call this when you want the kingdom to take one of seven formal actions: declare war, propose peace, propose trade, propose alliance, break alliance, transfer a vassal fief, or expel a clan.\n- type must be one of: declare_war, propose_peace, propose_trade, propose_alliance, break_alliance, transfer_fief, expel_clan.\n- For declare_war/propose_peace/propose_trade/propose_alliance/break_alliance: set target_kingdom to the other kingdom's Chinese name or StringId.\n- For transfer_fief: set settlement_name to the town/castle and new_owner_entity_id to the new owner clan leader's entity id or name. Only the king (confiscation/reassignment) or the fief's current owner clan leader (voluntary transfer) may propose. The ruler clan's own fiefs are free to transfer and cannot be targeted by an agenda.\n- For expel_clan: set target_clan_name; only the king may propose; the target clan's clan leader is summoned to defend but does not vote.\n- reason is mandatory: write the political justification in Chinese, as it will be recorded in the agenda archive and the chronicle.\n- Only one agenda may be active per kingdom; the proposer automatically supports the proposal.\n- Do NOT call this for responding to a foreign proposal or for routine military movement. Alliance proposals and breaking alliances are agenda types here.",
+    "parameters": [
+      {
+        "name": "type",
+        "type": "string",
+        "description": "Agenda type: declare_war | propose_peace | propose_trade | transfer_fief | expel_clan"
+      },
+      {
+        "name": "target_kingdom",
+        "type": "string",
+        "description": "Target kingdom name or StringId for declare_war/propose_peace/propose_trade. Use empty string otherwise."
+      },
+      {
+        "name": "settlement_name",
+        "type": "string",
+        "description": "Target town/castle name for transfer_fief. Use empty string otherwise."
+      },
+      {
+        "name": "new_owner_entity_id",
+        "type": "string",
+        "description": "New owner clan leader entity id or name for transfer_fief. Use empty string otherwise."
+      },
+      {
+        "name": "target_clan_name",
+        "type": "string",
+        "description": "Target clan name for expel_clan. Use empty string otherwise."
+      },
+      {
+        "name": "reason",
+        "type": "string",
+        "description": "Mandatory political justification in Chinese. Shown to all voters, recorded in the agenda archive and the chronicle."
+      }
+    ]
+  },
+  {
+    "name": "respond_to_agenda",
+    "category": "council",
+    "description": "Cast your clan's vote on the active kingdom agenda (朝议). Only a clan leader who was summoned as a voter may call this.\n\nUsage:\n- Call this when you are summoned to vote and have decided your stance.\n- stance must be support, oppose, or abstain.\n- reason is optional but strongly encouraged: one short sentence in Chinese explaining your family's interest. It is public and recorded in the agenda archive, your diary, and the chronicle.\n- Your vote is weighted by your clan's strength (GetClanStrength). The agenda passes if weighted support / (support + oppose) reaches the threshold and the summoned weight meets quorum.\n- Do NOT call this if you are the targeted clan (you defend with defend_agenda instead) or if you were not summoned.\n- Only do this one thing; do not send letters or take military action in the same activation.",
+    "parameters": [
+      {
+        "name": "agenda_id",
+        "type": "string",
+        "description": "Optional agenda id; omit to use the active agenda of your kingdom."
+      },
+      {
+        "name": "stance",
+        "type": "string",
+        "description": "support | oppose | abstain"
+      },
+      {
+        "name": "reason",
+        "type": "string",
+        "description": "Optional one-sentence reason in Chinese, shown publicly and recorded."
+      }
+    ]
+  },
+  {
+    "name": "defend_agenda",
+    "category": "council",
+    "description": "Defend your clan against an active agenda that targets it (fief confiscation or expulsion). Only the targeted clan leader may call this, before the vote starts.\n\nUsage:\n- Call this when you are the target of a transfer_fief (imposed by the king) or expel_clan agenda and have been summoned to defend.\n- reason is your public defense in Chinese: loyalty, war record, governance, family ties, rebuttal, or offered concessions. It is shown to all voters and recorded in the agenda archive and the chronicle.\n- After your defense the agenda proceeds to a vote. You do not vote on an agenda that targets you.\n- You may also lobby other clan leaders with send_letter/send_envoy, but only do the defense in this activation if you want to keep it focused.",
+    "parameters": [
+      {
+        "name": "agenda_id",
+        "type": "string",
+        "description": "Optional agenda id; omit to use the active agenda of your kingdom."
+      },
+      {
+        "name": "reason",
+        "type": "string",
+        "description": "Your public defense in Chinese, shown to all voters and recorded."
+      }
+    ]
+  },
+  {
+    "name": "query_agenda",
+    "category": "query",
+    "description": "Query the public agenda record of your kingdom (朝议). Returns the active agenda or the recent history, including proposer, reason, terms, target defense, every summoned clan's weight/stance/reason, absent clans, quorum, threshold, and outcome.\n\nUsage:\n- Call this when you need to know what the kingdom is currently voting on, why, who supports or opposes it, or how a past agenda ended.\n- Omit agenda_id to get the active agenda; set history=true for recent resolved agendas; set agenda_id to read a specific record.\n- The same record is public to all vassals of the kingdom and to the historian; other kingdoms cannot read it.\n- Clan leaders who were not summoned can still read the record; they simply do not vote.",
+    "parameters": [
+      {
+        "name": "agenda_id",
+        "type": "string",
+        "description": "Optional specific agenda id. Omit for the active agenda."
+      },
+      {
+        "name": "history",
+        "type": "boolean",
+        "description": "If true, list recent resolved agendas instead of the active one."
       }
     ]
   }

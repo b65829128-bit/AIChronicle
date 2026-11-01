@@ -101,6 +101,30 @@ namespace AIChronicle
             return "已记入日记。";
         }
 
+        /// <summary>
+        /// 系统代写的日记条目（朝议等结构化事件用）：沿用 [年季节日] 类型：内容 格式。
+        /// 只给 AI 实体写；玩家（Controller=Human）不写，避免污染玩家档案。
+        /// </summary>
+        public static void AppendSystemDiary(string entityId, string type, string content)
+        {
+            if (string.IsNullOrWhiteSpace(entityId) || string.IsNullOrWhiteSpace(type) || string.IsNullOrWhiteSpace(content))
+                return;
+            try
+            {
+                var entity = EntityManager.GetOrCreateEntityById(entityId);
+                if (entity == null || entity.Controller == EntityController.Human)
+                    return;
+                var dir = EntityManager.GetEntityDirectory(entityId);
+                Directory.CreateDirectory(Path.Combine(dir, "decisions"));
+                var line = $"{GetDiaryDatePrefix()} {type}：{content.Replace("\r", "").Replace("\n", " ").Trim()}";
+                SafeFileIO.AppendAllText(Path.Combine(dir, "decisions", "diary.txt"), line + Environment.NewLine);
+            }
+            catch
+            {
+                // 日记失败不影响朝议结算
+            }
+        }
+
         public static string ExecuteGrep(string pattern, string path, int maxResults, int contextLines, bool caseSensitive)
         {
             if (string.IsNullOrEmpty(pattern))

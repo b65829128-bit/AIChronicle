@@ -558,7 +558,7 @@ namespace AIChronicle
         private bool _advisoryEnabled = true;
 
         [SettingPropertyBool("启用封臣自省/谏言", Order = 13, RequireRestart = false,
-            HintText = "开启后每天每王国有概率触发一位氏族领袖自省（封臣+佣兵+独立领袖，排除玩家和国王）。\n自省=处理自身事务，谏言只是其中一个选项；自省动作经 World/advisory/ 与 World/correspondence/ 落盘。\n关闭后封臣不再自省。")]
+            HintText = "开启后每天每王国有概率触发一位氏族领袖自省（封臣+佣兵+独立领袖，排除玩家和国王）。\n自省=处理自身事务，提议朝议/密陈只是其中选项；自省动作经 propose_agenda / World/curia/ 与 World/correspondence/ 落盘。\n关闭后封臣不再自省。")]
         [SettingPropertyGroup("游戏设置")]
         public bool AdvisoryEnabled
         {
@@ -748,6 +748,206 @@ namespace AIChronicle
                 if (_disableClanDiscontinuation != value)
                 {
                     _disableClanDiscontinuation = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        // ================= 朝议（Curia） =================
+
+        private bool _curiaEnabled = true;
+
+        [SettingPropertyBool("启用朝议", Order = 0, RequireRestart = false,
+            HintText = "开启后，宣战/议和提议/贸易提议/结盟提议/退出盟约/封臣封地转让/驱逐家族七类行动经由王国朝议表决；公开谏言与诏令被朝议取代。\n关闭则恢复旧工具（不推荐）。")]
+        [SettingPropertyGroup("朝议")]
+        public bool CuriaEnabled
+        {
+            get => _curiaEnabled;
+            set
+            {
+                if (_curiaEnabled != value)
+                {
+                    _curiaEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _curiaFullCouncilThreshold = 6;
+
+        [SettingPropertyInteger("全量阈值（家族数）", 2, 20, Order = 1, RequireRestart = false,
+            HintText = "合格封臣家族数 ≤ 此值时全部投票；超过此值启用应召制（固定+利害+权重+轮换，控制 LLM 成本）。默认 6。")]
+        [SettingPropertyGroup("朝议")]
+        public int CuriaFullCouncilThreshold
+        {
+            get => _curiaFullCouncilThreshold;
+            set
+            {
+                if (_curiaFullCouncilThreshold != value)
+                {
+                    _curiaFullCouncilThreshold = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _curiaAttendanceCap = 6;
+
+        [SettingPropertyInteger("应召上限（家族数）", 2, 20, Order = 2, RequireRestart = false,
+            HintText = "应召制下最多激活多少个 AI 家族投票。软上限：若未达到 quorum，会继续按权重补人。默认 6。")]
+        [SettingPropertyGroup("朝议")]
+        public int CuriaAttendanceCap
+        {
+            get => _curiaAttendanceCap;
+            set
+            {
+                if (_curiaAttendanceCap != value)
+                {
+                    _curiaAttendanceCap = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private bool _curiaForceFullCouncil = false;
+
+        [SettingPropertyBool("强制全量朝议", Order = 3, RequireRestart = false,
+            HintText = "开启后每次朝议都激活所有合格封臣家族（成本高）。默认关闭，仅在小家族数或调试时使用。")]
+        [SettingPropertyGroup("朝议")]
+        public bool CuriaForceFullCouncil
+        {
+            get => _curiaForceFullCouncil;
+            set
+            {
+                if (_curiaForceFullCouncil != value)
+                {
+                    _curiaForceFullCouncil = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _curiaVoteDays = 5;
+
+        [SettingPropertyInteger("投票天数", 1, 15, Order = 4, RequireRestart = false,
+            HintText = "朝议表决窗口（游戏天）。全部应召者表态可提前结算；到期未表态视为弃权。默认 5。")]
+        [SettingPropertyGroup("朝议")]
+        public int CuriaVoteDays
+        {
+            get => _curiaVoteDays;
+            set
+            {
+                if (_curiaVoteDays != value)
+                {
+                    _curiaVoteDays = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private float _curiaQuorum = 0.5f;
+
+        [SettingPropertyFloatingInteger("出席 quorum", 0.3f, 0.9f, Order = 5, RequireRestart = false,
+            HintText = "应召者总权重占全国合格选民总权重的最低比例；不足则流会（不通过）。默认 0.5。")]
+        [SettingPropertyGroup("朝议")]
+        public float CuriaQuorum
+        {
+            get => _curiaQuorum;
+            set
+            {
+                if (Math.Abs(_curiaQuorum - value) > 0.001f)
+                {
+                    _curiaQuorum = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private float _curiaWarThreshold = 0.5f;
+
+        [SettingPropertyFloatingInteger("战/和/贸/结盟门槛", 0.5f, 0.9f, Order = 6, RequireRestart = false,
+            HintText = "宣战/议和提议/贸易提议/结盟提议的通过门槛：支持权重 /（支持+反对）≥ 此值。默认 0.5。")]
+        [SettingPropertyGroup("朝议")]
+        public float CuriaWarThreshold
+        {
+            get => _curiaWarThreshold;
+            set
+            {
+                if (Math.Abs(_curiaWarThreshold - value) > 0.001f)
+                {
+                    _curiaWarThreshold = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private float _curiaFiefThreshold = 0.66f;
+
+        [SettingPropertyFloatingInteger("封地/驱逐/背盟门槛", 0.5f, 0.9f, Order = 7, RequireRestart = false,
+            HintText = "封地转让/驱逐家族/退出盟约的通过门槛。默认 0.66（2/3），保护封臣财产与盟约。")]
+        [SettingPropertyGroup("朝议")]
+        public float CuriaFiefThreshold
+        {
+            get => _curiaFiefThreshold;
+            set
+            {
+                if (Math.Abs(_curiaFiefThreshold - value) > 0.001f)
+                {
+                    _curiaFiefThreshold = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _curiaProposalCooldownDays = 3;
+
+        [SettingPropertyInteger("提议冷却（天）", 0, 30, Order = 8, RequireRestart = false,
+            HintText = "同一家族领袖两次提议之间的最小间隔（游戏天），防止刷议题。默认 3。")]
+        [SettingPropertyGroup("朝议")]
+        public int CuriaProposalCooldownDays
+        {
+            get => _curiaProposalCooldownDays;
+            set
+            {
+                if (_curiaProposalCooldownDays != value)
+                {
+                    _curiaProposalCooldownDays = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _curiaHistoryKeep = 200;
+
+        [SettingPropertyInteger("保留朝议记录", 20, 1000, Order = 9, RequireRestart = false,
+            HintText = "每个王国保留最近 N 条已结束朝议（JSON/TXT）；更旧的自动清理，避免长期存档无限积累。默认 200。")]
+        [SettingPropertyGroup("朝议")]
+        public int CuriaHistoryKeep
+        {
+            get => _curiaHistoryKeep;
+            set
+            {
+                if (_curiaHistoryKeep != value)
+                {
+                    _curiaHistoryKeep = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private bool _curiaPauseRandomActivations = true;
+
+        [SettingPropertyBool("议程期间暂停随机激活", Order = 10, RequireRestart = false,
+            HintText = "开启后，某王国有活跃朝议时，暂停该王国的随机国王政务/封臣自省，专心处理议程。默认开启。")]
+        [SettingPropertyGroup("朝议")]
+        public bool CuriaPauseRandomActivations
+        {
+            get => _curiaPauseRandomActivations;
+            set
+            {
+                if (_curiaPauseRandomActivations != value)
+                {
+                    _curiaPauseRandomActivations = value;
                     OnPropertyChanged();
                 }
             }

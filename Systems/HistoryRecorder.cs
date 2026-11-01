@@ -223,6 +223,12 @@ namespace AIChronicle
             RecordExternalEvent(eventType, summary);
         }
 
+        /// <summary>静态入口：供 CuriaService 记录朝议的提议/通过/未通过/执行/失败史料。</summary>
+        public static void RecordCuriaEvent(string eventType, string summary)
+        {
+            RecordExternalEvent(eventType, summary);
+        }
+
         private static void RecordExternalEvent(string eventType, string summary)
         {
             if (Campaign.Current == null) return;
@@ -472,6 +478,7 @@ namespace AIChronicle
 
             var name = kingdom.Name?.ToString() ?? "未知王国";
             RecordEvent("kingdom_destroyed", $"{name}灭亡");
+            CuriaService.OnKingdomDestroyed(kingdom);
 
             AgentScheduler.QueueSpecialChronicle($"王国灭亡：{name}。");
         }

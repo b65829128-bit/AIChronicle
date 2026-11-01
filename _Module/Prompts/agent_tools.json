@@ -202,18 +202,6 @@
     ]
   },
   {
-    "name": "submit_advisory",
-    "category": "communication",
-    "description": "Submit your public advisory to the king of your kingdom. The system will record it with a timestamp and archive it in the kingdom's public advisory records, visible to the court historian.\n\nUsage:\n- Call this when you have finished forming your advisory opinion and want to present it to the king PUBLICLY.\n- The content should be the advisory text itself — no greeting, no signature, no meta commentary.\n- The system automatically adds your name, title and the current time before your words.\n- After calling this, reply with a brief closing line only; do not repeat the advisory in your reply text.\n- If you have things you do NOT want written into history, use submit_secret_advisory instead.",
-    "parameters": [
-      {
-        "name": "content",
-        "type": "string",
-        "description": "The body of your public advisory in Chinese. State your position directly (e.g. 支持/反对某事, 应当/不应如何)."
-      }
-    ]
-  },
-  {
     "name": "submit_secret_advisory",
     "category": "communication",
     "description": "Submit a SECRET advisory to your king only. It is NOT recorded in the annals and the court historian cannot read it.\n\nUsage:\n- Call this when you think something should not be recorded in history or known by others — things only the king should hear.\n- The king alone can read these; the historian and the public record will never see them.\n- The content should be the advisory text itself — no greeting, no signature.\n- After calling this, reply with a brief closing line only.",
@@ -222,18 +210,6 @@
         "name": "content",
         "type": "string",
         "description": "The body of your secret advisory in Chinese, addressed only to the king."
-      }
-    ]
-  },
-  {
-    "name": "submit_edict",
-    "category": "diplomacy",
-    "description": "Publish a public edict to your whole kingdom — a royal decree, a policy statement, or a question posed to your vassals. The system will record it with a timestamp and archive it in the kingdom's edict records; your vassals read it before they advise, and the court historian may cite it in the annals. Only the ruler of the kingdom may issue edicts; anyone else is rejected by the system.\n\nUsage:\n- Call this when you have something to declare to the realm: a guiding policy, an answer to your vassals' advisories, or a question you want your vassals to address.\n- The content should be the edict text itself — no greeting, no signature, no meta commentary.\n- The system automatically adds your name, title and the current time before your words.\n- After calling this, reply with a brief closing line only; do not repeat the edict in your reply text.",
-    "parameters": [
-      {
-        "name": "content",
-        "type": "string",
-        "description": "The body of your edict in Chinese. Declare your will directly, or pose the question you want your vassals to answer."
       }
     ]
   },

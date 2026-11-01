@@ -101,8 +101,9 @@ namespace AIChronicle
             "king_consult" => new[] { "universal", "query", "diplomacy" },
             "historian" => new[] { "universal", "query", "file" },
             "clan_replenishment" => new[] { "universal", "query", "file" },
-            "advisory" => new[] { "universal", "query", "file", "communication" },
-            "fief_review" => new[] { "universal", "query", "file", "communication", "diplomacy" },
+            "fief_review" => new[] { "universal", "query", "file", "communication", "diplomacy", "council" },
+            "curia" => new[] { "universal", "query", "council", "file" },
+            "curia_defense" => new[] { "universal", "query", "council", "file", "communication" },
             "consolidation" => new[] { "universal", "file" },
             "chat" => new[] { "universal", "query", "file", "social", "communication" },
             // 自省 = 激活就是激活：处理自身事务（行军/军事/社交/外交/进谏/密使）皆可，工具级排除表收窄
@@ -110,9 +111,9 @@ namespace AIChronicle
             "self_review" => new[] { "universal", "query", "social", "movement", "military", "diplomacy", "communication", "file" },
             // 密使回应：窄会话，只回应（query + file + 通信），单跳防环（send_envoy 被排除）
             "envoy_reply" => new[] { "universal", "query", "file", "communication" },
-            // 秘书处是玩家的行政助手，不是战斗/财务代理：只保留查询、通信（谏言/密陈）、外交（换国/诏令/问询回复）。
-            // 行军/军事/社交（给钱拿钱/送物/改好感）全部移除——玩家在这些方面有替代路径（游戏 UI、部队命令、O 键书信）。
-            "chancery" => new[] { "universal", "query", "communication", "diplomacy" },
+            // 秘书处只查询：动作/写文件/通信/政治工具由 ContextBuilder._chanceryExcludedTools 统一排除，
+            // 玩家参政走 M 键参政页；秘书处只保留 query 分类与只读文件工具。
+            "chancery" => new[] { "universal", "query", "file" },
             _ => new[] { "universal", "query", "social", "military", "movement", "diplomacy", "file", "communication" },
         };
 
@@ -145,10 +146,10 @@ namespace AIChronicle
         {
             Name = "browse_tools",
             Category = "meta",
-            Description = "Browse available tools in a category to unlock them for use.\n\nUsage:\n- Call this to see detailed descriptions and unlock tools in a specific category.\n- The category parameter must be one of: military, movement, diplomacy, file, social, query, communication.\n- After calling, the tools in that category become available in your next response.\n- You do NOT need to call this for categories already shown in your current function list.\n- Only call this when the situation requires tools from a category you cannot currently access.",
+            Description = "Browse available tools in a category to unlock them for use.\n\nUsage:\n- Call this to see detailed descriptions and unlock tools in a specific category.\n- The category parameter must be one of: military, movement, diplomacy, council, file, social, query, communication.\n- After calling, the tools in that category become available in your next response.\n- You do NOT need to call this for categories already shown in your current function list.\n- Only call this when the situation requires tools from a category you cannot currently access.",
             Parameters = new List<ToolParamDef>
             {
-                new() { Name = "category", Type = "string", Description = "Category to browse and unlock: military, movement, diplomacy, file, social, query, communication." }
+                new() { Name = "category", Type = "string", Description = "Category to browse and unlock: military, movement, diplomacy, council, file, social, query, communication." }
             }
         };
 
@@ -192,8 +193,9 @@ namespace AIChronicle
             if (CurrentIntent == "chancery")
                 toolDefs.RemoveAll(t => t.Name == "create_kingdom");
             // 秘书处不提供 browse_tools（防止解锁被限制的分类绕过权限收窄）；
-            // 自省/密使回应也不提供（自省是固定动作菜单，密使回应是窄会话，无需按需解锁分类）
-            if (CurrentIntent != "chancery" && CurrentIntent != "self_review" && CurrentIntent != "envoy_reply")
+            // 自省/密使回应/朝议投票也不提供（固定动作菜单，避免注意力分散）
+            if (CurrentIntent != "chancery" && CurrentIntent != "self_review"
+                && CurrentIntent != "envoy_reply" && CurrentIntent != "curia" && CurrentIntent != "curia_defense")
                 toolDefs.Add(BrowseToolsDef);
             return BuildTools(toolDefs);
         }

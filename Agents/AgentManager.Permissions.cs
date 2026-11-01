@@ -43,6 +43,7 @@ namespace AIChronicle
                 if (IsCorrespondenceAllowed(relPath)) return true; // 私有密使线程：仅参与者双方（史官不可读）
                 if (IsPublicDocAllowed(relPath)) return true;      // 公开诏令/谏言：史官任何国家、其他仅本国
                 if (IsSecretAdvisoryAllowed(relPath)) return true; // 秘密谏言：仅本国国王
+                if (IsCuriaAllowed(relPath)) return true;          // 朝议公开档案：史官任何国家、本国成员
                 if (isWorldPath) return true;                      // 其余世界只读文件（史料/编年史/世界名册）
             }
 
@@ -81,6 +82,9 @@ namespace AIChronicle
                 return Path.Combine(_baseDir, "World", relPath);
 
             if (IsSecretAdvisoryAllowed(relPath))
+                return Path.Combine(_baseDir, "World", relPath);
+
+            if (IsCuriaAllowed(relPath))
                 return Path.Combine(_baseDir, "World", relPath);
 
             if (_readableWorldDirs.Any(d => relPath.StartsWith(d + "/") || relPath == d))
@@ -125,6 +129,32 @@ namespace AIChronicle
             var kingdomName = KingdomNameFromFile(Path.GetFileNameWithoutExtension(relPath));
             return kingdomName != null
                 && string.Equals(kingdom.Name?.ToString(), kingdomName, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 朝议公开档案（World/curia/{王国}/...）的读取授权：史官可读所有国家；
+        /// 其他 agent 仅本国（按目录名与自身王国匹配）。根目录仅史官可列。
+        /// </summary>
+        private static bool IsCuriaAllowed(string relPath)
+        {
+            if (!relPath.StartsWith("curia", StringComparison.Ordinal))
+                return false;
+            if (_agentEntityId.Value == "__historian__")
+                return true; // 史官：所有国家的朝议公开档案
+            if (relPath == "curia" || relPath == "curia/")
+                return false; // 非史官不可列所有国家
+
+            var rest = relPath.Substring("curia".Length).TrimStart('/');
+            if (rest.Length == 0) return false;
+            var slash = rest.IndexOf('/');
+            var kingdomDir = slash >= 0 ? rest.Substring(0, slash) : rest;
+
+            var hero = EntityManager.GetEntityById(_agentEntityId.Value ?? "")?.HeroRef;
+            var kingdom = hero?.Clan?.Kingdom ?? hero?.MapFaction as Kingdom;
+            if (kingdom == null) return false;
+            var kingdomName = kingdom.Name?.ToString() ?? "";
+            return !string.IsNullOrEmpty(kingdomName)
+                && string.Equals(KingdomNameFromFile(kingdomDir), kingdomName, StringComparison.Ordinal);
         }
 
         /// <summary>

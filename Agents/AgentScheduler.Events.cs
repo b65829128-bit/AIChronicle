@@ -106,6 +106,18 @@ namespace AIChronicle
                         $"{targetName} 遣密使来见 {agentName}，{agentName} 正在考虑如何回应...",
                         Colors.Cyan));
                 }
+                else if (evt.Type == ActivationEventType.CuriaVote)
+                {
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
+                        $"{agentName} 正在参与朝议并考虑立场...",
+                        Colors.Cyan));
+                }
+                else if (evt.Type == ActivationEventType.CuriaDefense)
+                {
+                    MainThreadExecutor.DisplayMessage(new InformationMessage(
+                        $"{agentName} 正在就朝议中的处置作出陈情...",
+                        Colors.Yellow));
+                }
                 else
                 {
                     MainThreadExecutor.DisplayMessage(new InformationMessage(
@@ -178,12 +190,24 @@ namespace AIChronicle
                     ActivationEventType.KingConsult => "king_consult",
                     ActivationEventType.SelfReview => "self_review",
                     ActivationEventType.EnvoyReceived => "envoy_reply",
+                    ActivationEventType.CuriaVote => "curia",
+                    ActivationEventType.CuriaDefense => "curia_defense",
                     _ => "letter"
                 };
                 var response = await AIChatClient.SendMessage(
                     charPrompt, agentEntity.HeroRef, includeTools: true, intent: intent);
 
-                if (!string.IsNullOrEmpty(response.Content))
+                if (evt.Type == ActivationEventType.CuriaVote)
+                {
+                    // 确保即使模型没有调用 respond_to_agenda，也在截止前留下一个明确立场（弃权+说明），
+                    // 避免议程被一个未表态的应召者拖到截止日。
+                    CuriaService.EnsureVoteFromAgent(agentEntity.HeroRef!, response.Content);
+                }
+                else if (evt.Type == ActivationEventType.CuriaDefense)
+                {
+                    CuriaService.EnsureDefenseFromAgent(agentEntity.HeroRef!, response.Content);
+                }
+                else if (!string.IsNullOrEmpty(response.Content))
                 {
                     // 方案A：回信只进聊天线程（标记为信件📜），不再投递信箱收件箱——信箱退化为线程入口
                     var isLetterReply = evt.Type == ActivationEventType.LetterReceived;
@@ -206,6 +230,8 @@ namespace AIChronicle
                     ActivationEventType.FiefReview => $"{agentName} 已处置好夺封之事。",
                     ActivationEventType.KingConsult => $"{agentName} 已回应 {targetName} 的使者。",
                     ActivationEventType.EnvoyReceived => $"{agentName} 已处理 {targetName} 的密使。",
+                    ActivationEventType.CuriaVote => $"{agentName} 已参与朝议并表态。",
+                    ActivationEventType.CuriaDefense => $"{agentName} 已就被提议的处置作出陈情。",
                     ActivationEventType.BehaviorCheckIn => $"{agentName} 已重新评估当前任务。",
                     ActivationEventType.PlanCheckIn => $"{agentName} 已继续执行计划。",
                     _ => ""
@@ -267,8 +293,15 @@ namespace AIChronicle
             if (evt.Type == ActivationEventType.KingConsult)
             {
                 MainThreadExecutor.DisplayMessage(new InformationMessage(
-                    $"{senderEntity.Name} 遣使问询你，按 M 键秘书处查看并回应。",
+                    $"{senderEntity.Name} 遣使问询你，按 M 键参政页查看并回应。",
                     Colors.Cyan));
+                return;
+            }
+
+            if (evt.Type == ActivationEventType.CuriaVote || evt.Type == ActivationEventType.CuriaDefense)
+            {
+                MainThreadExecutor.DisplayMessage(new InformationMessage(
+                    "朝议需要你的表态，按 M 键打开参政页。", Colors.Yellow));
                 return;
             }
         }

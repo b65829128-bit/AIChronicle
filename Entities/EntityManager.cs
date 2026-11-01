@@ -263,10 +263,12 @@ namespace AIChronicle
         {
             var caps = new HashSet<EntityCapability>();
             var isNoble = hero.Clan != null;
-            if (controller == EntityController.Agent)
+            if (controller == EntityController.Agent || hero == Hero.MainHero)
             {
+                // 玩家实体也要 FileSystem：M 键秘书处（chancery）只查询，需要 read_file/list/glob/grep；
+                // 写入类工具由 ContextBuilder 的 chancery 排除表挡掉。
                 caps.Add(EntityCapability.FileSystem);
-                if (isNoble)
+                if (controller == EntityController.Agent && isNoble)
                     caps.Add(EntityCapability.SendLetter);
             }
             if (hero.PartyBelongedTo != null && hero.PartyBelongedTo.LeaderHero == hero)
@@ -276,6 +278,10 @@ namespace AIChronicle
             }
             if (hero.Clan?.Kingdom?.RulingClan?.Leader == hero)
                 caps.Add(EntityCapability.Diplomat);
+            // 封臣（含无地）是政治身份；雇佣兵没有朝议权，独立家族无王国可议
+            if (isNoble && hero.Clan?.Kingdom != null
+                && !hero.Clan.IsUnderMercenaryService && !hero.Clan.IsClanTypeMercenary)
+                caps.Add(EntityCapability.Curia);
             if (hero.Gold > 0)
                 caps.Add(EntityCapability.GiveGold);
             if (isNoble)

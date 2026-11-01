@@ -18,6 +18,7 @@
     <Compile Include="../../Core/MainThreadExecutor.cs" Link="MainThreadExecutor.cs" />
     <Compile Include="../../Systems/HistoryArchive.cs" Link="HistoryArchive.cs" />
     <Compile Include="../../Systems/HistoryMarkdown.cs" Link="HistoryMarkdown.cs" />
+    <Compile Include="../../Systems/CuriaVoteMath.cs" Link="CuriaVoteMath.cs" />
     <Compile Include="../../Core/SafeFileIO.cs" Link="SafeFileIO.cs" />
   </ItemGroup>
 

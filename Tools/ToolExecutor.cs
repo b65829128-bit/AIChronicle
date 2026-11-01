@@ -170,9 +170,13 @@ namespace AIChronicle
                         return ExecuteQueryPendingProposals();
 
                     case "declare_war":
+                        if (CuriaService.Enabled)
+                            return "[错误] 主动宣战需先经朝议：请用 propose_agenda(type=\"declare_war\", target_kingdom=..., reason=...)。";
                         return DiplomacyService.ExecuteDeclareWar(args["target_kingdom"]?.ToString() ?? "", args["message"]?.ToString());
 
                     case "propose_peace":
+                        if (CuriaService.Enabled)
+                            return "[错误] 主动议和需先经朝议：请用 propose_agenda(type=\"propose_peace\", target_kingdom=..., reason=...)。";
                         return DiplomacyService.ExecuteProposePeace(
                             args["target_kingdom"]?.ToString() ?? "",
                             args["tribute_amount"]?.ToObject<int>() ?? 0,
@@ -180,12 +184,43 @@ namespace AIChronicle
                             args["message"]?.ToString());
 
                     case "propose_alliance":
+                        if (CuriaService.Enabled)
+                            return "[错误] 主动结盟需先经朝议：请用 propose_agenda(type=\"propose_alliance\", target_kingdom=..., reason=...)。";
                         return DiplomacyService.ExecuteProposeAlliance(args["target_kingdom"]?.ToString() ?? "", args["message"]?.ToString());
 
                     case "propose_trade":
+                        if (CuriaService.Enabled)
+                            return "[错误] 主动贸易提议需先经朝议：请用 propose_agenda(type=\"propose_trade\", target_kingdom=..., reason=...)。";
                         return DiplomacyService.ExecuteProposeTrade(args["target_kingdom"]?.ToString() ?? "", args["message"]?.ToString());
 
+                    case "propose_agenda":
+                        return ExecuteProposeAgenda(
+                            args["type"]?.ToString() ?? "",
+                            args["target_kingdom"]?.ToString() ?? "",
+                            args["settlement_name"]?.ToString() ?? "",
+                            args["new_owner_entity_id"]?.ToString() ?? "",
+                            args["target_clan_name"]?.ToString() ?? "",
+                            args["reason"]?.ToString() ?? "");
+
+                    case "respond_to_agenda":
+                        return ExecuteRespondToAgenda(
+                            args["agenda_id"]?.ToString() ?? "",
+                            args["stance"]?.ToString() ?? "",
+                            args["reason"]?.ToString() ?? "");
+
+                    case "defend_agenda":
+                        return ExecuteDefendAgenda(
+                            args["agenda_id"]?.ToString() ?? "",
+                            args["reason"]?.ToString() ?? "");
+
+                    case "query_agenda":
+                        return ExecuteQueryAgenda(
+                            args["agenda_id"]?.ToString() ?? "",
+                            args["history"]?.ToObject<bool>() ?? false);
+
                     case "end_alliance":
+                        if (CuriaService.Enabled)
+                            return "[错误] 退出盟约需先经朝议：请用 propose_agenda(type=\"break_alliance\", target_kingdom=..., reason=...)。";
                         return DiplomacyService.ExecuteEndAlliance(args["target_kingdom"]?.ToString() ?? "");
 
                     case "end_trade_agreement":
@@ -334,14 +369,8 @@ namespace AIChronicle
                     case "send_letter":
                         return ExecuteSendLetter(args["recipient_entity_id"]?.ToString() ?? "", args["content"]?.ToString() ?? "");
 
-                    case "submit_advisory":
-                        return ExecuteSubmitAdvisory(args["content"]?.ToString() ?? "");
-
                     case "submit_secret_advisory":
                         return ExecuteSubmitSecretAdvisory(args["content"]?.ToString() ?? "");
-
-                    case "submit_edict":
-                        return ExecuteSubmitEdict(args["content"]?.ToString() ?? "");
 
                     case "consult_king":
                         return ExecuteConsultKing(args["target_kingdom"]?.ToString() ?? "", args["message"]?.ToString() ?? "");
@@ -372,9 +401,9 @@ namespace AIChronicle
         private static string ExecuteBrowseTools(string category)
         {
             if (string.IsNullOrEmpty(category))
-                return "[错误] 请提供要浏览的工具分类。可选：military, movement, diplomacy, file, social, query, communication";
+                return "[错误] 请提供要浏览的工具分类。可选：military, movement, diplomacy, council, file, social, query, communication";
 
-            var validCategories = new HashSet<string> { "military", "movement", "diplomacy", "file", "social", "query", "communication" };
+            var validCategories = new HashSet<string> { "military", "movement", "diplomacy", "council", "file", "social", "query", "communication" };
             if (!validCategories.Contains(category))
                 return $"[错误] 未知分类 \"{category}\"。可选：{string.Join(", ", validCategories)}";
 

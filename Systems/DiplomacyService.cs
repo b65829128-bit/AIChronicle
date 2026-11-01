@@ -237,7 +237,7 @@ namespace AIChronicle
             return $"你单方面终止了与 {target.Name} 的贸易协定。";
         }
 
-        internal static string ExecuteTransferFief(string settlementName, string targetEntityId, string reason = "")
+        internal static string ExecuteTransferFief(string settlementName, string targetEntityId, string reason = "", bool byCuria = false, bool voluntary = false)
         {
             var actingHero = GetDiplomacyHero();
             if (actingHero == null) return "[错误] 只有王国统治者才能转让封地";
@@ -253,6 +253,9 @@ namespace AIChronicle
             if (ownerClan == null) return $"[错误] {settlement.Name} 没有归属家族";
             if (ownerClan.Kingdom != myKingdom)
                 return $"[错误] {settlement.Name} 不在你的王国内";
+            // 朝议时代：国王只能自由转让自己家族的封地；其他家族封地必须走朝议（byCuria=true）
+            if (!byCuria && CuriaService.Enabled && ownerClan != actingHero.Clan)
+                return "[错误] 转让其他家族的封地需先经朝议：请用 propose_agenda(type=\"transfer_fief\", settlement_name=..., new_owner_entity_id=...)。";
 
             // 被夺方（原主）在转让前捕获——转让后 OwnerClan 已变
             var deprivedLeader = ownerClan.Leader;
@@ -298,7 +301,7 @@ namespace AIChronicle
             InformationManager.DisplayMessage(new InformationMessage(notice, Colors.Cyan));
 
             // 被夺方激活：原主（非国王本人）被夺封 → 队列封地审视，激起矛盾（矛盾来源是"失去的人"）
-            if (deprivedLeader != null && deprivedLeader != actingHero)
+            if (deprivedLeader != null && deprivedLeader != actingHero && !voluntary)
             {
                 var deprivedEntity = EntityManager.GetEntityByHero(deprivedLeader);
                 if (deprivedEntity != null)
@@ -310,6 +313,43 @@ namespace AIChronicle
             }
 
             return $"已将{settlement.Name}从{oldClanName}（{oldLeaderName}）转让给{newClanName}（{targetHero.Name}）。";
+        }
+
+        /// <summary>朝议执行器：把某封臣家族逐出王国（家族带封地离开，成为独立家族/可再投他国）。</summary>
+        internal static string ExecuteExpelClan(string targetClanName)
+        {
+            var actingHero = GetDiplomacyHero();
+            if (actingHero == null) return "[错误] 只有王国统治者才能驱逐家族";
+            var myKingdom = actingHero.MapFaction as Kingdom;
+            if (myKingdom == null) return "[错误] 你当前不属于任何王国";
+
+            Clan? targetClan = null;
+            foreach (var c in Clan.All)
+            {
+                if (c == null || c.IsEliminated) continue;
+                if (c.StringId != null && string.Equals(c.StringId, targetClanName, StringComparison.OrdinalIgnoreCase))
+                {
+                    targetClan = c;
+                    break;
+                }
+                var name = c.Name?.ToString() ?? "";
+                if (name == targetClanName || name.Contains(targetClanName) || targetClanName.Contains(name))
+                {
+                    targetClan = c;
+                    break;
+                }
+            }
+            if (targetClan == null) return "[错误] 未找到目标家族：" + targetClanName;
+            if (targetClan.Kingdom != myKingdom) return $"[错误] {targetClan.Name} 不在你的王国内";
+            if (targetClan == myKingdom.RulingClan) return "[错误] 不能驱逐统治家族";
+            if (targetClan.IsUnderMercenaryService || targetClan.IsClanTypeMercenary)
+                return $"[错误] {targetClan.Name} 是雇佣兵，不是封臣家族";
+
+            var clanName = targetClan.Name?.ToString() ?? "?";
+            ChangeKingdomAction.ApplyByLeaveKingdom(targetClan);
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"{actingHero.Name} 将 {clanName} 逐出 {myKingdom.Name}", Colors.Yellow));
+            return $"已将{clanName}逐出{myKingdom.Name}。该家族带着封地离开，可能投奔他国。";
         }
 
         internal static string ExecuteRespondToProposal(string proposalId, bool accepted)

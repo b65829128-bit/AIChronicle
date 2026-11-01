@@ -25,6 +25,9 @@ namespace AIChronicle
             foreach (var kingdom in Kingdom.All)
             {
                 if (kingdom.IsEliminated) continue;
+                // 朝议期间暂停该王国的随机自省，专心处理议程
+                if (CuriaService.Enabled && MySettings.Instance?.CuriaPauseRandomActivations != false && CuriaService.HasActiveAgenda(kingdom))
+                    continue;
                 if (kingdom.RulingClan?.Leader == null || !kingdom.RulingClan.Leader.IsAlive)
                     continue;
 

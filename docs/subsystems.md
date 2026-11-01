@@ -17,14 +17,14 @@ OnApplicationTick → AgentScheduler.Tick() → 若并发槽未满 → 取最高
 | P | 事件类型 | 说明 |
 |---|---------|------|
 | 0 | YearlyChronicle / SpecialChronicle（史官） | 最高，**永不跳过**（生成不受队列门槛限制，永远先出队） |
-| 1 | KingDiplomacy（国王内外政务/提案） | 高优先，外交提案不积压；现同时处理内政（封地分配） |
+| 1 | KingDiplomacy / CuriaVote / CuriaDefense（国王内外政务/提案/朝议投票/陈情） | 高优先，外交提案与朝议不积压；议程期间该国随机政务/自省暂停 |
 | 2 | LetterReceived / EnvoyReceived（来信/密使） | 中 |
 | 3 | BehaviorCheckIn / PlanCheckIn / FiefReview（签到/封地审视） | 低 |
 | 4 | SelfReview（概率激活的自省） | 最低，只在无更高优先工作时处理 |
 
 - 并发安全：每任务上下文（`CurrentHero`/agent/深度等）经 `AsyncLocal` 隔离，工具仍统一回主线程串行执行
 - `ActivationEvent.Depth` 控制级联深度（`AsyncLocal` 按任务隔离，MCM 可调默认 5）
-- 支持事件类型：`LetterReceived`（来信）、`BehaviorCheckIn`（签到）、`KingDiplomacy`（国王内外政务）、`PlanCheckIn`（计划）、`YearlyChronicle`/`SpecialChronicle`（史官）、`SelfReview`（封臣自省）、`EnvoyReceived`（私有密使，立即激活对方一次）、`FiefReview`（封地审视，被夺方激活触发内政矛盾）
+- 支持事件类型：`LetterReceived`（来信）、`BehaviorCheckIn`（签到）、`KingDiplomacy`（国王内外政务）、`PlanCheckIn`（计划）、`YearlyChronicle`/`SpecialChronicle`（史官）、`SelfReview`（封臣自省）、`EnvoyReceived`（私有密使，立即激活对方一次）、`FiefReview`（封地审视，被夺方激活触发内政矛盾）、`CuriaVote`（朝议应召投票）、`CuriaDefense`（朝议被针对家族陈情）
 - **检查站冷却**：签到类激活（BehaviorCheckIn/PlanCheckIn）每 agent 至少间隔 **15 真实分钟**（`PartyBehaviorManager._lastCheckInByAgent`，用真实时间而非游戏时间——游戏时间加速时游戏小时冷却无效）。防止「move/wait 到达→立刻签到→再发指令」的 token 死循环
 - **卡死保险（持久行为）**：驻防/巡逻/护送（`CheckInHours > 0`）若下发后长时间**未到达目标点**（被拦截/目标遥不可及/巡逻绕圈不进 5 单位判定圈），签到永不触发、`PendingAction` 永不移除、mod 每帧重发覆盖原版、agent 永不激活 → 静默卡死。兜底：`PendingAction.CreatedAt` 记录下发时间，超时（`2× 签到周期`，驻防 6 天/巡逻 4 天/护送 2 天）且仍未到达 → 强制触发一次 BehaviorCheckIn（提示"你一直未能到达 X，是否放弃"）并释放 PendingAction，部队回归原版 AI。正常到达时此分支永不触发，零额外成本
 - 被俘/逃亡的国王统治者现在也会被激活（仅跳过已死亡和 null 的），`BuildSelfStatus` 中会提示"你仍是王国统治者"
@@ -51,7 +51,7 @@ SelectSelfReviewLeader：公平轮转（距上次自省最久优先）
     ↓
 QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先）
     → intent="self_review"：一次激活 = 一件自包含的事
-    → 派密使 / 进谏(submit_advisory/submit_secret_advisory) / 整备 / 移防 / 处置战俘
+    → 派密使 / 提议朝议(propose_agenda) / 密陈(submit_secret_advisory) / 整备 / 移防 / 处置战俘
       / 思量立场(change_kingdom 叛变/叛逃、create_kingdom 自立) / record_resolve 记决心 / 按兵不动
 ```
 
@@ -59,18 +59,18 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 - **一次性行动原则**：命令一经发出立即执行完毕，无续接激活。工具级排除（`ContextBuilder.GetExcludedToolsForIntent("self_review")`，API tools 与提示词索引共用）：招兵/买粮/升级（链式"先到定居点再激活"）、`send_letter`（级联）、`wait_at_settlement`、`query_available_troops`/`query_settlement_villages`、`update_knowledge`/`let_go`/`query_pending_proposals`、`give_item`/`request_items`、`escort_party`、`browse_tools`（固定菜单，不按需解锁分类）
 - **自省先读日记**：`self_review_rules.txt` 要求先 `read_file decisions/diary.txt` 回顾没有「结果」标记的计策/承诺/计划（仍视为进行中），`chat_logs/` 比日记新则以聊天为准；`MemoryConsolidator.EnsureDiaryCurrentAsync` 在自省前静默补记（SelfReview 已列入自我审视类）
 - **自省摘要**：`BuildSelfReviewDigest`（零 token 代码组装，注入【当前状况】易变块）——封地/部队规模/君主关系/王国战和/未读密使线程。**只提供事实摘要，不注入日记内容**（克制原则：能提醒就别注入，日记由 agent 自己 `read_file`）
-- `submit_advisory` 是 agent_tools.json 里的专用工具，归档格式由代码控制，agent 只需填内容
+- `propose_agenda` 是朝议提议工具（公开理由+入档/入史）；`submit_secret_advisory` 是密陈工具（只呈国王、不入史册）
 - 私人笔记 `decisions/personal_notes.txt` 非强制；若 LLM 写成了别的文件名，旧 `ProcessAdvisory` 的强制合并归位逻辑已随 v2.3.0 移除（自省不再强制进谏）
-- 国王外交激活（`KingDiplomacy`）的提示词自动注入"先 read_file World/advisory/ 了解封臣谏言"，但国王决策权不受限
-- **国王↔封臣闭环（诏令）**：国王政务审视时可颁布公开诏令（`submit_edict`，归档 `World/edict/{王国}_{年}.txt`，仅王国统治者可用、非国王被拒）；封臣自省进谏前先读国王诏令（`self_review_rules.txt` + `advisory_rules.txt`），若国王垂询某事应在谏言中回应；诏令读取走 `IsPublicDocAllowed`（史官任何国家、其他 agent 仅本国），玩家 H 键可见本国诏令
+- 国王外交激活（`KingDiplomacy`）的提示词改为"先处理外国提案、再看本国朝议"；国王保留提议/投票权，但不能绕过朝议独断
+- **国王↔封臣闭环（朝议）**：国王/封臣都可提朝议议题（`propose_agenda`）；被召入议程的封臣在单独 `curia` 激活中投票/陈情；结果写公开档案与日记。公开谏言/诏令已移除，密陈保留
 - **国王外交问询（跨国王互通）**：国王可用 `consult_king` 遣使问询他国国王（`KingConsult` 事件 P1，落盘 `World/diplomacy/consults/{A}_and_{B}.txt`），对方以 `reply_consult` 答复，问询方下次政务激活拉取看到。**严格单向防环**：问询会话（intent=`"king_consult"`）中 `consult_king` 被 BuildTools 排除，链深恒 1。史官可读任何国家问询线程（`IsConsultAllowed`），参与双方国王可读，第三方不可读。每王国对 7 游戏天冷却（`TryConsult`/`RecordConsult`）
 - **私有密使（封臣互通，不入史册）**：任何家族领袖可用 `send_envoy`/`reply_envoy`（`EnvoyReceived` 事件 P2，落盘 `World/correspondence/{idA}_and_{idB}.txt`，**史官与第三方不可读**——`IsCorrespondenceAllowed` 仅参与者实体 ID 匹配；`__historian__` 天然无权）。立即激活对方一次回应（`envoy_reply` 会话中 `send_envoy` 被 BuildTools 排除，单跳防环），回复不激活任何人、对方下次自省时读到；每实体对 7 游戏天冷却（`TryEnvoy`/`RecordEnvoy`）；收信方在押/逃亡时线程在其下次自省摘要浮现。**玩家 O 键面板**：联系人 📨 标记 + 未读角标，密使往来窗口（intent=`"envoy"`）展示线程并回复（写入线程、不惊动对方），书信窗口亦只读展示密使记录
 - 事件队列积压 >3 时暂停生成新的国王外交/封臣自省，先消化积压（Tick 中 `PendingEventCount() <= 3` 门槛）
 - **token 截断重试**：`SendMessage` 捕获 `finish_reason`（`"length"`=被 `max_tokens` 截断）。自省/史官若被截断且无输出 → 自动重试一次（更坚决的提示直接行动）；主动沉默（`finish_reason="stop"`）不重试。MCM「最大 Token 数」上限 65536、默认 32768
-- 历史（H 键）可读本国公开谏言；史官 `_readableWorldDirs` 含 `"advisory"` 可读取
-- **玩家谏言**：秘书处（M 键）的 chancery 提示词引导使用 `submit_advisory`（玩家封臣/国王均可，雇佣兵被工具拒绝）——玩家谏言与 AI 谏言同一归档，可被史官写入编年史
-- **史官联动**：`historian_rules.txt` 和 `yearly_chronicle_prompt.txt` 引导史官可选读 `advisory/` 作为补充视角（补充事实背后的观点和史料未载细节）；原始史料仍为权威，引用须注明"某封臣当时的谏言"
-- **秘密谏言（不入史册）**：`submit_secret_advisory` 密陈给国王，写 `World/secret_advisory/{王国}_{年}.txt`，**史官无权读取**（`IsSecretAdvisoryAllowed` 仅本国王可读本国密陈）。公开谏言进史、密陈只呈国王，封臣可公开一套、私下另一套。提示词按克制原则模糊化：「你认为不适合被历史记录或旁人知晓的事」
+- 朝议（M 键）可读本国 `World/curia/`；史官 `IsCuriaAllowed` 可读所有国家，其他 agent 仅本国
+- **玩家参政**：M 键参政页（CEF）投票/提议/陈情；秘书处只查询。玩家与 AI 共用同一朝议档案，可被史官写入编年史
+- **史官联动**：`historian_rules.txt` 引导史官读 `World/curia/` 的公开朝议档案（提议/陈情/票数/理由）；原始史料仍为权威，引用须注明“某次朝议”
+- **秘密谏言（不入史册）**：`submit_secret_advisory` 密陈给国王，写 `World/secret_advisory/{王国}_{年}.txt`，**史官无权读取**（`IsSecretAdvisoryAllowed` 仅本国王可读本国密陈）。朝议进史、密陈只呈国王，封臣可公开投票、私下密陈。提示词按克制原则模糊化：「你认为不适合被历史记录或旁人知晓的事」
 
 ## 3. 内政审视与封地政治（配套制度）
 
@@ -139,7 +139,7 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 - **提示词**：使用 `intent = "historian"` 的 `ContextBuilder.Build()`，规则来自 `historian_rules.txt`
 - **体例规范（史书命名，代码强制）**：史文统一按五种体例落盘，文件名由系统自动生成（`AgentManager.ExecuteWriteChronicle` 校验体例白名单 + 清洗名称 + 拼 `{名称}{体例}.txt`）——**本纪**（`{国王名}本纪`，一国之君生平与在位大事）、**世家**（`{国名}世家`，一国/大族兴衰史）、**列传**（`{人名}列传`，单个人物生平）、**编年史**（`{年份}编年史`，年度大事记）、**纪事**（`{事件名}纪事`，重大事件始末）。史官不得再用 `write_file` 自行命名（提示词已改指 `write_chronicle`）
 - **体例建议（代码给建议，史官可调整）**：`ConsumeSpecialChronicleContent` 按事件性质注入体例建议——「重要人物之死」中死者为统治者→本纪、其余→列传；「王国灭亡：X」→世家；其他→纪事。判定标准同时写入 `historian_rules.txt` 的「史书体例」表
-- **输出**：年度编年史 → `World/history/chronicles/{year}编年史.txt`；传记/世家/纪事 → `{名称}{体例}.txt`。文件内容为 Markdown；谏言/诏令/密陈仍是实体角色扮演产出的纯文本
+- **输出**：年度编年史 → `World/history/chronicles/{year}编年史.txt`；传记/世家/纪事 → `{名称}{体例}.txt`。文件内容为 Markdown；密陈（及旧档谏言/诏令）仍是实体角色扮演产出的纯文本
 - **阅读入口**：原生 `HistoryScreenVM` 与 CEF `HistoryCefScreen` 共用 `HistoryArchive`（目录扫描/体例分组/权限过滤/正文读取），避免双入口各自实现一套逻辑
 
 ### NPC 查阅历史
@@ -155,3 +155,21 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 - 每帧 `Tick()` 中调用 `CheckYearAdvance()`，检测 `currentYear > _lastChronicleYear`
 - 对每个已跳过的年份，检查 `events_{year}.txt` 是否存在且 `{year}编年史.txt` 不存在，满足条件才队列事件
 - 防止重复生成：已存在编年史的年份跳过
+
+
+## 6. 朝议（Curia）
+
+> 设计契约见 `docs/plan-curia.md`。核心：**七类行动经王国公开表决；文本是理由，类型+参数是机制；通过执行、不通过无事发生。**
+
+- **七类议题**：`declare_war` / `propose_peace` / `propose_trade` / `propose_alliance` / `break_alliance` / `transfer_fief` / `expel_clan`。
+- **选民**：所有封臣家族领袖（含无地）；雇佣兵无票。国王/玩家必召；被针对家族不投票但单独陈情。玩家被俘仍可投票；AI 被俘/逃亡不召。
+- **权重**：`DiplomacyModel.GetClanStrength`（原版选王同款），公开；国王无额外票权。
+- **全量/应召**：合格封臣数 ≤ `CuriaFullCouncilThreshold`（默认 6）或强制全量时全部投票；否则固定（国王/玩家/提议者）+ 利害前 3 + 权重补到 quorum 50% + 轮换 1-2，软上限 `CuriaAttendanceCap`（默认 6，quorum 优先）。每人记录 `SummonReason`（固定/利害/权重/轮换），未出席记 `未获召见`。
+- **门槛**：战/和/贸/结盟 50%；封地/驱逐/背盟 2/3。quorum 不足 → 流会。
+- **状态机**：`Proposed`（待陈情，1 天）→ `Voting`（默认 5 天）→ `Passed/Rejected` → `Applied/Failed`。全部应召者表态可提前结算；到期未表态=弃权。一个王国同一时间一个活跃议程。
+- **暂停随机激活**：`AgentScheduler.CheckKingActivations` / `CheckSelfReviewActivations` 发现该王国有活跃议程且 `CuriaPauseRandomActivations` 开启时跳过；`CuriaVote`/`CuriaDefense` 为 P1。
+- **稳定执行**：`CuriaService.Propose` 校验；`CuriaService.Effects` 结算前重校验；执行器调用 `DiplomacyService` 的现有动作；`AIChatClient.CurrentHero` 临时设为国王以复用 `GetDiplomacyHero`；失败标记 `Failed`，不崩游戏。
+- **数据**：`World/curia/{王国}/state.json` + `agenda_{id}.json` + `agenda_{id}.txt`（公开摘要）。权限 `AgentManager.IsCuriaAllowed`：本国成员 + 史官；他国不可读。已结束议程默认每国保留最近 200 条（`CuriaHistoryKeep`），旧档在 `FinishAgenda` 后清理，读档时也会清理一次；`query_agenda` 只读最近 10/30 条，不随存档无限增长。
+- **日记/史书**：代码代写 AI 投票者「决定」、参与者「结果」、未出席者「情报」；`HistoryRecorder.RecordCuriaEvent` 写 `curia_proposed/passed/rejected/applied/failed`；史官可读 `World/curia/` 并在编年史写朝议场景。
+- **玩家入口**：M 键 `CuriaCefScreen`（CEF；朝议/外交/封地/密陈/秘书）；页面动作经 `CefBridge` + `MainThreadExecutor`；文本输入走原生 `InformationManager.ShowTextInquiry`；CEF 失败回退秘书处查询。秘书处 `chancery` 只保留 query + 只读文件工具。
+- **旧入口**：`submit_advisory`/`submit_edict` 删除；`declare_war`/`propose_peace`/`propose_trade`/`propose_alliance`/`end_alliance` 在朝议启用时拒绝；`gift_fief` 仅国王自己封地；玩家 `change_kingdom` 拒绝；原版 `ExpelClanFromKingdomDecision` 在朝议启用时取消（手动 Harmony）。贸易终止 `end_trade_agreement` 仍直接。

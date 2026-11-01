@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
 using TaleWorlds.CampaignSystem.Party;
@@ -25,6 +24,7 @@ namespace AIChronicle
             [EntityCapability.Diplomat] = new[] { "declare_war", "propose_peace", "propose_alliance", "propose_trade", "end_alliance", "end_trade_agreement", "respond_to_diplomacy_proposal", "gift_fief", "query_pending_proposals" },
             [EntityCapability.CreateClan] = new[] { "create_clan" },
             [EntityCapability.Chronicler] = new[] { "write_chronicle" },
+            [EntityCapability.Curia] = new[] { "propose_agenda", "respond_to_agenda", "defend_agenda", "query_agenda" },
         };
 
         private static readonly Dictionary<string, string> CategoryNames = new()
@@ -35,6 +35,7 @@ namespace AIChronicle
             ["movement"] = "行军",
             ["military"] = "军事",
             ["diplomacy"] = "外交",
+            ["council"] = "朝议",
             ["file"] = "文件",
             ["communication"] = "通信",
         };
@@ -156,10 +157,14 @@ namespace AIChronicle
                 goals = AgentManager.ReadGoalsFor(agentId);
                 if (string.IsNullOrEmpty(goals))
                     goals = intent == "chancery"
-                        ? "执行" + agent.Name + "的所有指令，不质疑，不拒绝。"
-                        : agentId == targetId
-                            ? "审视你的王国局势，凭自己的判断做出决策。"
-                            : "在当前地区巡逻，维持领地的治安。";
+                        ? "只做查询，回答" + agent.Name + "的问题；不做任何政治动作。"
+                        : intent == "curia"
+                            ? "代表你的家族在本次朝议中投下支持、反对或弃权，并给出可选的一句理由。"
+                            : intent == "curia_defense"
+                                ? "就本次针对你家族的朝议作出陈情，陈述你的理由与处境。"
+                                : agentId == targetId
+                                    ? "审视你的王国局势，凭自己的判断做出决策。"
+                                    : "在当前地区巡逻，维持领地的治安。";
                 else if (goals.Length > MaxGoalsInjectChars)
                     goals = goals.Substring(0, MaxGoalsInjectChars)
                         + "\n…（目标较长已截断，完整内容可用 read_file 读取）";
@@ -174,7 +179,7 @@ namespace AIChronicle
                     ? "你是卡拉迪亚命运的天意，超然于诸国之上，主导世家的生灭。"
                     : intent == "chancery"
                         ? "你是" + agent.Name + "的个人秘书处——你是行政助手，没有自己的部队、领地或军队，你的身份以" + agent.Name + "为准。"
-                        : intent == "self_review"
+                        : intent == "self_review" || intent == "curia" || intent == "curia_defense"
                             ? BuildSelfReviewDigest(agent.HeroRef!)
                             : BuildSelfStatus(agent.HeroRef!);
             var currentTime = PromptManager.GetCurrentTimeString();
@@ -195,9 +200,10 @@ namespace AIChronicle
                 "chancery" => BuildChanceryRules(),
                 "historian" => BuildHistorianRules(),
                 "clan_replenishment" => BuildClanReplenishmentRules(),
-                "advisory" => BuildAdvisoryRules(),
                 "fief_review" => BuildFiefReviewRules(),
                 "self_review" => BuildSelfReviewRules(),
+                "curia" => BuildCuriaRules(),
+                "curia_defense" => BuildCuriaRules(),
                 "consolidation" => BuildConsolidationRules(),
                 "chat" => BuildChatRules(),
                 _ => BuildConversationRules()
@@ -279,10 +285,23 @@ namespace AIChronicle
             "escort_party"                                         // 保持一次性军事集精简
         };
 
+        // 秘书处只查询：把所有"动作/写文件/通信/政治"工具排除，只留 query 分类 + 只读文件工具。
+        private static readonly HashSet<string> _chanceryExcludedTools = new()
+        {
+            "update_knowledge", "cancel_action", "create_clan", "create_kingdom",
+            "write_file", "append_file", "edit_file", "delete_file", "move_file", "write_chronicle", "record_resolve",
+            "send_letter", "send_envoy", "reply_envoy", "submit_secret_advisory",
+            "consult_king", "reply_consult", "change_kingdom",
+            "declare_war", "propose_peace", "propose_alliance", "propose_trade", "end_alliance", "end_trade_agreement",
+            "respond_to_diplomacy_proposal", "gift_fief", "propose_agenda", "respond_to_agenda", "defend_agenda"
+        };
+
         /// <summary>intent 级工具排除（API tools 与提示词索引共用，保证两处一致）。非目标 intent 返回空集。</summary>
         public static HashSet<string> GetExcludedToolsForIntent(string intent)
         {
-            return intent == "self_review" ? _selfReviewExcludedTools : EmptyTools;
+            if (intent == "self_review") return _selfReviewExcludedTools;
+            if (intent == "chancery") return _chanceryExcludedTools;
+            return EmptyTools;
         }
 
         private static readonly HashSet<string> EmptyTools = new();
@@ -348,7 +367,7 @@ namespace AIChronicle
                 sb.AppendLine($"【{catName}】{string.Join(", ", names)}");
             }
 
-            if (intent != "chancery" && inactiveCategories.Count > 0)
+            if (intent != "chancery" && intent != "curia" && intent != "curia_defense" && inactiveCategories.Count > 0)
             {
                 sb.AppendLine();
                 sb.AppendLine("【其他可用工具分类 — 需要时先调 browse_tools 查看并解锁】");
@@ -461,12 +480,21 @@ namespace AIChronicle
                 + "- 当写信人透露了新信息时，调用 append_file 追加到 knowledge/{target_id}.txt";
         }
 
+        private static string? ResolveRulesPath(string filename)
+        {
+            var campaign = Path.Combine(PromptManager.CampaignDir, filename);
+            var basePath = Path.Combine(PromptManager.PromptsBaseDir, filename);
+            var hasCampaign = File.Exists(campaign);
+            var hasBase = File.Exists(basePath);
+            if (hasCampaign && hasBase)
+                return File.GetLastWriteTimeUtc(basePath) > File.GetLastWriteTimeUtc(campaign) ? basePath : campaign;
+            return hasCampaign ? campaign : (hasBase ? basePath : null);
+        }
+
         private static string? LoadRulesFile(string filename, ref string cache, ref DateTime lastCheck)
         {
-            var path = Path.Combine(PromptManager.CampaignDir, filename);
-            if (!File.Exists(path))
-                path = Path.Combine(PromptManager.PromptsBaseDir, filename);
-            if (!File.Exists(path))
+            var path = ResolveRulesPath(filename);
+            if (path == null)
                 return null;
 
             var lastWrite = File.GetLastWriteTimeUtc(path);
@@ -478,8 +506,6 @@ namespace AIChronicle
             return cache;
         }
 
-        private static string _cachedAdvisoryRules = "";
-        private static DateTime _lastAdvisoryRulesCheck;
         private static string _cachedFiefReviewRules = "";
         private static DateTime _lastFiefReviewRulesCheck;
         private static string _cachedConsolidationRules = "";
@@ -487,23 +513,20 @@ namespace AIChronicle
 
         private static string BuildDiplomacyRules()
         {
-            var path = Path.Combine(PromptManager.CampaignDir, "diplomacy_rules.txt");
-            if (!File.Exists(path))
-                path = Path.Combine(PromptManager.PromptsBaseDir, "diplomacy_rules.txt");
-            if (!File.Exists(path))
+            var path = ResolveRulesPath("diplomacy_rules.txt");
+            if (path == null)
                 return
-                    "你是{name}，{title}。你是所在王国的最高统治者。审视你的王国局势，凭你自己的判断做出外交决断。\n\n"
+                    "你是{name}，{title}。你是所在王国的最高统治者。审视你的王国局势，凭自己的判断做出内外决断。\n\n"
                     + "步骤：\n"
-                    + "1. 先调用 query_pending_proposals 查看是否有待处理的外交提案，有则用 respond_to_diplomacy_proposal 逐一处理\n"
-                    + "2. 调用 query_war_status 了解当前所有战争的战况\n"
-                    + "3. 根据你对局势的个人判断，决定是否采取新的外交行动——如何决策由你做主\n\n"
-                    + "重要规则：\n"
-                    + "- 不要说你会做某件事——必须调用对应的 function。例如，说「我决定议和」而不调用 propose_peace 等于什么都没做\n"
-                    + "- 每次回复最多调用 3 个工具。先处理提案，再决定新的行动\n"
-                    + "- 没有待处理提案且你不想采取新行动时，可以说「暂无需要处理的外交事务」\n"
-                    + "- 不要虚构数据——所有统计来自 query_war_status 的返回值\n"
-                    + "- 你是国王，你的决断就是王国的决断，不需要征求任何人同意\n"
-                    + "- 绝对不要用 send_letter 处理外交事务。send_letter 只能用于私人通信。外交提案只能用 propose_peace / propose_alliance / propose_trade / declare_war / respond_to_diplomacy_proposal；盟约/贸易可单方面终止（end_alliance / end_trade_agreement）；需要向国内宣示方针、回应群臣或垂询政务时，用 submit_edict 颁布公开诏令";
+                    + "1. 先调用 query_pending_proposals 查看是否有待处理的外国提案，有则用 respond_to_diplomacy_proposal 逐一处理\n"
+                    + "2. 调用 query_war_status 了解战况；调用 query_agenda 查看本国朝议\n"
+                    + "3. 主动宣战/议和/贸易/结盟/退出盟约/转让封臣封地/驱逐家族，用 propose_agenda 提出并经朝议表决\n\n"
+                    + "规则：\n"
+                    + "- 不要说你会做某件事——必须调用对应的 function，光说不做等于什么都没发生\n"
+                    + "- 每次回复最多调用 3 个工具；先处理外国提案，再决定是否提出新议程\n"
+                    + "- 不要虚构数据——统计来自 query_war_status 等查询工具\n"
+                    + "- 你不是独裁者：主动外交与封地处置必须过朝议；你的权力是提议、投票和自由处置自己家族的封地\n"
+                    + "- 绝对不要用 send_letter 处理外交事务；对外主动行动只用 propose_agenda，对外国提案用 respond_to_diplomacy_proposal";
 
             var lastWrite = File.GetLastWriteTimeUtc(path);
             if (_cachedDiplomacyRules == "" || lastWrite > _lastDiplomacyRulesCheck)
@@ -516,20 +539,15 @@ namespace AIChronicle
 
         private static string BuildChanceryRules()
         {
-            var path = Path.Combine(PromptManager.CampaignDir, "chancery_rules.txt");
-            if (!File.Exists(path))
-                path = Path.Combine(PromptManager.PromptsBaseDir, "chancery_rules.txt");
-            if (!File.Exists(path))
+            var path = ResolveRulesPath("chancery_rules.txt");
+            if (path == null)
                 return
-                    "你就是{name}，{title}。你正在处理政务和个人事务。\n\n"
-                    + "你可用的工具取决于你的身份和能力：\n"
-                    + "- 如果你是国王，你拥有全套外交工具（declare_war/propose_peace/propose_alliance/propose_trade/end_alliance/end_trade_agreement/respond_to_diplomacy_proposal）\n"
-                    + "- 你也可以调用 query_war_status 查看战况、query_surroundings 查看周围环境\n"
-                    + "- 你可以用 send_letter 给任何你认识的人写信\n\n"
-                    + "规则：\n"
-                    + "- 说你要做什么就必须调用对应的 function——光说不做等于什么都没发生\n"
-                    + "- 一次回复最多调用 3 个工具\n"
-                    + "- 系统会执行你的指令并告知结果";
+                    "你是{name}的个人秘书处，只做查询。\n\n"
+                    + "你可以用 query_character / query_settlement / query_world_state / query_war_status / "
+                    + "query_surroundings / query_party_troops / query_clan_fiefs / query_agenda / "
+                    + "query_pending_proposals / query_recent_events 等查询工具，以及 read_file / list_dir / glob / grep 读取公开档案。\n\n"
+                    + "你不能提出议程、投票、陈情、写信、送礼、行军、换国或处理外交提案；这些由{name}在 M 键参政页或原版界面完成。\n"
+                    + "只回答事实；查不到就说查不到。一次回复最多调用 3 个查询工具。";
 
             var lastWrite = File.GetLastWriteTimeUtc(path);
             if (_cachedChanceryRules == "" || lastWrite > _lastChanceryRulesCheck)
@@ -542,10 +560,8 @@ namespace AIChronicle
 
         private static string BuildHistorianRules()
         {
-            var path = Path.Combine(PromptManager.CampaignDir, "historian_rules.txt");
-            if (!File.Exists(path))
-                path = Path.Combine(PromptManager.PromptsBaseDir, "historian_rules.txt");
-            if (!File.Exists(path))
+            var path = ResolveRulesPath("historian_rules.txt");
+            if (path == null)
                 return
                     "你就是卡拉迪亚的宫廷史官。\n\n"
                     + "你的职责是编纂客观公正的历史，记录卡拉迪亚大陆的重大事件。\n\n"
@@ -570,7 +586,8 @@ namespace AIChronicle
                     + "- kingdom_created: 新王国建立\n"
                     + "- hero_killed: 重要人物死亡\n"
                     + "- clan_changed_kingdom: 氏族叛变/归附\n"
-                    + "- marriage: 贵族婚嫁\n\n"
+                    + "- marriage: 贵族婚嫁\n"
+                    + "- curia_proposed / curia_passed / curia_rejected / curia_applied / curia_failed: 朝议的提议、通过、未通过、执行、失败（完整档案在 World/curia/，公开可读）\n\n"
                     + "## 专题史\n\n"
                     + "如果某年发生了特别重大的事件（如王国灭亡、传奇战役），你可以额外写一篇专题史。\n"
                     + "王国灭亡应以「世家」体例记录一国兴衰，其余重大事件以「纪事」体例叙述。\n"
@@ -597,22 +614,13 @@ namespace AIChronicle
                 + "家族成员由系统自动生成（3-6 人，偏向年轻），家族等级为 2——恰好够当封臣，又看得出是新族。";
         }
 
-        private static string BuildAdvisoryRules()
-        {
-            return LoadRulesFile("advisory_rules.txt", ref _cachedAdvisoryRules, ref _lastAdvisoryRulesCheck)
-                ?? "你是{name}，{title}，{kingdom}的氏族领袖。\n\n"
-                + "请审视王国当前的局势，写下你的公开谏言。\n"
-                + "你的谏言将被国王和史官看到。\n"
-                + "私人想法和隐秘计划请写入私有文件。";
-        }
-
         private static string BuildFiefReviewRules()
         {
             return LoadRulesFile("fief_review_rules.txt", ref _cachedFiefReviewRules, ref _lastFiefReviewRulesCheck)
                 ?? "你就是{name}，{title}。审视你此刻的处境与心情（上文是关于你封地的消息）。\n\n"
                 + "规则：\n"
-                + "- 你可以：写信给国王或他人交涉（send_letter）、上表陈情（submit_advisory）、或用 write_file/append_file 记录内心想法\n"
-                + "- 若你动了去意，你是氏族领袖，可考虑转投他国（change_kingdom）——是否如此由你的性格与处境决定\n"
+                + "- 你可以：写信给国王或他人交涉（send_letter）、派密使（send_envoy）、用 record_resolve 记录决心/评价/结果，或用 write_file/append_file 记录内心想法\n"
+                + "- 若你动了去意，你是氏族领袖，可考虑转投他国（change_kingdom）或自立（create_kingdom）——是否如此由你的性格与处境决定\n"
                 + "- 出于真心还是另有谋划，都是你自己的事，按你的为人行事";
         }
 
@@ -638,6 +646,22 @@ namespace AIChronicle
                     + "- 若没有值得记录的往来，直接回复「无需记录」");
         }
 
+        private static string _cachedCuriaRules = "";
+        private static DateTime _lastCuriaRulesCheck;
+
+        private static string BuildCuriaRules()
+        {
+            return LoadRulesFile("curia_rules.txt", ref _cachedCuriaRules, ref _lastCuriaRulesCheck)
+                ?? ("你是{name}，{title}。你正在参加{kingdom}的朝议。\n\n"
+                    + "规则：\n"
+                    + "- 你只做一件事：代表你的家族，对当前议题投下支持/反对/弃权，并可给一句理由。\n"
+                    + "- 用 respond_to_agenda 表态；被针对家族陈情时用 defend_agenda。\n"
+                    + "- 不要写信、不要行军、不要做其他动作；投票与理由会被公开记录，史官与所有封臣可见。\n"
+                    + "- 按你的家族利益、封地安危、贸易与盟约、你与各方的关系、以及你的性格决定，不要凭空捏造数据。\n"
+                    + "- 投票前可用 query_agenda / query_character / query_clan_fiefs / query_war_status / query_settlement / query_party_troops 核实事实。\n"
+                    + "- 若你确实无意见，也请投弃权——不要不表态。");
+        }
+
         private static string _cachedSelfReviewRules = "";
         private static DateTime _lastSelfReviewRulesCheck;
 
@@ -649,8 +673,8 @@ namespace AIChronicle
                 + "你接下来要做的事，只关乎你自己。你可以：\n"
                 + "- 经营家族：整备军队、移防自保、处置战俘\n"
                 + "- 经营关系：向某人示好、馈赠，或疏远\n"
-                + "- 互通消息：派密使联络某位家族领袖或某国国王（向自家王上进言用进谏，不派使者）\n"
-                + "- 进谏或密陈：若你认为国王该知道某件事；进谏前先留意国王近期有无新诏令（系统若提示今年有诏令，先 read_file 阅读 edict/ 下本国当年的诏令）\n"
+                + "- 互通消息：派密使联络某位家族领袖或某国国王（向自家王上进言用密陈，不派使者）\n"
+                + "- 提议朝议 / 密陈：若你认为王国该宣战/议和/贸易/结盟/背盟/转让封地/驱逐某族，且本国无活跃议程，可用 propose_agenda；不宜公开的事用 submit_secret_advisory 密陈给国王\n"
                 + "- 思量立场：是否满足于现状，是否该另谋出路（可考虑叛变、叛逃，乃至自立建国）\n"
                 + "- 立下决心：用 record_resolve 记入日记\n\n"
                 + "注意：你这次的命令一经发出便会立即执行完毕，不会有后续的询问来请你「下一步怎么办」。所以此刻只做一件当场就能完成的事；需要「先到某处、到达后再行动」的事，留到下次自省时再定夺。\n\n"
@@ -713,10 +737,14 @@ namespace AIChronicle
                     try { rel = CharacterRelationManager.GetHeroRelation(hero, ruler); } catch { }
                     sb.AppendLine($"你是 {kingdom.Name} 的封臣，君主是 {rulerName}，你们的关系 {rel} 点。");
 
-                    // 国王诏令提示（仅封臣）：当年有诏令才提醒，附最近一条时间，避免反复读往年陈旧诏令。
-                    var edictNote = BuildEdictNote(hero, kingdom);
-                    if (edictNote.Length > 0)
-                        sb.AppendLine(edictNote);
+                    // 朝议提示：本国若有进行中的议程，让封臣在自省时知道（详情由 query_agenda 拉取）。
+                    try
+                    {
+                        var activeAgenda = CuriaService.GetActiveAgenda(kingdom);
+                        if (activeAgenda != null)
+                            sb.AppendLine($"本国正在进行朝议：{CuriaText.TypeLabel(activeAgenda.Type)}（{CuriaText.TargetSummary(activeAgenda)}），状态 {CuriaText.StatusLabel(activeAgenda.Status)}。可用 query_agenda 查看详情。");
+                    }
+                    catch { }
                 }
             }
             else
@@ -753,49 +781,6 @@ namespace AIChronicle
             catch { }
 
             return sb.ToString().TrimEnd();
-        }
-
-        /// <summary>
-        /// 国王诏令提示（仅封臣调用）：当年（edict/{王国}_{年}.txt）存在且非空时返回一句提示，
-        /// 并附最近一条诏令的发布时间，引导封臣进谏前读王上最新旨意；无当年诏令则返回空串——
-        /// 往年陈旧诏令一律不提醒，避免封臣每次自省都机械读旧诏令。
-        /// </summary>
-        private static string BuildEdictNote(Hero hero, Kingdom kingdom)
-        {
-            if (hero == null || kingdom == null) return "";
-            if (string.IsNullOrEmpty(PromptManager.CampaignDir)) return "";
-
-            try
-            {
-                var kingdomName = kingdom.Name?.ToString();
-                if (string.IsNullOrEmpty(kingdomName)) return "";
-
-                var currentYear = CampaignTime.Now.GetYear;
-                var edictFile = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "edict",
-                    $"{kingdomName}_{currentYear}.txt");
-                if (!File.Exists(edictFile)) return "";
-
-                var lines = SafeFileIO.ReadAllLines(edictFile);
-                if (lines.Length == 0) return "";
-
-                // 从后往前找最近一条诏令的 header（形如 "[第1089年，夏季第12日，下午] 名字（头衔）诏令："），提取日期部分。
-                string? latestDate = null;
-                for (var i = lines.Length - 1; i >= 0; i--)
-                {
-                    if (string.IsNullOrWhiteSpace(lines[i])) continue;
-                    var m = Regex.Match(lines[i], @"第\d+年，[春夏秋冬]季第\d+日");
-                    if (m.Success)
-                    {
-                        latestDate = m.Value;
-                        break;
-                    }
-                }
-
-                return latestDate != null
-                    ? $"国王今年颁布过诏令（最近一条发于 {latestDate}），进谏前可 read_file edict/{kingdomName}_{currentYear}.txt 了解王上旨意与垂询。"
-                    : $"国王今年颁布过诏令，进谏前可 read_file edict/{kingdomName}_{currentYear}.txt 了解王上旨意与垂询。";
-            }
-            catch { return ""; }
         }
 
         /// <summary>扫描 World/correspondence/ 下含自己的线程，列出对方最新发来的密使消息（供自省时看到并决定是否回复）。</summary>

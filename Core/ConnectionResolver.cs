@@ -31,13 +31,14 @@ namespace AIChronicle
                 "diplomacy" => C(s.DiplomacyApiUrl, s.DiplomacyModel, s.DiplomacyApiKey, s.DiplomacyProviderType.SelectedValue),
                 "king_consult" => C(s.KingConsultApiUrl, s.KingConsultModel, s.KingConsultApiKey, s.KingConsultProviderType.SelectedValue),
                 "fief_review" => C(s.FiefReviewApiUrl, s.FiefReviewModel, s.FiefReviewApiKey, s.FiefReviewProviderType.SelectedValue),
-                // 自省与密使回应复用「封臣谏言」场景连接（自省即谏言槽位泛化，不新增配置组）
+                // 自省与密使回应复用「封臣自省」场景连接（不新增配置组）
                 "advisory" or "self_review" or "envoy_reply" => C(s.AdvisoryApiUrl, s.AdvisoryModel, s.AdvisoryApiKey, s.AdvisoryProviderType.SelectedValue),
                 "clan_replenishment" => C(s.ClanReplenishmentApiUrl, s.ClanReplenishmentModel, s.ClanReplenishmentApiKey, s.ClanReplenishmentProviderType.SelectedValue),
                 "historian" => C(s.HistorianApiUrl, s.HistorianModel, s.HistorianApiKey, s.HistorianProviderType.SelectedValue),
                 "consolidation" => C(s.ConsolidationApiUrl, s.ConsolidationModel, s.ConsolidationApiKey, s.ConsolidationProviderType.SelectedValue),
                 "chat" => C(s.CheckInApiUrl, s.CheckInModel, s.CheckInApiKey, s.CheckInProviderType.SelectedValue),
                 "chancery" => C(s.ChanceryApiUrl, s.ChanceryModel, s.ChanceryApiKey, s.ChanceryProviderType.SelectedValue),
+                "curia" or "curia_defense" => C(s.CuriaApiUrl, s.CuriaModel, s.CuriaApiKey, s.CuriaProviderType.SelectedValue),
                 _ => new ConnectionInfo(s.ApiUrl, s.Model, s.ApiKey, s.ProviderType)
             };
         }
@@ -49,7 +50,7 @@ namespace AIChronicle
             "diplomacy" => "政务外交",
             "king_consult" => "外交问询",
             "fief_review" => "封地审视",
-            "advisory" => "封臣谏言",
+            "advisory" => "封臣自省",
             "self_review" => "封臣自省",
             "envoy_reply" => "密使回应",
             "clan_replenishment" => "天意建族",
@@ -57,6 +58,7 @@ namespace AIChronicle
             "consolidation" => "记忆巩固",
             "chat" => "签到",
             "chancery" => "秘书处",
+            "curia" or "curia_defense" => "朝议",
             _ => "兜底"
         };
     }

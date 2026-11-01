@@ -23,7 +23,9 @@ namespace AIChronicle
         FiefReview,
         KingConsult,
         ClanReplenishment,
-        EnvoyReceived
+        EnvoyReceived,
+        CuriaVote,
+        CuriaDefense
     }
 
     public class ActivationEvent
@@ -38,7 +40,8 @@ namespace AIChronicle
         public int Priority => Type switch
         {
             ActivationEventType.YearlyChronicle or ActivationEventType.SpecialChronicle => 0,
-            ActivationEventType.KingDiplomacy or ActivationEventType.KingConsult => 1,
+            ActivationEventType.KingDiplomacy or ActivationEventType.KingConsult
+                or ActivationEventType.CuriaVote or ActivationEventType.CuriaDefense => 1,
             ActivationEventType.LetterReceived or ActivationEventType.EnvoyReceived => 2,
             ActivationEventType.BehaviorCheckIn or ActivationEventType.PlanCheckIn or ActivationEventType.FiefReview or ActivationEventType.ClanReplenishment => 3,
             _ => 4
@@ -129,6 +132,7 @@ namespace AIChronicle
             _nextKingIndex = 0;
             _warmupFrames = 120;
             _warmupFramesHistorian = 60;
+            CuriaService.ResetForNewCampaign();
         }
 
         public static void RecordProposalActivation(string entityId)
@@ -422,6 +426,7 @@ namespace AIChronicle
         public static void Tick()
         {
             CheckExpiringAgreements();
+            CuriaService.Tick();
 
             if (_inFlightCount >= MaxConcurrent) return;
 
@@ -474,6 +479,9 @@ namespace AIChronicle
                 attempts++;
 
                 var kingdom = kingdoms[idx];
+                // 朝议期间暂停该王国的随机政务激活，专心处理议程
+                if (CuriaService.Enabled && MySettings.Instance?.CuriaPauseRandomActivations != false && CuriaService.HasActiveAgenda(kingdom))
+                    continue;
                 var ruler = kingdom.RulingClan?.Leader;
                 if (ruler == null || !ruler.IsAlive)
                     continue;
@@ -514,24 +522,19 @@ namespace AIChronicle
                     : "";
 
                 var currentYear = CampaignTime.Now.GetYear;
-                var advisoryNote = $"\n（提示：先用 read_file 阅读 advisory/{kingdom.Name}_{currentYear}.txt 了解封臣们的公开谏言，再用 read_file 阅读 secret_advisory/{kingdom.Name}_{currentYear}.txt 查看封臣们的秘密陈奏——后者仅你可见、不入史册。群臣意见是你的决策参考，但你的决定权至高无上。若需向国内宣示方针、回应群臣或垂询政务，可调用 submit_edict 颁布公开诏令——封臣进谏前会先读你的诏令，史官也会记载。）\n";
+                var curiaNote = $"\n（提示：先用 query_agenda 查看本国进行中的朝议与各家族立场；用 read_file 阅读 World/curia/{kingdom.Name}/ 下的历史档案；密陈在 secret_advisory/{kingdom.Name}_{currentYear}.txt，仅你可见、不入史册。主动宣战/议和/贸易/结盟/退出盟约/转让封臣封地/驱逐家族，必须用 propose_agenda 提出并经朝议表决，不能直接绕过；外国提案仍用 respond_to_diplomacy_proposal。朝议公开，理由与投票史官可读。）\n";
                 var consultNote = BuildConsultInjection(kingdom);
 
                 var activationMsg =
-                    $"你是{kingdom.Name}的至高统治者。审视你的王国局势，凭自己的判断做出外交决断。\n\n"
-                    + $"步骤1：调用 query_pending_proposals 查看是否有待处理的提案，有则用 respond_to_diplomacy_proposal 逐一处理\n"
-                    + $"步骤2：调用 query_war_status 了解当前所有战争的战况\n"
+                    $"你是{kingdom.Name}的至高统治者。审视你的王国局势，凭自己的判断做出内外决断。\n\n"
+                    + $"步骤1：调用 query_pending_proposals 查看是否有待处理的外国提案，有则用 respond_to_diplomacy_proposal 逐一处理\n"
+                    + $"步骤2：调用 query_war_status 了解当前所有战争的战况；调用 query_agenda 查看本国朝议\n"
                     + proposalLines
-                    + advisoryNote
+                    + curiaNote
                     + consultNote
                     + $"\n（提示：你的长期战略方针、承诺、计策都记在 decisions/diary.txt（条目类型含「战略」）。每次审视先 read_file 读取日记回顾你的战略走向与既往承诺，据此做连贯决策；若 chat_logs/ 有比日记更新的往来，以它们为准，并把新决定/新战略补记进日记。）\n\n"
-                    + $"然后依据你自己的判断采取行动——以下是你可用的外交工具：\n"
-                    + "- propose_peace：结束一场战争（可附带赔款条件）\n"
-                    + "- propose_alliance：与中立王国结盟\n"
-                    + "- propose_trade：与中立王国签订贸易协定\n"
-                    + "- declare_war：宣战\n"
-                    + "- submit_edict：颁布公开诏令，向国内宣示方针、回应群臣或垂询政务（可选）\n\n"
-                    + "不要幻想或虚构数据。不要用 send_letter 处理外交事务——外交方案只用上述 function 发起；需要向国内传达旨意时，用 submit_edict 颁布公开诏令。";
+                    + $"然后依据你自己的判断行动：主动外交/封地/驱逐一律用 propose_agenda（宣战/议和/贸易/结盟/背盟/转让封地/驱逐家族）；具体规则见系统提示中的 diplomacy_rules。\n"
+                    + "不要幻想或虚构数据。不要用 send_letter 处理外交事务——外交只走 propose_agenda / respond_to_diplomacy_proposal。";
 
                 QueueEvent(new ActivationEvent
                 {

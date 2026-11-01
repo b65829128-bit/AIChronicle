@@ -26,6 +26,7 @@ namespace AIChronicle.Tests
             Run("read: markdown, empty file, missing file, header", TestReadArticle);
             Run("markdown -> plain text fallback", TestMarkdownPlainText);
             Run("main-thread epoch: drop stale + cancel waiters", TestMainThreadEpoch);
+            Run("curia: weighted tally + quorum + threshold", TestCuriaVoteMath);
 
             Console.WriteLine();
             Console.WriteLine($"passed: {_passed}, failed: {_failed}");
@@ -343,6 +344,33 @@ namespace AIChronicle.Tests
             {
                 // 临时目录清理失败不影响测试结论
             }
+        }
+
+        private static void TestCuriaVoteMath()
+        {
+            // 支持 10、反对 20、弃权 5、未表态 99：应召权重 134，明确票 30，支持率 1/3。
+            var tally = CuriaVoteMath.Tally(new (float Weight, int Stance)[]
+            {
+                (10f, 1), (20f, -1), (5f, 0), (99f, -2)
+            });
+            AssertNear(10f, tally.Support, "support");
+            AssertNear(20f, tally.Oppose, "oppose");
+            AssertNear(5f, tally.Abstain, "abstain");
+            AssertNear(134f, tally.Summoned, "summoned");
+            AssertNear(1f / 3f, CuriaVoteMath.SupportRatio(10f, 20f), "ratio");
+            AssertTrue(CuriaVoteMath.MeetsQuorum(134f, 67f), "quorum met");
+            AssertFalse(CuriaVoteMath.MeetsQuorum(66f, 67f), "quorum not met");
+            AssertFalse(CuriaVoteMath.Passes(10f, 20f, 0.5f), "minority fails");
+            AssertTrue(CuriaVoteMath.Passes(20f, 10f, 0.5f), "majority passes");
+            AssertFalse(CuriaVoteMath.Passes(0f, 0f, 0.5f), "no votes fails");
+            AssertTrue(CuriaVoteMath.Passes(20f, 10f, 2f / 3f), "2/3 threshold passes");
+            AssertFalse(CuriaVoteMath.Passes(19f, 11f, 2f / 3f), "below 2/3 fails");
+        }
+
+        private static void AssertNear(float expected, float actual, string context)
+        {
+            if (Math.Abs(expected - actual) > 0.001f)
+                throw new Exception($"{context}: expected {expected}, got {actual}");
         }
 
         private static void AssertEqual<T>(T expected, T actual, string? context = null)

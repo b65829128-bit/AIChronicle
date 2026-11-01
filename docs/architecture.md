@@ -28,13 +28,13 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **书信模式** | 支持书信 intent，O 键唤起书信往来面板（统一线程列表 + 未读角标） |
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 70 个工具定义在 `tools.json`（51 个游戏工具）和 `agent_tools.json`（19 个文件/通信工具，含 `write_chronicle`/`submit_advisory`/`submit_edict`/`consult_king`/`send_envoy`/`reply_envoy`/`record_resolve`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
+| **工具定义文件化** | 72 个工具定义在 `tools.json`（55 个游戏工具，含 `propose_agenda`/`respond_to_agenda`/`defend_agenda`/`query_agenda`）和 `agent_tools.json`（17 个文件/通信工具，含 `write_chronicle`/`submit_secret_advisory`/`consult_king`/`send_envoy`/`reply_envoy`/`record_resolve`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
 | **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁。**玩家发起的聊天（conversation）是全功能通道——全部分类默认激活**（AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全则对话里达成的承诺无法兑现；能力门控照旧，国王专属工具仍只有国王拿到） |
 | **提示词全部可编辑** | `context_template.txt`、`persona_generation.txt`、`chancery_rules.txt`、`world_info.txt`、`game_rules.txt` 等均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环，模型调用工具 → 执行 → 追加结果 → 重请求，直到模型自然停止（无轮数限制，仅保留极高安全阀防死循环） |
 | **主线程分发** | LLM 工具循环跑在后台线程，但**所有修改游戏状态的工具**经 `MainThreadExecutor` 排队到主线程 `OnApplicationTick` 执行（后台线程阻塞等待结果）；仅 `request_gold`/`request_items`/`browse_tools` 留在后台线程（前两者需主线程弹窗等待玩家，后者改本流程上下文）。背景：Bannerlord 游戏对象（MobileParty/Hero/Kingdom）是主线程独占的。**战役生命周期隔离**：`OnGameStart`/`OnGameEnd` 递增 campaign epoch 并清空旧队列；旧 epoch 动作直接丢弃，等待中的 `RunOnMainThread` 立即取消；`AIChatClient.SendMessage` 也捕获 epoch，跨档的 LLM 工具循环不再执行工具 |
 | **上下文隔离（AsyncLocal）** | `CurrentHero`/`CurrentIntent`/`ActivatedCategories`（AIChatClient）、`_agentEntityId`/`_targetEntityId`（AgentManager）、`_activeAgentId`/`_activeTargetId`（EntityManager）均为 `AsyncLocal`——聊天与后台信件/自省/密使/外交多个流程并发时上下文互不覆盖；实体缓存用 `ConcurrentDictionary`（线程安全） |
-| **秘书处** | M 键打开，玩家的个人行政助手。固定 persona（无条件服从），不读玩家 persona。国王/封臣/平民均可使用。**工具范围严格受限**：仅查询、谏言（`submit_advisory`/`submit_secret_advisory`）、诏令与问询回复（`submit_edict`/`reply_consult`，国王）、快速加入/脱离王国（`change_kingdom`，受家族等级限制）——行军/军事/金钱物品/好感/写信一律不可用（有替代路径），且不提供 `browse_tools`（防止解锁受限分类绕过权限）。玩家可经秘书处调 `submit_advisory` 提交公开谏言（雇佣兵除外） |
+| **参政页与秘书处** | **M 键**打开 CEF `CuriaCefScreen`（朝议/外交/封地/密陈/秘书五页签）；玩家政治动作在此完成。**秘书页签只查询**：`query_*` + `query_agenda` + 只读文件工具；`submit_advisory`/`submit_edict`/`change_kingdom`/外交动作全部移除。CEF 失败回退秘书处查询聊天。 |
 | **天意** | 虚拟实体（ID: `__fate__`，HeroRef=null，与史官并列）。家族补充系统：在世贵族/佣兵家族**总数**（封臣世家 + 雇佣兵公司，佣兵不论是否受雇都计入）低于「家族总数补充阈值」时被激活，决定新家族名称/文化/投效势力/以封臣还是佣兵身份入世（`create_clan`，能力门控仅天意可用），成员程序生成、等级 2、族长带兵、旗帜随机，入原始史料但不激活史官。只在玩家位于大地图时检测（捏脸/初始化阶段计数失真），有 MCM 冷却防连补；成员模板用 `RebelliousHeroTemplates`（`GetRandomTemplateByOccupation(Lord)` 查不到 Lord 模板、恒 null 的历史死路径已弃） |
 | **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
 
@@ -123,8 +123,9 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | `World/factions.txt` | 只读 |
 | `World/settlements.txt` | 只读 |
 | `World/history/**`（原始史料/编年史） | 只读 |
-| `World/advisory/`（封臣公开谏言） | 只读：史官可读任何国家；其他 agent 仅本国 |
-| `World/edict/`（国王诏令） | 只读：史官可读任何国家；其他 agent 仅本国 |
+| `World/advisory/`（旧档公开谏言，v2.4.0 起不再写入） | 只读：史官可读任何国家；其他 agent 仅本国 |
+| `World/edict/`（旧档国王诏令，v2.4.0 起不再写入） | 只读：史官可读任何国家；其他 agent 仅本国 |
+| `World/curia/{王国}/`（朝议公开档案） | 只读：本国成员 + 史官；他国不可读；根目录仅史官可列 |
 | `World/secret_advisory/`（秘密谏言） | 只读：**仅本国国王**；本国封臣与史官不可读 |
 | `World/diplomacy/consults/`（国王外交问询） | 只读：史官可读任何国家；参与双方国王可读；第三方不可读 |
 | `World/correspondence/`（私有密使） | 只读：**仅参与者双方**（实体 ID 匹配）；史官与任何第三方不可读 |
@@ -193,6 +194,16 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 **设计优先级**：未来设计记忆相关系统时，**优先以日记为锚点**，围绕「日记索引 + 聊天全文」的互证结构展开，不要另起炉灶。日记格式必须保持 `[年季节日] 类型：内容` 一致，否则检索失效。
 
 **为什么是日记而不是注入**：日记是拉取式（agent 自觉读写，见克制原则），不占上下文；注入任何记忆内容都会膨胀上下文、稀释提示。检索工具（grep 的 context_lines/max_results）为此设计。
+
+## 10.1 数字与 Agent 的分工（朝议的设计原则）
+
+**数字描述世界，Agent 做判断。**
+
+- 数字负责事实：兵力、金币、封地数、距离、家族实力、投票权重。
+- Agent 负责判断：支持/反对/弃权、信任/猜忌、服从/叛逃、一个国王还有没有名分。
+- 不要用数字替 Agent 思考：朝议不引入“合法性 -10”“支持度 +5”这类决策代理；Agent 读到的是公开记录（谁提议、谁投票、理由、谁缺席、谁被夺封/驱逐），自己形成判断。
+- 也不要用 Agent 替数字干活：票数、quorum、门槛、权重必须由代码计算。
+- 朝议的“合法性”是涌现的：公开档案 + 关系 + 日记 + 史书共同构成 Agent 的判断依据，而不是一根隐藏数值条。
 
 ## 11. 日记权威化与记忆巩固（diary-as-authority）
 
@@ -331,7 +342,7 @@ Usage:
 
 ### 当前实现
 
-所有 70 个工具（51 个游戏工具 + 19 个文件/通信工具）定义在 `tools.json`/`agent_tools.json`（热重载，不硬编码）。每次 API 请求都附带能力过滤后的工具定义。模型自行判断是否需要调用。返回的 `ChatResponse` 包含：
+所有 72 个工具（55 个游戏工具 + 17 个文件/通信工具）定义在 `tools.json`/`agent_tools.json`（热重载，不硬编码）。每次 API 请求都附带能力过滤后的工具定义。模型自行判断是否需要调用。返回的 `ChatResponse` 包含：
 - `Content`：角色扮演文本回复
 - `LearnedKnowledge`：如果模型调用了 `update_knowledge`，这里包含新认知
 - `ToolCalls`：原始工具调用数据（用于构建反馈闭环）
@@ -429,7 +440,8 @@ Usage:
 │   ├── ToolExecutor.Query.cs   ← 查询类工具（人物/定居点/世界/内政/技能）
 │   ├── ToolExecutor.Intel.cs   ← 军情迷雾（query_party_troops + 距离/传闻三档模糊模型）
 │   ├── ToolExecutor.Military.cs ← 行军/军事（move/raid/besiege/form_army/驻防/招募/俘虏）
-│   ├── ToolExecutor.Social.cs  ← 社交/通信（金钱物品/好感/放行/书信/谏言/诏令/问询/密使）
+│   ├── ToolExecutor.Social.cs  ← 社交/通信（金钱物品/好感/放行/书信/密陈/问询/密使）
+│   ├── ToolExecutor.Curia.cs   ← 朝议（propose/respond/defend/query_agenda）
 │   ├── ToolExecutor.Diplomacy.cs ← 阵营变更（change_kingdom 全模式 + 家族等级限制）
 │   └── ToolExecutor.Fate.cs    ← 天意建族（create_clan + 预算成功才占用 + 随机旗帜/定居点）
 ├── UI/                         ← 界面层
@@ -438,8 +450,13 @@ Usage:
 │   ├── LetterListScreen.cs     ← 书信收信人列表屏幕
 │   ├── HistoryScreenVM.cs      ← 史书原生 ViewModel（只做绑定/选中态；数据经 HistoryArchive）
 │   ├── Kit/                    ← 原生 Kit UI 框架（KitScreen/KitTheme/组件/动态纹理/Gallery）
-│   └── Web/                    ← CEF 页面宿主（CefWebHost/CefWebScreen/HistoryCefScreen/Bridge；WebPage 脚手架）
+│   └── Web/                    ← CEF 页面宿主（CefWebHost/CefWebScreen/HistoryCefScreen/CuriaCefScreen/Bridge；WebPage 脚手架）
 ├── Systems/                    ← 游戏系统与 Harmony 补丁
+│   ├── CuriaService.cs / .Attendance.cs / .Effects.cs ← 朝议（提议/应召/投票/结算/执行）
+│   ├── CuriaModels.cs          ← 朝议数据模型
+│   ├── CuriaStore.cs           ← 朝议持久化/公开档案/日记/史料/通知
+│   ├── CuriaPageBuilder.cs     ← 朝议 CEF 数据/AI 查询/投票提示词
+│   ├── CuriaVoteMath.cs        ← 纯逻辑计票（可单测）
 │   ├── HistoryArchive.cs       ← 史册数据层（目录/体例分组/权限/正文；原生与 CEF 共用）
 │   ├── HistoryViewerFactory.cs ← 从当前战役读取史册权限视角
 │   ├── HistoryMarkdown.cs      ← Markdown → 原生纯文本（CEF 不可用时的 fallback）
@@ -483,7 +500,7 @@ Usage:
 │       ├── tools.json         ← 游戏工具定义（热重载）
 │       ├── agent_tools.json   ← Agent 文件工具定义（热重载）
 │       ├── persona_generation.txt ← NPC性格生成提示词（玩家可编辑，热重载）
-│       ├── advisory_rules.txt  ← 封臣谏言规则（保留，自省进谏仍走此套归档，热重载）
+│       ├── curia_rules.txt      ← 朝议投票/陈情规则（热重载）
 │       ├── self_review_rules.txt ← 封臣自省规则（热重载）
 │       ├── fief_review_rules.txt ← 封地审视规则（被夺方激活，热重载）
 │       ├── clan_replenishment_rules.txt ← 天意建族规则（家族补充，热重载）

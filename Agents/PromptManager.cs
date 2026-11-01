@@ -196,7 +196,7 @@ namespace AIChronicle
             CopyPromptToCampaign("yearly_chronicle_prompt.txt");
             CopyPromptToCampaign("special_chronicle_prompt.txt");
             CopyPromptToCampaign("biography_prompt.txt");
-            CopyPromptToCampaign("advisory_rules.txt");
+            CopyPromptToCampaign("curia_rules.txt");
             CopyPromptToCampaign("fief_review_rules.txt");
             CopyPromptToCampaign("self_review_rules.txt");
             CopyPromptToCampaign("clan_replenishment_rules.txt");
@@ -481,9 +481,6 @@ namespace AIChronicle
                         new() { Name = "recipient_entity_id", Type = "string", Description = "收信人 ID 或名称" },
                         new() { Name = "content", Type = "string", Description = "信件正文" }
                     } },
-                new() { Name = "submit_advisory", Category = "communication",
-                    Description = "向国王提交公开谏言。",
-                    Parameters = new List<ToolParamDef> { new() { Name = "content", Type = "string", Description = "谏言正文" } } }
             };
         }
 

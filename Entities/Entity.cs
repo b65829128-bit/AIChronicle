@@ -20,7 +20,8 @@ namespace AIChronicle
         SendLetter,
         Diplomat,
         CreateClan,
-        Chronicler
+        Chronicler,
+        Curia
     }
 
     public class Entity

@@ -10,7 +10,7 @@
 - 默认页面 1280×720（16:9）、30fps，软件渲染（`--disable-gpu` / `--no-sandbox`）。
 - 实机：`Cef.Initialize` 约 0.8s，首帧约 1.6s；浏览器关闭后 CEF 保持初始化，可直接重开。
 - 入口：大地图按 **F8** → Kit Gallery →「打开 CEF」/「打开 CEF 史书」（演示/编年史示例）。
-- 全 Web 史书：默认按 H 打开新版 Web 阅读页；MCM 关闭或 CEF 失败时回退原生史书。正文按 Markdown 渲染，谏言/诏令/密陈保持纯文本。
+- 全 Web 史书：默认按 H 打开新版 Web 阅读页；MCM 关闭或 CEF 失败时回退原生史书。正文按 Markdown 渲染，密陈（及旧档谏言/诏令）保持纯文本。
 - CEF 原生运行时约 395MB（`libcef.dll` 236MB + locales + subprocess + paks）。
 
 ## 2. 架构
@@ -53,6 +53,8 @@ CefBridge.ActionReceived
 | `Systems/HistoryArchive.cs` | 史册数据层：目录扫描、体例分组、权限过滤、正文读取（原生/CEF 共用） |
 | `Systems/HistoryMarkdown.cs` | Markdown → 原生纯文本（CEF 失败时的 fallback） |
 | `_Module/WebUI/history.html/css/js` | 全 Web 史书：1100×700 古籍式目录 + 书页正文、阅读进度/字数，页面铺满无外框 |
+| `UI/Web/CuriaCefScreen.cs` | M 键参政页宿主：五页签、投票/提议/陈情/外交/密陈动作回主线程、原生文本输入、刷新 |
+| `_Module/WebUI/curia.html/css/js` | 朝议参政页：朝议/外交/封地/密陈/秘书；1280×760；页面只 dispatch，不碰游戏对象 |
 | `_Module/WebUI/history.js` | 目录渲染、Markdown/纯文本正文渲染、dispatch、逐元素平滑滚动 |
 | `UI/Kit/KitTexture.cs` | `KitTextureWidget`：动态纹理、BGRA/raw 帧、指针/滚轮事件、旧纹理延迟释放 |
 | `_Module/WebUI/live.html` | CEF 演示页：CSS 动画、JS 时钟、`ping` 桥测试按钮 |
@@ -96,7 +98,7 @@ CefBridge.ActionReceived
   - 目标速度 = `viewportHeight * 1.6 * notches`；
   - 指数逼近速度，新 burst 加 `viewportHeight * 0.08` 冲量；
   - 页面用 `__scrollBySmooth` 逐帧逼近目标（rAF + 0.30 插值），避免一帧到底。
-- 文本输入/中文 IME 不交给 CEF；聊天/书信继续原生输入框。
+- 文本输入/中文 IME 不交给 CEF；聊天/书信/朝议理由继续原生输入框（`InformationManager.ShowTextInquiry`）。
 
 ## 7. 页面与排版
 
@@ -117,8 +119,24 @@ CefBridge.ActionReceived
 - 内容区 1100×700，页面铺满 CEF 纹理，**不再有页面边距/外层画框**；原生只保留标题/关闭，不显示技术状态行。
 - 原生 HistoryScreen 保留为 fallback；CEF 初始化失败/MCM 关闭时 H 仍打开原生史书。
 - 目录/正文数据已抽到 `HistoryArchive`（HistoryCefScreen 不再持有 HistoryScreenVM）；两套入口共用同一份目录顺序、权限与正文读取。
-- 正史正文按 Markdown 渲染：`##` 分节、`**` 强调、`>` 史官曰引用块、`- ` 列表；页面用 DOM 节点构造，不拼 `innerHTML`。谏言/诏令/密陈按 `format=plain` 原样显示，`*`/`#` 等字符不被解释。
+- 正史正文按 Markdown 渲染：`##` 分节、`**` 强调、`>` 史官曰引用块、`- ` 列表；页面用 DOM 节点构造，不拼 `innerHTML`。密陈（及旧档谏言/诏令）按 `format=plain` 原样显示，`*`/`#` 等字符不被解释。
 - 清晰度：窗口比 1280 全屏更接近 1:1；浏览器按 DPR 栅格化，CEF 固定位图仍可能被 Gauntlet 二次采样，必要时再做超采样/字体。
+
+### 7.2 朝议参政页（M 键，v2.4.0）
+
+- `CuriaCefScreen` + `_Module/WebUI/curia.html/css/js`：1280×760，深色议政厅 + 羊皮纸卡片；五页签：朝议/外交/封地/密陈/秘书。
+- 朝议页：提议者/理由/条款/目标、票数/权重/quorum/门槛条、应召家族立场与理由、未出席、被针对家族陈情、国王态度、结果与执行；投票/附理由/陈情按钮。
+- 提议表：类型/目标王国/封地/新主/目标家族的下拉选择；理由由 C# `InformationManager.ShowTextInquiry` 原生输入。
+- 外交页：外国提案接受/拒绝、当前战和/盟约/贸易、国王问询线程与遣使（仅国王）。
+- 封地页：国王自己封地自由转让；封臣封地提转让/夺封议程；驱逐家族；封臣可提自己的封地转让。
+- 密陈页：封臣写密陈；国王读本国密陈。
+- 秘书页：打开 `AIChatScreen.OpenChancery()`（query-only）；不提供任何政治动作。
+- 页面动作 id：`vote` / `voteReason` / `propose` / `transferOwnFief` / `defend` / `respondProposal` / `secretAdvisory` / `consultSend` / `consultReply` / `openSecretary` / `openLetters` / `refresh`；全部经 `CefBridge.dispatch` + `MainThreadExecutor.Post`。
+- CEF 失败：`CuriaCefScreen.Open()` 返回 false，M 键回退 `AIChatScreen.OpenChancery()` 查询聊天并提示。
+- 原生文本输入在 Linux/Proton + Fcitx5 下仍可能不可用；先用外部输入后粘贴，输入法修复作为独立议题（见 `docs/plan-curia.md` 第 14 节）。
+- **CEF OffScreen 不弹原生 `<select>` 菜单**：页面内选择器全部用 `createDropdown`（按钮 + 绝对定位面板）实现；不要再用 `<select>`/`<option>`。
+- **滚轮**：`CefWebHost.SendMouseWheel` 会调用 `window.__scrollBySmooth(delta,x,y)`；页面必须实现该函数，并从鼠标位置向上找 `overflow-y: auto/scroll` 且内容超高的祖先。优先滚下拉菜单/历史列表，最后回退 `main.main.scrollable`；否则 `window.scrollBy` 对固定 760px 的 body 无效。
+- **下拉图层**：仅给 `.dropdown-menu` 设 `z-index` 不够——`.card > *` 的 `z-index:1` 会形成层叠上下文，菜单会被后面的按钮/卡片压住。展开时给所在 `.card` 加 `.dropdown-open`（`z-index:30`），并把 `.form-grid`/`.actions`/`.send-row` 提到 `z-index:3`、`.form-actions` 保持 2。
 
 ## 8. 构建 / 打包
 

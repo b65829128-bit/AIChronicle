@@ -14,7 +14,7 @@
 
 > Linux 上 dnSpy 不可用；用 `ilspycmd` 生成/更新 `BLSource/`，或用 Rider 内置反编译。游戏运行经 Steam/Proton，见 `docs/linux-dev.md`。
 
-## 2. 游戏工具（tools.json，51 个）
+## 2. 游戏工具（tools.json，55 个）
 
 | 工具 | 类别 | 说明 |
 |------|------|------|
@@ -41,12 +41,16 @@
 | `go_around_party` | 行军 | 绕行回避某支部队 |
 | `query_war_status` | 查询 | 查询王国战争统计（双方阵亡/攻城/劫掠数） |
 | `query_influence` | 查询 | 查询本族当前影响力（政治资财，主要用于拉军团[超 100 可召集]与推行政策） |
+| `propose_agenda` | 朝议 | 朝议提议：宣战/议和提议/贸易提议/结盟提议/退出盟约/封地转让/驱逐家族；封臣/国王可用，雇佣兵不可；一个王国一个活跃议程 |
+| `respond_to_agenda` | 朝议 | 应召投票：支持/反对/弃权 + 可选一句理由；公开，入档/日记/史书 |
+| `defend_agenda` | 朝议 | 被针对家族陈情；不投票，只陈述理由，公开给所有投票者 |
+| `query_agenda` | 查询 | 查看本国进行中/历史朝议：提议者、理由、票数、权重、各家族立场与理由、缺席、结果 |
 | `query_pending_proposals` | 查询 | 列出当前王国待处理的外交提案（无需参数，自动按当前 Entity 过滤） |
-| `declare_war` | 外交 | 向另一王国宣战（单向，国王专属） |
-| `propose_peace` | 外交 | 向另一王国提议议和（双向，附赔偿方案，国王专属） |
-| `propose_alliance` | 外交 | 向另一王国提议结盟（双向，国王专属） |
-| `propose_trade` | 外交 | 向另一王国提议贸易协定（双向，国王专属） |
-| `end_alliance` | 外交 | 单方面终止与盟友的盟约（无需对方确认，国王专属） |
+| `declare_war` | 外交 | 向另一王国宣战（单向，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="declare_war")` |
+| `propose_peace` | 外交 | 向另一王国提议议和（双向，附赔偿方案，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="propose_peace")` |
+| `propose_alliance` | 外交 | 向另一王国提议结盟（双向，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="propose_alliance")` |
+| `propose_trade` | 外交 | 向另一王国提议贸易协定（双向，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="propose_trade")` |
+| `end_alliance` | 外交 | 单方面终止与盟友的盟约（无需对方确认，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="break_alliance")` |
 | `end_trade_agreement` | 外交 | 单方面终止与另一王国的贸易协定（无需对方确认，国王专属） |
 | `respond_to_diplomacy_proposal` | 外交 | 接受或拒绝收到的外交提案（国王专属） |
 | `gift_fief` | 外交 | 国王敕令将封地直接转让给指定封臣家族领袖（国王专属，不经过选举） |
@@ -66,7 +70,7 @@
 | `create_clan` | 通用 | 天意建族（家族补充系统）：建新贵族家族（成员 3-6 人程序生成、家族等级 2、族长带兵、旗帜随机、入原始史料但不激活史官）。仅 `__fate__` 实体可用（能力门控）。**代码强制每次激活只建一族**（LLM 可能连建多族，曾致原生崩溃）；英雄创建对齐游戏叛乱建族模式（先建英雄→注册进族→置 Active）；成员模板用 `CultureObject.RebelliousHeroTemplates`（Lord 模板不在 NotableTemplates，`GetRandomTemplateByOccupation(Lord)` 恒 null 的死路径已弃）；**预算只在建族成功后才占用**（失败不消耗、可重试） |
 | `create_kingdom` | 外交 | 封臣/独立氏族领袖自立建国（**实验性功能：未经实机测试，为未来功能提前做的准备**）。门槛对齐原版 KingdomCreationModel（tier4 + 城镇/城堡≥1 + 兵≥100）；排除玩家（走原版总督对话）/国王/雇佣兵；封臣建国先叛乱脱离旧国（保封地、对旧国及其交战方宣战）再建国；文化参数精确优先再模糊匹配，不自创文化（CultureObject 是 XML 静态内容）；国号查重；史官自动入史 + 建国纪事；称王后 `EntityManager.RefreshEntity` 补 Diplomat 能力 |
 
-## 3. 文件工具（agent_tools.json，19 个）
+## 3. 文件工具（agent_tools.json，17 个）
 
 | 工具 | 说明 |
 |------|------|
@@ -81,9 +85,7 @@
 | `glob` | 按文件名模式匹配（如 `knowledge/*.txt`） |
 | `grep` | 按关键词搜索文件内容（支持 max_results 上限、context_lines 上下文、case_sensitive） |
 | `send_letter` | 给其他 Entity 写信 |
-| `submit_advisory` | 向国王提交公开谏言（封臣谏言专用，系统自动归档，史官可读） |
 | `submit_secret_advisory` | 向国王密陈秘密谏言（不入史册，仅本国王可读） |
-| `submit_edict` | 国王颁布公开诏令/垂询群臣（公开归档 `World/edict/{王国}_{年}.txt`，史官可读，仅王国统治者可用） |
 | `consult_king` | 国王遣使问询他国国王（`World/diplomacy/consults/{A}_and_{B}.txt`，激活对方回应，史官可读，仅王国统治者可用，每王国对 7 游戏天冷却） |
 | `reply_consult` | 国王回复他国外交问询（落盘到问询线程，史官可读，仅王国统治者可用） |
 | `send_envoy` | 私有密使：派使者联络其他家族领袖/他国国王（`World/correspondence/{idA}_and_{idB}.txt`，**史官与第三方不可读**，仅参与者双方；立即激活对方一次回应，单跳防环；每实体对 7 游戏天冷却。仅家族领袖可用） |
@@ -97,14 +99,15 @@
 | 分类 | 包含工具 | 默认激活场景 |
 |------|---------|:--|
 | universal | update_knowledge, cancel_action, create_clan（仅天意） | 全部 |
-| query | query_character, query_settlement, query_settlement_geography, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_clan_fiefs, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills, query_influence | 全部 |
+| query | query_character, query_settlement, query_settlement_geography, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_clan_fiefs, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills, query_influence, query_agenda | 全部 |
+| council | propose_agenda, respond_to_agenda, defend_agenda | conversation / diplomacy / self_review / fief_review / curia |
 | social | change_relation, give_gold, request_gold, give_item, request_items, let_go | conversation |
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous（conversation 亦激活） |
 | military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops, form_army, release_prisoner, execute_prisoner | autonomous（conversation 亦激活） |
-| diplomacy | declare_war, propose_peace, propose_alliance, propose_trade, respond_to_diplomacy_proposal, gift_fief, change_kingdom, create_kingdom（实验性）, submit_edict, consult_king, reply_consult | diplomacy（conversation 亦激活） |
+| diplomacy | declare_war（朝议启用时拒绝）, propose_peace（拒绝）, propose_alliance（拒绝）, propose_trade（拒绝）, end_alliance（拒绝，改用 break_alliance）, respond_to_diplomacy_proposal, gift_fief（仅自己封地）, change_kingdom（AI 可用，玩家拒绝）, create_kingdom（实验性）, consult_king, reply_consult | diplomacy（conversation 亦激活） |
 | file | read_file, write_file, write_chronicle（仅史官）, append_file, edit_file, delete_file, move_file, list_dir, glob, grep, record_resolve | letter, autonomous, conversation, self_review |
-| communication | send_letter, send_envoy, reply_envoy, submit_advisory, submit_secret_advisory, submit_edict | letter（conversation 亦激活）；send_envoy/reply_envoy 在 self_review 激活 |
+| communication | send_letter, send_envoy, reply_envoy, submit_secret_advisory | letter（conversation 亦激活）；send_envoy/reply_envoy 在 self_review 激活 |
 
-**玩家发起的聊天（conversation）是全功能通道**——所有分类默认激活。理由：AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全，对话里达成的承诺（议和/出兵/换国/写信/放人）就无法兑现。能力门控照旧：国王专属工具（宣战/议和/结盟/诏令/问询）仍只有国王拿到，部队工具仍只有带兵者拿到，`change_kingdom` 仅氏族领袖可用——所以对话里每个 NPC 的可用工具由身份决定。
+**玩家发起的聊天（conversation）是全功能通道**——所有分类默认激活。理由：AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全，对话里达成的承诺（议和/出兵/换国/写信/放人）就无法兑现。能力门控照旧：国王专属工具（朝议提议/结盟/问询）仍只有国王拿到，部队工具仍只有带兵者拿到，`change_kingdom` 仅氏族领袖可用——所以对话里每个 NPC 的可用工具由身份决定。
 
 Agent 任何时候都可以调 `browse_tools("military")` 解锁某类工具，下一轮即可使用。
