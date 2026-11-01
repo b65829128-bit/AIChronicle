@@ -27,7 +27,7 @@ OnApplicationTick → AgentScheduler.Tick() → 若并发槽未满 → 取最高
 - 支持事件类型：`LetterReceived`（来信）、`BehaviorCheckIn`（签到）、`KingDiplomacy`（国王内外政务）、`PlanCheckIn`（计划）、`YearlyChronicle`/`SpecialChronicle`（史官）、`SelfReview`（封臣自省）、`EnvoyReceived`（私有密使，立即激活对方一次）、`FiefReview`（封地审视，被夺方激活触发内政矛盾）、`CuriaVote`（朝议应召投票）、`CuriaDefense`（朝议被针对家族陈情）
 - **检查站冷却**：签到类激活（BehaviorCheckIn/PlanCheckIn）每 agent 至少间隔 **15 真实分钟**（`PartyBehaviorManager._lastCheckInByAgent`，用真实时间而非游戏时间——游戏时间加速时游戏小时冷却无效）。防止「move/wait 到达→立刻签到→再发指令」的 token 死循环
 - **卡死保险（持久行为）**：驻防/巡逻/护送（`CheckInHours > 0`）若下发后长时间**未到达目标点**（被拦截/目标遥不可及/巡逻绕圈不进 5 单位判定圈），签到永不触发、`PendingAction` 永不移除、mod 每帧重发覆盖原版、agent 永不激活 → 静默卡死。兜底：`PendingAction.CreatedAt` 记录下发时间，超时（`2× 签到周期`，驻防 6 天/巡逻 4 天/护送 2 天）且仍未到达 → 强制触发一次 BehaviorCheckIn（提示"你一直未能到达 X，是否放弃"）并释放 PendingAction，部队回归原版 AI。正常到达时此分支永不触发，零额外成本
-- 被俘/逃亡的国王统治者现在也会被激活（仅跳过已死亡和 null 的），`BuildSelfStatus` 中会提示"你仍是王国统治者"
+- 被俘/逃亡的国王统治者仍会被激活处理政务/外交（仅跳过已死亡和 null 的），`BuildSelfStatus` 中会提示「你仍是王国统治者」；但朝议中没有国王席位
 - 玩家可见：左下角弹 `xxx 给 xxx 写了一封信` / `xxx 正在思考下一步行动...` / `xxx 正在处理内外政务...` / `xxx 发现自己被夺封了...` / `xxx 正在独自思量自己的处境...` / `xxx 遣密使来见 yyy，yyy 正在考虑如何回应...`
 - 防递归：书信规则强调"除非必要不回信" + 深度硬上限
 - 聊天记录使用显式路径（`GetChatLogPathFor`）防线程竞态
@@ -169,7 +169,7 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 > 设计契约见 `docs/plan-curia.md`。核心：**九类行动经王国公开表决；文本是理由，类型+参数是机制；通过执行、不通过无事发生。**
 
 - **九类议题**：`declare_war` / `propose_peace` / `propose_trade` / `propose_alliance` / `break_alliance` / `enact_policy` / `revoke_policy` / `transfer_fief` / `expel_clan`。
-- **选民**：所有封臣家族领袖（含无地）；雇佣兵无票。国王/玩家必召；被针对家族不投票但单独陈情。玩家作为普通封臣被俘/流亡仍保留投票权；国王被俘/流亡不保留席位（界面显示原因）；其他 AI 被俘/逃亡不召；国王已故则议程失效。
+- **选民**：所有封臣家族领袖（含无地）；雇佣兵无票。国王（自由时）/玩家必召；被针对家族不投票但单独陈情。玩家作为普通封臣被俘/流亡仍保留投票权；国王被俘/流亡不保留席位（界面显示原因）；其他 AI 被俘/逃亡不召；国王已故则议程失效。
 - **权重**：`DiplomacyModel.GetClanStrength`（原版选王同款），公开；国王无额外票权。
 - **全量/应召**：合格封臣数 ≤ `CuriaFullCouncilThreshold`（默认 6）或强制全量时全部投票；否则固定（国王/玩家/提议者）+ 利害前 3 + 权重补到 quorum 50% + 轮换 1-2，软上限 `CuriaAttendanceCap`（默认 6，quorum 优先）。每人记录 `SummonReason`（固定/利害/权重/轮换），未出席记 `未获召见`。
 - **门槛**：战/和/贸/结盟/政策 50%；封地/驱逐/背盟 2/3。quorum 不足 → 流会。
