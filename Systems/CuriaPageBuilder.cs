@@ -232,7 +232,7 @@ namespace AIChronicle
             var playerClanId = player?.Clan?.StringId ?? "";
             var playerVote = a.Votes.FirstOrDefault(v => v.ClanId == playerClanId);
             var isTarget = a.NeedsTargetDefense && a.TargetClanId == playerClanId;
-            var canVote = a.Status == CuriaAgendaStatus.Voting && playerVote != null;
+            var canVote = a.Status == CuriaAgendaStatus.Voting && playerVote != null && !playerVote.Stance.HasValue;
             var canDefend = a.Status == CuriaAgendaStatus.Proposed && isTarget && !a.TargetDefended;
 
             var votes = a.Votes.Select(v => (object)new Dictionary<string, object?>
@@ -297,6 +297,7 @@ namespace AIChronicle
                 ["absent"] = absent,
                 ["playerStance"] = playerVote?.Stance.HasValue == true ? CuriaText.StanceKey(playerVote.Stance.Value) : "",
                 ["playerStanceLabel"] = playerVote?.Stance.HasValue == true ? CuriaText.StanceLabel(playerVote.Stance.Value) : "",
+                ["playerAutoSupport"] = playerVote?.IsAutoSupport == true,
                 ["playerReason"] = playerVote?.Reason ?? "",
                 ["canVote"] = canVote,
                 ["canDefend"] = canDefend,

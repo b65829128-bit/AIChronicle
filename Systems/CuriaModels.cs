@@ -158,8 +158,8 @@ namespace AIChronicle
                 foreach (var v in Votes)
                 {
                     if (!v.HasVoted) return false;
-                    // 玩家作为提议者时的“自动支持”不算最终表态：给玩家留出改票/附理由的时间。
-                    if (v.IsPlayer && v.IsAutoSupport) return false;
+                    // 提议者的自动支持与 AI 投票一样计入最终表态：所有应召者投完即结算，
+                    // 不再要求玩家作为提议者重复点一次“支持”。
                 }
                 return true;
             }

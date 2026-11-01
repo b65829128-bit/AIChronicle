@@ -722,7 +722,7 @@ namespace AIChronicle
                 message = "[错误] 当前议程尚未进入表决或已结束";
                 return false;
             }
-            if (CuriaStore.Today > agenda.DeadlineDay)
+            if (CuriaStore.Today >= agenda.DeadlineDay)
             {
                 message = "[错误] 本次朝议已截止";
                 return false;
@@ -738,9 +738,12 @@ namespace AIChronicle
                 message = "[错误] 你不是本次朝议的应召投票者";
                 return false;
             }
-            if (vote.HasVoted && vote.VotedDay == CuriaStore.Today)
+            if (vote.Stance.HasValue)
             {
-                // 同日重复提交视为改票；允许
+                message = vote.IsAutoSupport
+                    ? "[错误] 你是提议者，默认支持已计入，不能更改"
+                    : "[错误] 你已投过票，不能更改";
+                return false;
             }
 
             vote.Stance = stance;
@@ -794,7 +797,7 @@ namespace AIChronicle
                 return false;
             }
             if (agenda.Status != CuriaAgendaStatus.Proposed || agenda.TargetDefended
-                || CuriaStore.Today > agenda.DefenseDeadlineDay)
+                || CuriaStore.Today >= agenda.DefenseDeadlineDay)
             {
                 message = "[错误] 陈情期已过，朝议已进入表决";
                 return false;

@@ -399,7 +399,7 @@
         actions.appendChild(rb);
       }
       if (a.playerStanceLabel) {
-        actions.appendChild(el('span', 'small muted', '你的立场：' + a.playerStanceLabel + (a.playerReason ? '（' + a.playerReason + '）' : '')));
+        actions.appendChild(el('span', 'small muted', '你的立场：' + a.playerStanceLabel + (a.playerAutoSupport ? '（提议者默认）' : '') + (a.playerReason ? '（' + a.playerReason + '）' : '')));
       }
       card.appendChild(actions);
     } else if (a.playerStanceLabel) {

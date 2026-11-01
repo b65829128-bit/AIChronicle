@@ -166,7 +166,7 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 - **权重**：`DiplomacyModel.GetClanStrength`（原版选王同款），公开；国王无额外票权。
 - **全量/应召**：合格封臣数 ≤ `CuriaFullCouncilThreshold`（默认 6）或强制全量时全部投票；否则固定（国王/玩家/提议者）+ 利害前 3 + 权重补到 quorum 50% + 轮换 1-2，软上限 `CuriaAttendanceCap`（默认 6，quorum 优先）。每人记录 `SummonReason`（固定/利害/权重/轮换），未出席记 `未获召见`。
 - **门槛**：战/和/贸/结盟 50%；封地/驱逐/背盟 2/3。quorum 不足 → 流会。
-- **状态机**：`Proposed`（待陈情，1 天）→ `Voting`（默认 5 天）→ `Passed/Rejected` → `Applied/Failed`。全部应召者表态可提前结算；到期未表态=弃权。一个王国同一时间一个活跃议程。
+- **状态机**：`Proposed`（待陈情，1 天）→ `Voting`（默认 5 天）→ `Passed/Rejected` → `Applied/Failed`。提议者默认支持且计入最终票数；投票一经提交不可更改；全部应召者表态可提前结算，截止日强制按已有票数结算（未表态=弃权）。一个王国同一时间一个活跃议程。
 - **暂停随机激活**：`AgentScheduler.CheckKingActivations` / `CheckSelfReviewActivations` 发现该王国有活跃议程且 `CuriaPauseRandomActivations` 开启时跳过；`CuriaVote`/`CuriaDefense` 为 P1。
 - **稳定执行**：`CuriaService.Propose` 校验；`CuriaService.Effects` 结算前重校验；执行器调用 `DiplomacyService` 的现有动作；`AIChatClient.CurrentHero` 临时设为国王以复用 `GetDiplomacyHero`；失败标记 `Failed`，不崩游戏。
 - **数据**：`World/curia/{王国}/state.json` + `agenda_{id}.json` + `agenda_{id}.txt`（公开摘要）。权限 `AgentManager.IsCuriaAllowed`：本国成员 + 史官；他国不可读。已结束议程默认每国保留最近 200 条（`CuriaHistoryKeep`），旧档在 `FinishAgenda` 后清理，读档时也会清理一次；`query_agenda` 只读最近 10/30 条，不随存档无限增长。
