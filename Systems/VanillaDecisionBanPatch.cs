@@ -1,3 +1,4 @@
+using System.Reflection;
 using TaleWorlds.CampaignSystem;
 
 namespace AIChronicle
@@ -27,6 +28,19 @@ namespace AIChronicle
         public static bool BlockExecute()
         {
             return !CuriaService.Enabled;
+        }
+
+        /// <summary>
+        /// 某些 DataSource 绑定会在 VM 内部缓存 CanXxx 字段；只改 getter 可能不足以让
+        /// Clan 页的驱逐按钮刷新。选中/刷新后强制把字段改为 false。
+        /// </summary>
+        public static void ForceDisableExpelButton(object __instance)
+        {
+            if (!CuriaService.Enabled || __instance == null) return;
+            var prop = __instance.GetType().GetProperty("CanExpelCurrentClan",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (prop != null && prop.CanWrite)
+                prop.SetValue(__instance, false);
         }
     }
 }

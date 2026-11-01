@@ -525,8 +525,13 @@ namespace AIChronicle
             PatchBool(harmony, "TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Policies.KingdomPoliciesVM, TaleWorlds.CampaignSystem.ViewModelCollection", "get_CanProposeOrDisavowPolicy");
             PatchExecute(harmony, "TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Policies.KingdomPoliciesVM, TaleWorlds.CampaignSystem.ViewModelCollection", "ExecuteProposeOrDisavow");
 
-            PatchBool(harmony, "TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Clans.KingdomClanVM, TaleWorlds.CampaignSystem.ViewModelCollection", "get_CanExpelCurrentClan");
-            PatchExecute(harmony, "TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Clans.KingdomClanVM, TaleWorlds.CampaignSystem.ViewModelCollection", "ExecuteExpelCurrentClan");
+            const string clanVm = "TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Clans.KingdomClanVM, TaleWorlds.CampaignSystem.ViewModelCollection";
+            PatchBool(harmony, clanVm, "get_CanExpelCurrentClan");
+            PatchExecute(harmony, clanVm, "ExecuteExpelCurrentClan");
+            PatchPostfix(harmony, clanVm, "SetCurrentSelectedClan",
+                nameof(VanillaDecisionBanPatch.ForceDisableExpelButton));
+            PatchPostfix(harmony, clanVm, "RefreshValues",
+                nameof(VanillaDecisionBanPatch.ForceDisableExpelButton));
 
             PatchBool(harmony, "TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Settlements.KingdomSettlementVM, TaleWorlds.CampaignSystem.ViewModelCollection", "get_CanAnnexCurrentSettlement");
             PatchExecute(harmony, "TaleWorlds.CampaignSystem.ViewModelCollection.KingdomManagement.Settlements.KingdomSettlementVM, TaleWorlds.CampaignSystem.ViewModelCollection", "ExecuteAnnex");
@@ -538,20 +543,45 @@ namespace AIChronicle
         {
             var type = Type.GetType(typeName);
             var method = type?.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (method == null) return;
+            if (method == null)
+            {
+                DebugLogger.Log($"朝议接管：未找到 {typeName}.{methodName}");
+                return;
+            }
             harmony.Patch(method,
                 prefix: new HarmonyMethod(typeof(VanillaDecisionBanPatch).GetMethod(
                     nameof(VanillaDecisionBanPatch.BlockBoolResult), BindingFlags.Static | BindingFlags.Public)));
+            DebugLogger.Log($"朝议接管：已 patch {typeName}.{methodName} (bool)");
         }
 
         private static void PatchExecute(Harmony harmony, string typeName, string methodName)
         {
             var type = Type.GetType(typeName);
             var method = type?.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (method == null) return;
+            if (method == null)
+            {
+                DebugLogger.Log($"朝议接管：未找到 {typeName}.{methodName}");
+                return;
+            }
             harmony.Patch(method,
                 prefix: new HarmonyMethod(typeof(VanillaDecisionBanPatch).GetMethod(
                     nameof(VanillaDecisionBanPatch.BlockExecute), BindingFlags.Static | BindingFlags.Public)));
+            DebugLogger.Log($"朝议接管：已 patch {typeName}.{methodName} (execute)");
+        }
+
+        private static void PatchPostfix(Harmony harmony, string typeName, string methodName, string postfixName)
+        {
+            var type = Type.GetType(typeName);
+            var method = type?.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (method == null)
+            {
+                DebugLogger.Log($"朝议接管：未找到 {typeName}.{methodName}");
+                return;
+            }
+            harmony.Patch(method,
+                postfix: new HarmonyMethod(typeof(VanillaDecisionBanPatch).GetMethod(
+                    postfixName, BindingFlags.Static | BindingFlags.Public)));
+            DebugLogger.Log($"朝议接管：已 patch {typeName}.{methodName} (postfix {postfixName})");
         }
 
         /// <summary>朝议启用时取消原版驱逐家族决策（改由朝议 expel_clan 议题处理）。</summary>
