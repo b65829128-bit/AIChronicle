@@ -79,17 +79,32 @@
 
     ctrl.close = close;
 
-    options.forEach(function (opt) {
-      var item = el('button', 'dropdown-item', opt.label);
-      item.type = 'button';
-      item.setAttribute('data-value', String(opt.value));
-      item.addEventListener('click', function (e) {
-        e.stopPropagation();
-        setValue(opt.value, true);
-        close();
+    function renderOptions() {
+      clear(menu);
+      options.forEach(function (opt) {
+        var item = el('button', 'dropdown-item', opt.label);
+        item.type = 'button';
+        item.setAttribute('data-value', String(opt.value));
+        item.addEventListener('click', function (e) {
+          e.stopPropagation();
+          setValue(opt.value, true);
+          close();
+        });
+        menu.appendChild(item);
       });
-      menu.appendChild(item);
-    });
+    }
+
+    function setOptions(next, preferred) {
+      close();
+      options = next || [];
+      renderOptions();
+      var keep = preferred == null ? '' : String(preferred);
+      var exists = options.some(function (o) { return String(o.value) === keep; });
+      setValue(exists ? keep : (options.length ? options[0].value : ''), false);
+    }
+
+    ctrl.setOptions = setOptions;
+    renderOptions();
 
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -481,6 +496,56 @@
     return wrap;
   }
 
+  function newOwnerOptionsData(clans, excludeClanName) {
+    var options = [];
+    (clans || []).forEach(function (c) {
+      if (!c.leaderEntityId) return;
+      if (excludeClanName && c.name === excludeClanName) return;
+      options.push({ value: c.leaderEntityId, label: c.name + ' · ' + c.leader });
+    });
+    return options;
+  }
+
+  function transferableFiefs(fiefs, clans) {
+    return (fiefs || []).filter(function (f) {
+      return newOwnerOptionsData(clans, f.ownerClan).length > 0;
+    });
+  }
+
+  function availableProposeTypes(d) {
+    if (!d.player || !d.player.canParticipate) return [];
+    var types = [];
+    var ks = d.kingdoms || [];
+    if (ks.some(function (k) { return !!k.canWar; })) types.push('declare_war');
+    if (ks.some(function (k) { return !!k.canPeace; })) types.push('propose_peace');
+    if (ks.some(function (k) { return !!k.canTrade; })) types.push('propose_trade');
+    if (ks.some(function (k) { return !!k.canAlliance; })) types.push('propose_alliance');
+    if (ks.some(function (k) { return !!k.canBreakAlliance; })) types.push('break_alliance');
+
+    var fiefs = d.player.isKing
+      ? (d.fiefs && d.fiefs.vassal ? d.fiefs.vassal : [])
+      : (d.fiefs && d.fiefs.own ? d.fiefs.own : []);
+    if (transferableFiefs(fiefs, d.clans).length > 0) types.push('transfer_fief');
+    if (d.player.isKing && (d.clans || []).some(function (c) { return !c.isRulerClan; })) types.push('expel_clan');
+    return types;
+  }
+
+  function kingdomOptionsForType(d, type) {
+    return (d.kingdoms || []).filter(function (k) {
+      if (type === 'declare_war') return !!k.canWar;
+      if (type === 'propose_peace') return !!k.canPeace;
+      if (type === 'propose_trade') return !!k.canTrade;
+      if (type === 'propose_alliance') return !!k.canAlliance;
+      if (type === 'break_alliance') return !!k.canBreakAlliance;
+      return false;
+    }).map(function (k) {
+      return {
+        value: k.name,
+        label: k.name + (k.atWar ? '（交战中）' : '') + (k.hasTrade ? '（有贸易）' : '') + (k.isAlly ? '（同盟）' : '')
+      };
+    });
+  }
+
   function renderProposeForm() {
     var d = state.data;
     var card = el('div', 'card');
@@ -488,27 +553,32 @@
     card.appendChild(el('h2', 'card-title', '提出新议题'));
     card.appendChild(el('div', 'card-sub', '提案会公开给所有应召家族与史官；通过后执行，不通过则无事发生。'));
 
+    var types = availableProposeTypes(d);
+    if (!types.length) {
+      card.appendChild(el('div', 'empty', '当前没有满足前提的议题。宣战需目标未交战；议和需正在交战；贸易需未交战且无贸易协定；结盟需未交战且未结盟；背盟需已有盟约；封地转让/驱逐还需有可用目标。'));
+      return card;
+    }
+
     var grid = el('div', 'form-grid');
     var typeField = el('div', 'field');
     typeField.appendChild(el('div', 'field-label', '议题类型'));
-    var types = ['declare_war', 'propose_peace', 'propose_trade', 'propose_alliance', 'break_alliance', 'transfer_fief'];
-    if (d.player && d.player.isKing) types.push('expel_clan');
     var typeSel = createDropdown(types.map(function (t) { return { value: t, label: TYPE_LABEL[t] }; }), types[0]);
     typeField.appendChild(typeSel.el);
     grid.appendChild(typeField);
 
     var kField = el('div', 'field');
     kField.appendChild(el('div', 'field-label', '目标王国'));
-    var kSel = createDropdown((d.kingdoms || []).map(function (k) {
-      return { value: k.name, label: k.name + (k.atWar ? '（交战中）' : '') + (k.hasTrade ? '（有贸易）' : '') };
-    }), '');
+    var kSel = createDropdown(kingdomOptionsForType(d, types[0]), '');
     kField.appendChild(kSel.el);
     grid.appendChild(kField);
 
+    var allFiefs = d.player && d.player.isKing
+      ? (d.fiefs && d.fiefs.vassal ? d.fiefs.vassal : [])
+      : (d.fiefs && d.fiefs.own ? d.fiefs.own : []);
+    var fiefList = transferableFiefs(allFiefs, d.clans);
+
     var sField = el('div', 'field');
     sField.appendChild(el('div', 'field-label', '目标封地'));
-    var fiefList = (d.fiefs && d.fiefs.vassal ? d.fiefs.vassal : []);
-    if (!d.player || !d.player.isKing) fiefList = (d.fiefs && d.fiefs.own ? d.fiefs.own : []);
     var sSel = createDropdown(fiefList.map(function (f) {
       return { value: f.name, label: f.name + '（' + f.ownerClan + '）' };
     }), '');
@@ -517,9 +587,7 @@
 
     var nField = el('div', 'field');
     nField.appendChild(el('div', 'field-label', '新主家族领袖'));
-    var nSel = createDropdown((d.clans || []).map(function (c) {
-      return { value: c.leaderEntityId, label: c.name + ' · ' + c.leader };
-    }), '');
+    var nSel = createDropdown(newOwnerOptionsData(d.clans, fiefList.length ? fiefList[0].ownerClan : ''), '');
     nField.appendChild(nSel.el);
     grid.appendChild(nField);
 
@@ -531,6 +599,12 @@
     cField.appendChild(cSel.el);
     grid.appendChild(cField);
 
+    sSel.onChange = function () {
+      var f = null;
+      for (var i = 0; i < fiefList.length; i++) if (fiefList[i].name === sSel.value) { f = fiefList[i]; break; }
+      nSel.setOptions(newOwnerOptionsData(d.clans, f ? f.ownerClan : ''), nSel.value);
+    };
+
     card.appendChild(grid);
     var actions = el('div', 'form-actions');
     var submit = el('button', 'btn primary', '写理由并提交');
@@ -540,7 +614,10 @@
 
     function updateFields() {
       var t = typeSel.value;
-      kField.classList.toggle('hidden', t !== 'declare_war' && t !== 'propose_peace' && t !== 'propose_trade' && t !== 'propose_alliance' && t !== 'break_alliance');
+      var external = t === 'declare_war' || t === 'propose_peace' || t === 'propose_trade'
+        || t === 'propose_alliance' || t === 'break_alliance';
+      kField.classList.toggle('hidden', !external);
+      if (external) kSel.setOptions(kingdomOptionsForType(d, t), kSel.value);
       sField.classList.toggle('hidden', t !== 'transfer_fief');
       nField.classList.toggle('hidden', t !== 'transfer_fief');
       cField.classList.toggle('hidden', t !== 'expel_clan');
@@ -696,7 +773,7 @@
     }
     viewEl.appendChild(card);
 
-    if (isKing && own.length && d.clans && d.clans.length) {
+    if (isKing && transferableFiefs(own, d.clans).length > 0) {
       viewEl.appendChild(renderOwnTransferForm(own, d.clans));
     }
 
@@ -720,25 +797,21 @@
       });
       table2.appendChild(tbody2); card2.appendChild(table2);
       viewEl.appendChild(card2);
-      viewEl.appendChild(renderVassalTransferForm(vassal, d.clans));
+      if (transferableFiefs(vassal, d.clans).length > 0)
+        viewEl.appendChild(renderVassalTransferForm(vassal, d.clans));
     }
 
-    if (isKing && d.clans && d.clans.length) {
+    if (isKing && (d.clans || []).some(function (c) { return !c.isRulerClan; })) {
       viewEl.appendChild(renderExpelForm(d.clans));
     }
 
-    if (!isKing && own.length && d.clans && d.clans.length) {
+    if (!isKing && transferableFiefs(own, d.clans).length > 0) {
       viewEl.appendChild(renderVassalOwnTransferForm(own, d.clans));
     }
   }
 
   function newOwnerOptions(clans, excludeClanName) {
-    var options = [];
-    (clans || []).forEach(function (c) {
-      if (excludeClanName && c.name === excludeClanName) return;
-      options.push({ value: c.leaderEntityId, label: c.name + ' · ' + c.leader });
-    });
-    return createDropdown(options, '');
+    return createDropdown(newOwnerOptionsData(clans, excludeClanName), '');
   }
 
   function renderOwnTransferForm(own, clans) {
@@ -746,12 +819,22 @@
     card.appendChild(el('div', 'card-kicker', 'PATRIMONY'));
     card.appendChild(el('h2', 'card-title', '转让自己的封地'));
     card.appendChild(el('div', 'card-sub', '统治者自由处置自己家族的封地，不需朝议。'));
+    var choices = transferableFiefs(own, clans);
+    if (!choices.length) {
+      card.appendChild(el('div', 'empty', '没有可接收该封地的其他家族。'));
+      return card;
+    }
     var grid = el('div', 'form-grid');
     var sf = el('div', 'field'); sf.appendChild(el('div', 'field-label', '封地'));
-    var sSel = createDropdown(own.map(function (f) { return { value: f.name, label: f.name }; }), '');
+    var sSel = createDropdown(choices.map(function (f) { return { value: f.name, label: f.name }; }), '');
     sf.appendChild(sSel.el); grid.appendChild(sf);
     var nf = el('div', 'field'); nf.appendChild(el('div', 'field-label', '新主'));
-    var nSel = newOwnerOptions(clans, '');
+    var nSel = newOwnerOptions(clans, choices[0].ownerClan);
+    sSel.onChange = function () {
+      var f = null;
+      for (var i = 0; i < choices.length; i++) if (choices[i].name === sSel.value) { f = choices[i]; break; }
+      nSel.setOptions(newOwnerOptionsData(clans, f ? f.ownerClan : ''), nSel.value);
+    };
     nf.appendChild(nSel.el); grid.appendChild(nf);
     card.appendChild(grid);
     var row = el('div', 'form-actions');
@@ -769,12 +852,22 @@
     card.appendChild(el('div', 'card-kicker', 'MOTION · FIEF'));
     card.appendChild(el('h2', 'card-title', '提夺封/转让议程'));
     card.appendChild(el('div', 'card-sub', '国王提出，2/3 通过后执行；被针对家族会陈情，不投票。'));
+    var choices = transferableFiefs(vassal, clans);
+    if (!choices.length) {
+      card.appendChild(el('div', 'empty', '没有可接收这些封地的其他家族。'));
+      return card;
+    }
     var grid = el('div', 'form-grid');
     var sf = el('div', 'field'); sf.appendChild(el('div', 'field-label', '封地'));
-    var sSel = createDropdown(vassal.map(function (f) { return { value: f.name, label: f.name + '（' + f.ownerClan + '）' }; }), '');
+    var sSel = createDropdown(choices.map(function (f) { return { value: f.name, label: f.name + '（' + f.ownerClan + '）' }; }), '');
     sf.appendChild(sSel.el); grid.appendChild(sf);
     var nf = el('div', 'field'); nf.appendChild(el('div', 'field-label', '新主'));
-    var nSel = newOwnerOptions(clans, '');
+    var nSel = newOwnerOptions(clans, choices[0].ownerClan);
+    sSel.onChange = function () {
+      var f = null;
+      for (var i = 0; i < choices.length; i++) if (choices[i].name === sSel.value) { f = choices[i]; break; }
+      nSel.setOptions(newOwnerOptionsData(clans, f ? f.ownerClan : ''), nSel.value);
+    };
     nf.appendChild(nSel.el); grid.appendChild(nf);
     card.appendChild(grid);
     var row = el('div', 'form-actions');
@@ -798,12 +891,22 @@
     card.appendChild(el('div', 'card-kicker', 'MOTION · FIEF'));
     card.appendChild(el('h2', 'card-title', '提议转让自己的封地'));
     card.appendChild(el('div', 'card-sub', '封臣转让自己的封地也需朝议，2/3 通过后执行。'));
+    var choices = transferableFiefs(own, clans);
+    if (!choices.length) {
+      card.appendChild(el('div', 'empty', '没有可接收该封地的其他家族。'));
+      return card;
+    }
     var grid = el('div', 'form-grid');
     var sf = el('div', 'field'); sf.appendChild(el('div', 'field-label', '封地'));
-    var sSel = createDropdown(own.map(function (f) { return { value: f.name, label: f.name }; }), '');
+    var sSel = createDropdown(choices.map(function (f) { return { value: f.name, label: f.name }; }), '');
     sf.appendChild(sSel.el); grid.appendChild(sf);
     var nf = el('div', 'field'); nf.appendChild(el('div', 'field-label', '新主'));
-    var nSel = newOwnerOptions(clans, '');
+    var nSel = newOwnerOptions(clans, choices[0].ownerClan);
+    sSel.onChange = function () {
+      var f = null;
+      for (var i = 0; i < choices.length; i++) if (choices[i].name === sSel.value) { f = choices[i]; break; }
+      nSel.setOptions(newOwnerOptionsData(clans, f ? f.ownerClan : ''), nSel.value);
+    };
     nf.appendChild(nSel.el); grid.appendChild(nf);
     card.appendChild(grid);
     var row = el('div', 'form-actions');

@@ -136,6 +136,7 @@ CefBridge.ActionReceived
 - 原生文本输入在 Linux/Proton + Fcitx5 下仍可能不可用；先用外部输入后粘贴，输入法修复作为独立议题（见 `docs/plan-curia.md` 第 14 节）。
 - **CEF OffScreen 不弹原生 `<select>` 菜单**：页面内选择器全部用 `createDropdown`（按钮 + 绝对定位面板）实现；不要再用 `<select>`/`<option>`。
 - **滚轮**：`CefWebHost.SendMouseWheel` 会调用 `window.__scrollBySmooth(delta,x,y)`；页面必须实现该函数，并从鼠标位置向上找 `overflow-y: auto/scroll` 且内容超高的祖先。优先滚下拉菜单/历史列表，最后回退 `main.main.scrollable`；否则 `window.scrollBy` 对固定 760px 的 body 无效。
+- **议程前提过滤**：`BuildKingdoms` 的 `canWar/canPeace/canTrade/canAlliance/canBreakAlliance` 供页面过滤类型与目标；`renderProposeForm` 没有有效类型时直接显示空态，不渲染提交按钮。
 - **下拉图层**：仅给 `.dropdown-menu` 设 `z-index` 不够——`.card > *` 的 `z-index:1` 会形成层叠上下文，菜单会被后面的按钮/卡片压住。展开时给所在 `.card` 加 `.dropdown-open`（`z-index:30`），并把 `.form-grid`/`.actions`/`.send-row` 提到 `z-index:3`、`.form-actions` 保持 2。
 
 ## 8. 构建 / 打包

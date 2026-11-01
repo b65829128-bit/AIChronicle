@@ -172,4 +172,5 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 - **数据**：`World/curia/{王国}/state.json` + `agenda_{id}.json` + `agenda_{id}.txt`（公开摘要）。权限 `AgentManager.IsCuriaAllowed`：本国成员 + 史官；他国不可读。已结束议程默认每国保留最近 200 条（`CuriaHistoryKeep`），旧档在 `FinishAgenda` 后清理，读档时也会清理一次；`query_agenda` 只读最近 10/30 条，不随存档无限增长。
 - **日记/史书**：代码代写 AI 投票者「决定」、参与者「结果」、未出席者「情报」；`HistoryRecorder.RecordCuriaEvent` 写 `curia_proposed/passed/rejected/applied/failed`；史官可读 `World/curia/` 并在编年史写朝议场景。
 - **玩家入口**：M 键 `CuriaCefScreen`（CEF；朝议/外交/封地/密陈/秘书）；页面动作经 `CefBridge` + `MainThreadExecutor`；文本输入走原生 `InformationManager.ShowTextInquiry`；CEF 失败回退秘书处查询。秘书处 `chancery` 只保留 query + 只读文件工具。
+- **前提过滤**：`BuildKingdoms` 输出 `canWar/canPeace/canTrade/canAlliance/canBreakAlliance`；CEF 只列当前有效类型与目标，AI 提示词要求先查询，`CuriaService.Propose` 硬校验并拒绝重复/无对象议题。
 - **旧入口**：`submit_advisory`/`submit_edict` 删除；`declare_war`/`propose_peace`/`propose_trade`/`propose_alliance`/`end_alliance` 在朝议启用时拒绝；`gift_fief` 仅国王自己封地；玩家 `change_kingdom` 拒绝；原版 `ExpelClanFromKingdomDecision` 在朝议启用时取消（手动 Harmony）。贸易终止 `end_trade_agreement` 仍直接。

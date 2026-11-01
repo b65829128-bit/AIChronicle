@@ -219,7 +219,9 @@ namespace AIChronicle
                         ["hasTrade"] = hasTrade,
                         ["canWar"] = !atWar,
                         ["canPeace"] = atWar,
-                        ["canTrade"] = !atWar && !hasTrade
+                        ["canTrade"] = !atWar && !hasTrade,
+                        ["canAlliance"] = !atWar && !isAlly,
+                        ["canBreakAlliance"] = isAlly
                     });
                 }
             }
