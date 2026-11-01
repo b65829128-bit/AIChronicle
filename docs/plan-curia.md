@@ -184,6 +184,17 @@ Agenda {
 - 外交“接受/拒绝外国提案”（`respond_to_diplomacy_proposal`）保留为国王的对外回应，不需要内部朝议。
 - 同盟、背盟、政策已并入九类朝议；贸易终止 `end_trade_agreement` 仍保留为国王直接工具。
 
+## 9.4 政策效果与影响力条款
+
+原版 32 条政策中，4 条依赖原版影响力投票：
+
+- Precarial Land Tenure：封地归并影响力成本 → **朝议：封地门槛 −8%**
+- Feudal Inheritance：剥夺封地影响力成本 → **朝议：封地门槛 +8%**（每个封地 +0.1 影响力量仍生效）
+- War Tax：宣战影响力成本 → **朝议：宣战门槛 +10%**（税收/繁荣仍生效）
+- Royal Privilege：推翻决策影响力成本 → **朝议：国王票权 ×1.2**
+
+其余政策仍由原版模型读取 `Kingdom.ActivePolicies` 生效；影响力仍影响 `GetClanStrength`（×1.2）与军团。`CuriaPolicyEffects` 负责门槛/票权修正，页面显示“原版效果 / 朝议修正”，`query_policies` 与投票提示词同步。
+
 ## 10. 数据与文件
 
 ```

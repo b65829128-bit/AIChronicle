@@ -249,7 +249,7 @@ namespace AIChronicle
                 CreatedDay = CuriaStore.Today,
                 DeadlineDay = CuriaStore.Today + (MySettings.Instance?.CuriaVoteDays ?? 5),
                 DefenseDeadlineDay = CuriaStore.Today + 1,
-                Threshold = GetThreshold(type)
+                Threshold = GetThreshold(kingdom, type)
             };
 
             switch (type)
@@ -536,15 +536,18 @@ namespace AIChronicle
                 ?? all.FirstOrDefault(p => string.Equals(p.Name?.ToString(), key, StringComparison.OrdinalIgnoreCase));
         }
 
-        private static float GetThreshold(CuriaAgendaType type)
+        private static float GetThreshold(Kingdom? kingdom, CuriaAgendaType type)
         {
             var s = MySettings.Instance;
+            float value;
             if (type == CuriaAgendaType.EnactPolicy || type == CuriaAgendaType.RevokePolicy)
-                return s?.CuriaPolicyThreshold ?? 0.5f;
-            return type == CuriaAgendaType.TransferFief || type == CuriaAgendaType.ExpelClan
-                   || type == CuriaAgendaType.BreakAlliance
-                ? (s?.CuriaFiefThreshold ?? 0.66f)
-                : (s?.CuriaWarThreshold ?? 0.5f);
+                value = s?.CuriaPolicyThreshold ?? 0.5f;
+            else if (type == CuriaAgendaType.TransferFief || type == CuriaAgendaType.ExpelClan
+                     || type == CuriaAgendaType.BreakAlliance)
+                value = s?.CuriaFiefThreshold ?? 0.66f;
+            else
+                value = s?.CuriaWarThreshold ?? 0.5f;
+            return CuriaPolicyEffects.AdjustThreshold(kingdom, type, value);
         }
 
         private static List<CuriaVote> BuildVoters(Kingdom kingdom, CuriaAgenda agenda)
@@ -572,13 +575,15 @@ namespace AIChronicle
             {
                 var leader = clan.Leader!;
                 var entityId = CuriaStore.EntityIdOf(leader);
+                var weight = CuriaStore.WeightOf(clan);
+                if (leader == king) weight *= CuriaPolicyEffects.KingVoteWeightMultiplier(kingdom);
                 voters.Add(new CuriaVote
                 {
                     ClanId = clan.StringId ?? "",
                     ClanName = clan.Name?.ToString() ?? "",
                     LeaderEntityId = entityId,
                     LeaderName = leader.Name?.ToString() ?? "",
-                    Weight = CuriaStore.WeightOf(clan),
+                    Weight = weight,
                     IsKing = leader == king,
                     IsPlayer = leader == player,
                     IsProposer = entityId == agenda.ProposerEntityId
@@ -670,7 +675,7 @@ namespace AIChronicle
             agenda.TotalWeight = totalWeight;
             agenda.QuorumWeight = quorum;
             agenda.SummonedWeight = selected.Sum(v => v.Weight);
-            agenda.Threshold = GetThreshold(agenda.Type);
+            agenda.Threshold = GetThreshold(kingdom, agenda.Type);
             agenda.Status = CuriaAgendaStatus.Voting;
             agenda.VotingStartedDay = CuriaStore.Today;
             agenda.DeadlineDay = CuriaStore.Today + (MySettings.Instance?.CuriaVoteDays ?? 5);

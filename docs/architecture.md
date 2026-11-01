@@ -457,6 +457,7 @@ Usage:
 │   ├── CuriaStore.cs           ← 朝议持久化/公开档案/日记/史料/通知
 │   ├── CuriaPageBuilder.cs     ← 朝议 CEF 数据/AI 查询/投票提示词
 │   ├── CuriaVoteMath.cs        ← 纯逻辑计票（可单测）
+│   ├── CuriaPolicyEffects.cs   ← 政策→朝议门槛/国王票权修正
 │   ├── HistoryArchive.cs       ← 史册数据层（目录/体例分组/权限/正文；原生与 CEF 共用）
 │   ├── HistoryViewerFactory.cs ← 从当前战役读取史册权限视角
 │   ├── HistoryMarkdown.cs      ← Markdown → 原生纯文本（CEF 不可用时的 fallback）

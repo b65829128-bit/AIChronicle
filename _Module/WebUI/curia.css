@@ -356,3 +356,42 @@ pre.secret {
   line-height: 1.65;
   color: #6b5a45;
 }
+
+/* 政策效果：原版效果 + 朝议修正，字号比普通 field-help 大，便于阅读 */
+.policy-reminder {
+  margin: 10px 0 2px;
+  padding: 9px 11px;
+  border-left: 3px solid var(--gold);
+  background: rgba(201,162,39,.10);
+  color: #4a3a2a;
+  font-size: 14px;
+  line-height: 1.75;
+}
+.policy-effect {
+  margin-top: 8px;
+  font-size: 14.5px;
+  line-height: 1.75;
+}
+.policy-effect-label {
+  margin-top: 5px;
+  font-size: 13px;
+  letter-spacing: .08em;
+  color: #8b6c3d;
+}
+.policy-effect-label.curia {
+  color: #8c2f2f;
+}
+.policy-effect-text {
+  margin-top: 2px;
+  color: #3b2c1d;
+}
+.policy-effect-desc {
+  margin-top: 3px;
+  color: #6b5a45;
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+.policy-effect-text.curia {
+  color: #8c2f2f;
+  font-weight: 600;
+}

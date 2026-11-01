@@ -354,6 +354,12 @@
       pe.appendChild(el('div', 'field-value reason', a.policyEffect));
       card.appendChild(pe);
     }
+    if (a.policyEffects) {
+      var pfx = el('div', 'field');
+      pfx.appendChild(el('div', 'field-label', '当前政策对朝议的修正'));
+      pfx.appendChild(el('div', 'field-value reason', a.policyEffects));
+      card.appendChild(pfx);
+    }
 
     card.appendChild(el('div', 'divider'));
     card.appendChild(renderVoteBar(a));
@@ -577,6 +583,9 @@
     card.appendChild(el('div', 'card-kicker', 'NEW MOTION'));
     card.appendChild(el('h2', 'card-title', '提出新议题'));
     card.appendChild(el('div', 'card-sub', '提案会公开给所有应召家族与史官；通过后执行，不通过则无事发生。'));
+    if (d.policyEffects) {
+      card.appendChild(el('div', 'policy-reminder', '当前政策对朝议的修正：' + d.policyEffects));
+    }
 
     var types = availableProposeTypes(d);
     if (!types.length) {
@@ -628,7 +637,7 @@
     pField.appendChild(el('div', 'field-label', '政策'));
     var pSel = createDropdown(policyOptionsForType(d, types[0]), '');
     pField.appendChild(pSel.el);
-    var pEffect = el('div', 'field-help', '');
+    var pEffect = el('div', 'field-help policy-effect', '');
     pField.appendChild(pEffect);
     grid.appendChild(pField);
 
@@ -638,9 +647,15 @@
       for (var i = 0; i < policies.length; i++) {
         if (String(policies[i].id) === String(pSel.value)) { selected = policies[i]; break; }
       }
-      pEffect.textContent = selected
-        ? '效果：' + (selected.effect || '（游戏未提供说明）') + (selected.description ? '　' + selected.description : '')
-        : '';
+      clear(pEffect);
+      if (!selected) return;
+      pEffect.appendChild(el('div', 'policy-effect-label', '原版效果'));
+      pEffect.appendChild(el('div', 'policy-effect-text', selected.effect || '（游戏未提供说明）'));
+      if (selected.description) pEffect.appendChild(el('div', 'policy-effect-desc', selected.description));
+      if (selected.curiaEffect) {
+        pEffect.appendChild(el('div', 'policy-effect-label curia', '朝议修正'));
+        pEffect.appendChild(el('div', 'policy-effect-text curia', selected.curiaEffect));
+      }
     }
     pSel.onChange = updatePolicyEffect;
 

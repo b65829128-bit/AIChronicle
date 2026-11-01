@@ -174,5 +174,6 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 - **玩家入口**：M 键 `CuriaCefScreen`（CEF；朝议/外交/封地/密陈/秘书）；页面动作经 `CefBridge` + `MainThreadExecutor`；文本输入走原生 `InformationManager.ShowTextInquiry`；CEF 失败回退秘书处查询。秘书处 `chancery` 只保留 query + 只读文件工具。
 - **前提过滤**：`BuildKingdoms` 输出 `canWar/canPeace/canTrade/canAlliance/canBreakAlliance`；CEF 只列当前有效类型与目标，AI 提示词要求先查询，`CuriaService.Propose` 硬校验并拒绝重复/无对象议题。
 - **政策效果**：`enact_policy` / `revoke_policy` 直接 `Kingdom.AddPolicy` / `RemovePolicy`；提案、投票、公开档案都带 `PolicyObject.SecondaryEffects` 的实际效果文本；AI 可用 `query_policies` 查询。
+- **失效影响力条款的替代**：`CuriaPolicyEffects` 把 4 条受影响政策映射为朝议修正——Precarial 封地门槛 −8%、Feudal 封地门槛 +8%、War Tax 宣战门槛 +10%、Royal Privilege 国王票权 ×1.2；UI 与 AI 提示均显示。
 - **接管原版投票**：朝议启用时，`KingdomPolicyDecision` / `SettlementClaimantDecision` / `SettlementClaimantPreliminaryDecision` 的 `IsAllowed()` 返回 false；政策/封地/驱逐的 VM 按钮 getter 与 Execute 也被 Harmony 拦截，AI 原版政策表决不会发生。
 - **旧入口**：`submit_advisory`/`submit_edict` 删除；`declare_war`/`propose_peace`/`propose_trade`/`propose_alliance`/`end_alliance` 在朝议启用时拒绝；`gift_fief` 仅国王自己封地；玩家 `change_kingdom` 拒绝；原版 `ExpelClanFromKingdomDecision` 在朝议启用时取消（手动 Harmony）。贸易终止 `end_trade_agreement` 仍直接。

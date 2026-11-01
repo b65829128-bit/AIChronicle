@@ -58,6 +58,7 @@ namespace AIChronicle
             data["clans"] = BuildClans(kingdom, player);
             data["kingdoms"] = BuildKingdoms(kingdom);
             data["policies"] = BuildPolicies(kingdom);
+            data["policyEffects"] = CuriaPolicyEffects.DescribeKingdom(kingdom);
             data["secretAdvisory"] = isKing ? CuriaStore.ReadSecretAdvisoryText(kingdom) : "";
             data["consultThreads"] = isKing
                 ? CuriaStore.ReadConsultThreads(kingdom).Select(t => (object)new Dictionary<string, object?>
@@ -216,7 +217,8 @@ namespace AIChronicle
                         ["description"] = policy.Description?.ToString() ?? "",
                         ["effect"] = policy.SecondaryEffects?.ToString() ?? "",
                         ["active"] = kingdom.HasPolicy(policy),
-                        ["allowed"] = permission == null || permission.IsPolicyDecisionAllowed(policy)
+                        ["allowed"] = permission == null || permission.IsPolicyDecisionAllowed(policy),
+                        ["curiaEffect"] = CuriaPolicyEffects.DescribePolicy(policy)
                     });
                 }
             }
@@ -259,6 +261,7 @@ namespace AIChronicle
         public static Dictionary<string, object?> BuildAgendaDetail(CuriaAgenda a, Hero? player)
         {
             var playerClanId = player?.Clan?.StringId ?? "";
+            var policyEffects = CuriaPolicyEffects.DescribeKingdom(CuriaStore.FindKingdom(a.KingdomName));
             var playerVote = a.Votes.FirstOrDefault(v => v.ClanId == playerClanId);
             var isTarget = a.NeedsTargetDefense && a.TargetClanId == playerClanId;
             var canVote = a.Status == CuriaAgendaStatus.Voting && playerVote != null && !playerVote.Stance.HasValue;
@@ -323,6 +326,7 @@ namespace AIChronicle
                 ["targetPolicyName"] = a.TargetPolicyName,
                 ["policyEffect"] = a.PolicyEffect,
                 ["policyDescription"] = a.PolicyDescription,
+                ["policyEffects"] = policyEffects,
                 ["outcome"] = a.Outcome,
                 ["effect"] = a.EffectResult,
                 ["failure"] = a.FailureReason,
@@ -380,6 +384,8 @@ namespace AIChronicle
             if (!string.IsNullOrEmpty(a.Terms)) sb.AppendLine($"条款：{a.Terms}");
             if (!string.IsNullOrEmpty(a.PolicyDescription)) sb.AppendLine($"政策说明：{a.PolicyDescription}");
             if (!string.IsNullOrEmpty(a.PolicyEffect)) sb.AppendLine($"政策效果：{a.PolicyEffect}");
+            var policyEffects = CuriaPolicyEffects.DescribeKingdom(CuriaStore.FindKingdom(a.KingdomName));
+            if (!string.IsNullOrEmpty(policyEffects)) sb.AppendLine($"当前朝议政策修正：{policyEffects}");
             sb.AppendLine($"门槛：{a.Threshold:P0}    quorum：{a.SummonedWeight:F1}/{a.QuorumWeight:F1}（总权重 {a.TotalWeight:F1}）");
             sb.AppendLine($"票数：支持 {a.SupportWeight:F1} / 反对 {a.OpposeWeight:F1} / 弃权 {a.AbstainWeight:F1}");
             if (!string.IsNullOrEmpty(a.TargetDefense))
@@ -427,6 +433,8 @@ namespace AIChronicle
                 sb.AppendLine($"- {(active ? "已实施" : "未实施")}：{policy.Name}（{policy.StringId}）" +
                               (allowed ? "" : "（当前不可提议）"));
                 sb.AppendLine($"  效果：{policy.SecondaryEffects}");
+                var curiaEffect = CuriaPolicyEffects.DescribePolicy(policy);
+                if (!string.IsNullOrEmpty(curiaEffect)) sb.AppendLine($"  朝议修正：{curiaEffect}");
                 listed++;
             }
             if (listed == 0) sb.AppendLine("（没有可查看的政策）");
@@ -437,6 +445,8 @@ namespace AIChronicle
         {
             var sb = new StringBuilder();
             sb.AppendLine($"你是{voter.LeaderName}，{voter.ClanName}的家族领袖。{agenda.KingdomName}正在举行朝议，你是应召的投票者。");
+            var policyEffects = CuriaPolicyEffects.DescribeKingdom(CuriaStore.FindKingdom(agenda.KingdomName));
+            if (!string.IsNullOrEmpty(policyEffects)) sb.AppendLine($"当前朝议政策修正：{policyEffects}");
             sb.AppendLine();
             sb.AppendLine($"议题：{CuriaText.TypeLabel(agenda.Type)}（{CuriaText.KindLabel(agenda.Kind)}）");
             sb.AppendLine($"目标：{CuriaText.TargetSummary(agenda)}");
@@ -448,7 +458,9 @@ namespace AIChronicle
             if (!string.IsNullOrEmpty(agenda.TargetDefense))
                 sb.AppendLine($"被针对家族陈情（{agenda.TargetDefenseBy}）：{agenda.TargetDefense}");
             sb.AppendLine();
-            sb.AppendLine($"你的家族权重：{voter.Weight:F1}；应召原因：{voter.SummonReason}。");
+            sb.AppendLine($"你的家族权重：{voter.Weight:F1}；应召原因：{voter.SummonReason}。" +
+                          (voter.IsKing && CuriaPolicyEffects.KingVoteWeightMultiplier(CuriaStore.FindKingdom(agenda.KingdomName)) > 1f
+                              ? "（王室特权：票权 ×1.2 已计入）" : ""));
             sb.AppendLine($"本次门槛：{agenda.Threshold:P0}；quorum：{agenda.QuorumWeight:F1}（应召权重 {agenda.SummonedWeight:F1}）。");
             sb.AppendLine($"当前票数：支持 {agenda.SupportWeight:F1} / 反对 {agenda.OpposeWeight:F1} / 弃权 {agenda.AbstainWeight:F1}。");
             sb.AppendLine();

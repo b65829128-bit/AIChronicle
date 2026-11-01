@@ -133,6 +133,7 @@
 - **公开谏言/诏令已移除**：`submit_advisory` / `submit_edict` 工具删除；国王的“评价”=在议程上的投票+理由，国王的“宣示”=自己提的议程。密陈（`submit_secret_advisory`）保留为只呈国王的私人渠道。
 - **玩家家族动作**：加入别国/当雇佣兵/脱离王国使用原版家族/王国界面；`change_kingdom` 对玩家直接拒绝（AI 仍可用）。
 - **政策**：`enact_policy` / `revoke_policy` 是九类议程的一部分；页面只列可提出/可废除政策，并在提交前显示 `PolicyObject.SecondaryEffects` 的实际效果。AI 提案前用 `query_policies` 查看效果，投票提示词也会带上政策说明与效果。
+- **政策→朝议修正**：Precarial Land Tenure 封地门槛 −8%、Feudal Inheritance 封地门槛 +8%、War Tax 宣战门槛 +10%、Royal Privilege 国王票权 ×1.2；页面在政策效果下方和提议页都会提示，AI 投票提示也会带上。
 - **接管原版影响力投票**：朝议启用时，原版政策、封地归属/转让、驱逐家族的 UI 按钮与底层 Election 都被禁用；AI 自动发起的原版政策表决同样被 `KingdomPolicyDecision.IsAllowed()` 拦截。
 - **旧工具限制**：`declare_war` / `propose_peace` / `propose_trade` / `propose_alliance` / `end_alliance` 在朝议启用时拒绝执行并提示改用 `propose_agenda`；`gift_fief` 只允许国王转让自己家族的封地；其他封地走朝议。贸易终止 `end_trade_agreement` 仍是国王直接工具。
 
@@ -613,6 +614,7 @@ AIChronicle/
 │   └── Web/                 # CEF 页面宿主（CefWebScreen/CefWebHost/CefBridge/HistoryCefScreen/CuriaCefScreen/WebPage 脚手架）
 ├── Systems/                 # 游戏系统与 Harmony 补丁
 │   ├── CuriaService.cs / .Attendance.cs / .Effects.cs # 朝议核心（提议/应召/投票/结算/执行）
+│   ├── CuriaPolicyEffects.cs # 政策→朝议修正（门槛/国王票权）
 │   ├── CuriaModels.cs       # 朝议数据模型
 │   ├── CuriaStore.cs        # 朝议持久化 + 文案 + 权限辅助 + 日记/史料
 │   ├── CuriaPageBuilder.cs  # 朝议 CEF 页面数据 / AI 查询文本 / 投票提示词
