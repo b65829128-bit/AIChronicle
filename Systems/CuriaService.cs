@@ -229,7 +229,7 @@ namespace AIChronicle
             }
 
             var king = CuriaStore.GetKing(kingdom);
-            if (king == null)
+            if (king == null || !king.IsAlive)
             {
                 message = "[错误] 王国没有在世统治者，无法召开朝议";
                 return false;
@@ -565,8 +565,9 @@ namespace AIChronicle
                 if (clan.IsMinorFaction || clan.IsBanditFaction) return false;
                 var leader = clan.Leader;
                 if (leader == null || !leader.IsAlive) return false;
-                // 玩家即使被俘/逃亡也保留投票权（模组既有“被俘国王仍可理政”的口径）；AI 无法出席。
-                if ((leader.IsPrisoner || leader.IsFugitive) && leader != Hero.MainHero) return false;
+                // 玩家即使被俘/逃亡也保留投票权（模组既有“被俘国王仍可理政”的口径）。
+                // 国王也必须保留席位：国王被俘/流亡不等于王位消失，朝议不能没有国王。
+                if ((leader.IsPrisoner || leader.IsFugitive) && leader != king && leader != Hero.MainHero) return false;
                 if (!string.IsNullOrEmpty(excludedClanId) && clan.StringId == excludedClanId) return false;
                 return true;
             }
@@ -627,6 +628,15 @@ namespace AIChronicle
                 }
             }
 
+            // 国王氏族若因 Kingdom.Clans 数据异常而缺失，单独补回；否则朝议会没有国王。
+            if (!voters.Any(v => v.IsKing) && king?.Clan != null
+                && king.IsAlive && king.Clan.Leader == king
+                && !king.Clan.IsEliminated && king.Clan.Kingdom == kingdom)
+            {
+                AddVote(king.Clan);
+                DebugLogger.Log($"朝议：国王氏族 {king.Clan.StringId} 不在 Kingdom.Clans，已补入国王席位");
+            }
+
             return voters;
         }
 
@@ -635,6 +645,12 @@ namespace AIChronicle
         private static void StartVoting(Kingdom kingdom, CuriaAgenda agenda)
         {
             if (kingdom == null || agenda == null) return;
+            var king = CuriaStore.GetKing(kingdom);
+            if (king == null || !king.IsAlive)
+            {
+                FailAgenda(kingdom, agenda, "王国没有在世统治者，议程失效");
+                return;
+            }
             var state = GetState(kingdom);
             var voters = BuildVoters(kingdom, agenda);
             if (voters.Count == 0)

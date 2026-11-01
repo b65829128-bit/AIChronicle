@@ -261,8 +261,19 @@ namespace AIChronicle
         public static Dictionary<string, object?> BuildAgendaDetail(CuriaAgenda a, Hero? player)
         {
             var playerClanId = player?.Clan?.StringId ?? "";
-            var policyEffects = CuriaPolicyEffects.DescribeKingdom(CuriaStore.FindKingdom(a.KingdomName));
+            var agendaKingdom = CuriaStore.FindKingdom(a.KingdomName);
+            var policyEffects = CuriaPolicyEffects.DescribeKingdom(agendaKingdom);
             var playerVote = a.Votes.FirstOrDefault(v => v.ClanId == playerClanId);
+            var kingMissingReason = "";
+            if (a.Votes.Count > 0 && !a.Votes.Any(v => v.IsKing))
+            {
+                var king = CuriaStore.GetKing(agendaKingdom);
+                kingMissingReason = king == null ? "王国没有统治者"
+                    : !king.IsAlive ? "国王已故"
+                    : king.IsPrisoner ? "国王被俘"
+                    : king.IsFugitive ? "国王流亡"
+                    : "国王未获应召";
+            }
             var isTarget = a.NeedsTargetDefense && a.TargetClanId == playerClanId;
             var canVote = a.Status == CuriaAgendaStatus.Voting && playerVote != null && !playerVote.Stance.HasValue;
             var canDefend = a.Status == CuriaAgendaStatus.Proposed && isTarget && !a.TargetDefended;
@@ -327,6 +338,7 @@ namespace AIChronicle
                 ["policyEffect"] = a.PolicyEffect,
                 ["policyDescription"] = a.PolicyDescription,
                 ["policyEffects"] = policyEffects,
+                ["kingMissingReason"] = kingMissingReason,
                 ["outcome"] = a.Outcome,
                 ["effect"] = a.EffectResult,
                 ["failure"] = a.FailureReason,
@@ -386,6 +398,16 @@ namespace AIChronicle
             if (!string.IsNullOrEmpty(a.PolicyEffect)) sb.AppendLine($"政策效果：{a.PolicyEffect}");
             var policyEffects = CuriaPolicyEffects.DescribeKingdom(CuriaStore.FindKingdom(a.KingdomName));
             if (!string.IsNullOrEmpty(policyEffects)) sb.AppendLine($"当前朝议政策修正：{policyEffects}");
+            if (a.Votes.Count > 0 && !a.Votes.Any(v => v.IsKing))
+            {
+                var king = CuriaStore.GetKing(CuriaStore.FindKingdom(a.KingdomName));
+                var reason = king == null ? "王国没有统治者"
+                    : !king.IsAlive ? "国王已故"
+                    : king.IsPrisoner ? "国王被俘"
+                    : king.IsFugitive ? "国王流亡"
+                    : "国王未获应召";
+                sb.AppendLine($"国王未参与：{reason}");
+            }
             sb.AppendLine($"门槛：{a.Threshold:P0}    quorum：{a.SummonedWeight:F1}/{a.QuorumWeight:F1}（总权重 {a.TotalWeight:F1}）");
             sb.AppendLine($"票数：支持 {a.SupportWeight:F1} / 反对 {a.OpposeWeight:F1} / 弃权 {a.AbstainWeight:F1}");
             if (!string.IsNullOrEmpty(a.TargetDefense))

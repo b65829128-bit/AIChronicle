@@ -360,6 +360,12 @@
       pfx.appendChild(el('div', 'field-value reason', a.policyEffects));
       card.appendChild(pfx);
     }
+    if (a.kingMissingReason) {
+      var km = el('div', 'field');
+      km.appendChild(el('div', 'field-label', '国王未参与'));
+      km.appendChild(el('div', 'field-value reason', a.kingMissingReason));
+      card.appendChild(km);
+    }
 
     card.appendChild(el('div', 'divider'));
     card.appendChild(renderVoteBar(a));

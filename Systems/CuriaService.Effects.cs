@@ -55,7 +55,7 @@ namespace AIChronicle
         private static void ApplyEffectAndFinish(Kingdom kingdom, CuriaAgenda agenda)
         {
             var king = CuriaStore.GetKing(kingdom);
-            if (king == null)
+            if (king == null || !king.IsAlive)
             {
                 FailAgenda(kingdom, agenda, "王国没有在世统治者");
                 return;
