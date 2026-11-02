@@ -223,16 +223,23 @@ html, body {
 .btn:disabled { opacity: .45; cursor: default; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
 
-select, input[type="text"] {
+select, input[type="text"], input[type="number"] {
   font-family: var(--serif); font-size: 14px; color: #3b2c1d;
   background: rgba(255,255,255,.3); border: 1px solid rgba(122,91,46,.4);
   padding: 8px 9px; max-width: 100%;
 }
-select:focus, input[type="text"]:focus { outline: 1px solid rgba(168,121,42,.7); }
+select:focus, input[type="text"]:focus, input[type="number"]:focus { outline: 1px solid rgba(168,121,42,.7); }
+.check-row { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #3b2c1d; padding-top: 4px; }
+.check-row input { accent-color: #a8792a; }
+.treaty-grid { margin-top: 4px; padding-top: 4px; border-top: 1px dashed rgba(122,91,46,.25); }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin-top: 12px; }
 .form-grid .field { margin: 0; }
 .form-grid .field.full { grid-column: 1 / -1; }
 .form-actions { margin-top: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cession-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.cession-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cession-row .dropdown { flex: 1 1 180px; min-width: 150px; }
+.cession-row .btn { white-space: nowrap; }
 
 .empty {
   padding: 34px 24px; text-align: center; color: #6b5a45;

@@ -85,6 +85,9 @@ namespace AIChronicle
             if (target == null) return $"[错误] 未找到王国：{targetKingdomName}";
             if (target == myKingdom) return "[错误] 不能对自己宣战";
             if (myKingdom.IsAtWarWith(target)) return $"已经与{target.Name}处于交战状态。";
+            var truce = TreatyStore.FindActiveTruce(myKingdom, target);
+            if (truce != null)
+                return $"[错误] 你与{target.Name}签有休战条约（至第{truce.TruceUntilDay}日），不能宣战。";
             // 宣战宣言：供 HistoryRecorder 记 war_declared 史料（历史与现实对照），用完清空
             HistoryRecorder.PendingWarDeclaration = string.IsNullOrWhiteSpace(message) ? null : message;
             try { DeclareWarAction.ApplyByDefault(myKingdom, target); }
@@ -98,7 +101,8 @@ namespace AIChronicle
             return $"已向{target.Name}宣战。{msgSuffix}";
         }
 
-        internal static string ExecuteProposePeace(string targetKingdomName, int tributeAmount, int tributeDays, string? message)
+        internal static string ExecuteProposePeace(string targetKingdomName, int tributeAmount, int tributeDays,
+            string? message, TreatyTerms? terms = null)
         {
             var actingHero = GetDiplomacyHero();
             if (actingHero == null) return "[错误] 只有王国统治者才能提出议和";
@@ -118,23 +122,94 @@ namespace AIChronicle
                     $"{actingHero.Name} 提议议和失败：并未与{target.Name}交战", Colors.Red));
                 return $"[错误] 当前并未与{target.Name}交战";
             }
+
+            TreatyTerms? normalized = null;
+            if (terms != null && terms.HasAnyTerm())
+            {
+                var validation = TreatyService.Validate(myKingdom, target, terms, preWar: false, actingHero);
+                if (!validation.Ok) return "[错误] " + validation.Error;
+                normalized = validation.Terms;
+                tributeAmount = normalized.TributeAmount;
+                tributeDays = normalized.TributeDays;
+            }
+
             var myEntity = EntityManager.GetOrCreateEntity(actingHero);
             var targetRuler = target.RulingClan?.Leader;
             if (targetRuler == null) return $"[错误] {target.Name} 没有统治者";
             var targetEntity = EntityManager.GetOrCreateEntity(targetRuler);
             var tributeArg = $"{tributeAmount}_{tributeDays}";
-            AgentManager.StoreDiplomacyProposal(myEntity.Id, targetEntity.Id, "peace", tributeArg, message);
+            AgentManager.StoreDiplomacyProposal(myEntity.Id, targetEntity.Id, "peace", tributeArg, message, normalized);
             var msgPart = !string.IsNullOrEmpty(message) ? $"\n\n附言：\"{message}\"" : "";
-            var tributeDesc = tributeAmount > 0
-                ? $"愿意每日支付 {tributeAmount} 金币、持续 {tributeDays} 天作为赔款"
-                : tributeAmount < 0
-                    ? $"要求对方每日赔偿 {Math.Abs(tributeAmount)} 金币、持续 {tributeDays} 天"
-                    : "不附带赔款条件";
+            string termsDesc;
+            if (normalized != null)
+            {
+                termsDesc = TreatyText.DescribeForTarget(normalized, myKingdom.Name?.ToString() ?? "?",
+                    target.Name?.ToString() ?? "?");
+            }
+            else
+            {
+                termsDesc = tributeAmount > 0
+                    ? $"愿意每日支付 {tributeAmount} 金币、持续 {tributeDays} 天作为赔款"
+                    : tributeAmount < 0
+                        ? $"要求对方每日赔偿 {Math.Abs(tributeAmount)} 金币、持续 {tributeDays} 天"
+                        : "不附带赔款条件";
+            }
+            if (normalized != null)
+            {
+                var neutral = TreatyText.DescribeNeutral(normalized,
+                    myKingdom.Name?.ToString() ?? "?", target.Name?.ToString() ?? "?");
+                HistoryRecorder.RecordDiplomacyEvent("treaty_proposed",
+                    $"{myKingdom.Name}向{target.Name}提出和平条约：{neutral}");
+            }
             QueueKingActivation(targetEntity.Id, myEntity.Id,
-                $"来自 {myEntity.Name}（{myKingdom.Name} 统治者）的议和提案：{tributeDesc}。你接受这个议和条件吗？请用 respond_to_diplomacy_proposal 回复。{msgPart}");
+                $"来自 {myEntity.Name}（{myKingdom.Name} 统治者）的{(normalized != null ? "和平条约" : "议和")}提案：{termsDesc}。" +
+                $"{(normalized != null ? "接受则停战并履行条约条款；拒绝则战争继续。" : "你接受这个议和条件吗？")}请用 respond_to_diplomacy_proposal 回复。{msgPart}");
             InformationManager.DisplayMessage(new InformationMessage(
-                $"{myEntity.Name}（{myKingdom.Name}）向 {target.Name} 提议议和", Colors.Cyan));
-            return $"议和提案已发送给{target.Name}的统治者{targetRuler.Name}，等待回复。";
+                $"{myEntity.Name}（{myKingdom.Name}）向 {target.Name} 提议{(normalized != null ? "和平条约" : "议和")}", Colors.Cyan));
+            return $"{(normalized != null ? "和平条约" : "议和")}提案已发送给{target.Name}的统治者{targetRuler.Name}，等待回复。";
+        }
+
+        internal static string ExecuteProposeTreaty(string targetKingdomName, TreatyTerms? terms, string? message)
+        {
+            var actingHero = GetDiplomacyHero();
+            if (actingHero == null) return "[错误] 只有王国统治者才能提出战前条约";
+            var myKingdom = GetHeroKingdom(actingHero);
+            if (myKingdom == null) return "[错误] 你当前不属于任何王国";
+            var target = FindKingdom(targetKingdomName);
+            if (target == null) return $"[错误] 未找到王国：{targetKingdomName}";
+            if (target == myKingdom) return "[错误] 不能对自己提出条约";
+            if (myKingdom.IsAtWarWith(target)) return $"[错误] 已与{target.Name}交战，请用议和提议";
+            var truce = TreatyStore.FindActiveTruce(myKingdom, target);
+            if (truce != null)
+                return $"[错误] 你与{target.Name}签有休战条约（至第{truce.TruceUntilDay}日），不能提出战前条约";
+            if (terms == null || !terms.HasConcession())
+                return "[错误] 战前条约至少要有割地或赔款；无条件和平请用议和提议";
+
+            var validation = TreatyService.Validate(myKingdom, target, terms, preWar: true, actingHero);
+            if (!validation.Ok) return "[错误] " + validation.Error;
+            var normalized = validation.Terms;
+
+            var targetRuler = target.RulingClan?.Leader;
+            if (targetRuler == null) return $"[错误] {target.Name} 没有统治者";
+            var myEntity = EntityManager.GetOrCreateEntity(actingHero);
+            var targetEntity = EntityManager.GetOrCreateEntity(targetRuler);
+            var tributeArg = $"{normalized.TributeAmount}_{normalized.TributeDays}";
+            AgentManager.StoreDiplomacyProposal(myEntity.Id, targetEntity.Id, "treaty", tributeArg, message, normalized);
+            var msgPart = !string.IsNullOrEmpty(message) ? $"\n\n附言：\"{message}\"" : "";
+            var desc = TreatyText.DescribeForTarget(normalized, myKingdom.Name?.ToString() ?? "?",
+                target.Name?.ToString() ?? "?");
+            var consequence = normalized.WarOnReject
+                ? "若你拒绝，对方将宣战。"
+                : "若你拒绝，对方不会自动宣战，但可能另提宣战议程。";
+            var neutralDesc = TreatyText.DescribeNeutral(normalized,
+                myKingdom.Name?.ToString() ?? "?", target.Name?.ToString() ?? "?");
+            HistoryRecorder.RecordDiplomacyEvent("treaty_proposed",
+                $"{myKingdom.Name}向{target.Name}提出战前条约：{neutralDesc}");
+            QueueKingActivation(targetEntity.Id, myEntity.Id,
+                $"来自 {myEntity.Name}（{myKingdom.Name} 统治者）的战前条约：{desc}。接受则不必开战并履行条款；{consequence}请用 respond_to_diplomacy_proposal 回复。{msgPart}");
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"{myEntity.Name}（{myKingdom.Name}）向 {target.Name} 提出战前条约", Colors.Cyan));
+            return $"战前条约已发送给{target.Name}的统治者{targetRuler.Name}，等待回复。";
         }
 
         internal static string ExecuteProposeAlliance(string targetKingdomName, string? message)
@@ -392,7 +467,7 @@ namespace AIChronicle
             if (toIdx < 0) return $"[错误] 无法解析提案ID";
             for (int i = toIdx + 1; i < parts.Length; i++)
             {
-                if (parts[i] == "peace" || parts[i] == "alliance" || parts[i] == "trade")
+                if (parts[i] == "peace" || parts[i] == "alliance" || parts[i] == "trade" || parts[i] == "treaty")
                 {
                     targetId = string.Join("_", parts.Skip(toIdx + 1).Take(i - toIdx - 1));
                     type = parts[i];
@@ -407,52 +482,72 @@ namespace AIChronicle
             var proposerEntity = EntityManager.GetOrCreateEntityById(proposerId);
             if (proposerEntity?.HeroRef == null) return "[错误] 无法找到提案发起人";
 
+            var proposerKingdom = GetHeroKingdom(proposerEntity.HeroRef);
+            var proposalTerms = TreatyService.ParseProposalTerms(content);
+
             if (!accepted)
             {
                 AgentManager.DeleteDiplomacyProposal(matchedId);
                 RecordDecision(myEntity.Id, proposerId, type, "拒绝", matchedId);
-                var rejectTypeName = type switch { "peace" => "议和", "alliance" => "结盟", "trade" => "贸易协定", _ => type };
+                var rejectTypeName = type switch
+                {
+                    "peace" => "议和",
+                    "treaty" => "战前条约",
+                    "alliance" => "结盟",
+                    "trade" => "贸易协定",
+                    _ => type
+                };
+                var warNote = "";
+                if (proposerKingdom != null
+                    && (type == "treaty" || (type == "peace" && proposalTerms != null && proposalTerms.HasAnyTerm())))
+                {
+                    warNote = TreatyService.HandleRejected(proposerKingdom, myKingdom, proposalTerms,
+                        type == "treaty" && proposalTerms?.WarOnReject == true, matchedId);
+                }
                 InformationManager.DisplayMessage(new InformationMessage(
                     $"{myEntity.Name} 拒绝了 {proposerEntity.Name} 的{rejectTypeName}提案", Colors.Yellow));
-                return "已拒绝该提案。";
+                return "已拒绝该提案。" + (string.IsNullOrEmpty(warNote) ? "" : " " + warNote);
             }
 
-            var proposerKingdom = GetHeroKingdom(proposerEntity.HeroRef);
             if (proposerKingdom == null) return "[错误] 提案发起人已不属于任何王国";
 
             switch (type)
             {
                 case "peace":
                 {
-                    InformationManager.DisplayMessage(new InformationMessage(
-                        $"[诊断] respond→peace：{myKingdom.Name} IsAtWarWith {proposerKingdom.Name} = {myKingdom.IsAtWarWith(proposerKingdom)}",
-                        Colors.Cyan));
-
                     if (!myKingdom.IsAtWarWith(proposerKingdom)) return "[错误] 当前并未与该王国交战";
-                    var lines = content.Split('\n');
-                    var tribute = "0_0";
-                    foreach (var line in lines)
+                    string result;
+                    if (proposalTerms != null && proposalTerms.HasAnyTerm())
                     {
-                        if (line.StartsWith("tribute="))
-                        {
-                            tribute = line.Substring(8);
-                            break;
-                        }
+                        result = TreatyService.AcceptPeace(proposerKingdom, myKingdom, proposalTerms, matchedId);
                     }
-                    var tributeParts = tribute.Split('_');
-                    var tributeAmount = int.TryParse(tributeParts[0], out var a) ? a : 0;
-                    var tributeDays = int.TryParse(tributeParts[1], out var d) ? d : 0;
-                    var detailType = typeof(MakePeaceAction).GetNestedType("MakePeaceDetail",
-                        BindingFlags.Public | BindingFlags.NonPublic);
-                    var defaultDetail = Enum.ToObject(detailType!, 0);
-                    var applyInternal = typeof(MakePeaceAction).GetMethod("ApplyInternal",
-                        BindingFlags.NonPublic | BindingFlags.Static);
-                    applyInternal!.Invoke(null, new object[] { proposerKingdom, myKingdom, tributeAmount, tributeDays, defaultDetail });
+                    else
+                    {
+                        var tributeAmount = proposalTerms?.TributeAmount ?? 0;
+                        var tributeDays = proposalTerms?.TributeDays ?? 0;
+                        ApplyPeaceWithTribute(proposerKingdom, myKingdom, tributeAmount, tributeDays);
+                        result = $"已接受议和，与{proposerKingdom.Name}达成和平。";
+                    }
+                    if (result.StartsWith("[错误]", StringComparison.Ordinal)) return result;
                     AgentManager.DeleteDiplomacyProposal(matchedId);
-                    RecordDecision(myEntity.Id, proposerId, type, "接受", matchedId);
+                    RecordDecision(myEntity.Id, proposerId, type, result.StartsWith("[警告]", StringComparison.Ordinal) ? "接受（部分失败）" : "接受", matchedId);
                     InformationManager.DisplayMessage(new InformationMessage(
-                        $"{myEntity.Name}（{myKingdom.Name}）接受了 {proposerEntity.Name} 的议和提案", Colors.Green));
-                    return $"已接受议和，与{proposerKingdom.Name}达成和平。";
+                        $"{myEntity.Name}（{myKingdom.Name}）接受了 {proposerEntity.Name} 的议和提案",
+                        result.StartsWith("[警告]", StringComparison.Ordinal) ? Colors.Yellow : Colors.Green));
+                    return result;
+                }
+                case "treaty":
+                {
+                    if (proposalTerms == null)
+                        return "[错误] 条约提案缺少条款，无法执行";
+                    var result = TreatyService.AcceptTreaty(proposerKingdom, myKingdom, proposalTerms, matchedId);
+                    if (result.StartsWith("[错误]", StringComparison.Ordinal)) return result;
+                    AgentManager.DeleteDiplomacyProposal(matchedId);
+                    RecordDecision(myEntity.Id, proposerId, type, result.StartsWith("[警告]", StringComparison.Ordinal) ? "接受（部分失败）" : "接受", matchedId);
+                    InformationManager.DisplayMessage(new InformationMessage(
+                        $"{myEntity.Name}（{myKingdom.Name}）接受了 {proposerEntity.Name} 的战前条约",
+                        result.StartsWith("[警告]", StringComparison.Ordinal) ? Colors.Yellow : Colors.Green));
+                    return result;
                 }
                 case "alliance":
                 {
@@ -483,6 +578,17 @@ namespace AIChronicle
                 default:
                     return $"[错误] 未知的提案类型：{type}";
             }
+        }
+
+        /// <summary>议和/和平条约的统一停战入口：透传原版每日赔款参数（正数 = faction1 付 faction2）。</summary>
+        internal static void ApplyPeaceWithTribute(Kingdom faction1, Kingdom faction2, int dailyTributeFrom1To2, int tributeDays)
+        {
+            var detailType = typeof(MakePeaceAction).GetNestedType("MakePeaceDetail",
+                BindingFlags.Public | BindingFlags.NonPublic);
+            var detail = Enum.ToObject(detailType!, 0);
+            var applyInternal = typeof(MakePeaceAction).GetMethod("ApplyInternal",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            applyInternal!.Invoke(null, new object[] { faction1, faction2, dailyTributeFrom1To2, tributeDays, detail });
         }
 
         private static Settlement? FindSettlement(string name)

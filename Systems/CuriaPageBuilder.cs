@@ -31,6 +31,7 @@ namespace AIChronicle
                 data["history"] = new List<object>();
                 data["foreignProposals"] = new List<object>();
                 data["fiefs"] = new Dictionary<string, object> { ["own"] = new List<object>(), ["vassal"] = new List<object>() };
+                data["foreignFiefs"] = new List<object>();
                 data["clans"] = new List<object>();
                 data["kingdoms"] = new List<object>();
                 data["secretAdvisory"] = "";
@@ -53,8 +54,9 @@ namespace AIChronicle
                 .Where(a => CuriaService.IsTerminal(a.Status))
                 .Select(a => BuildAgendaDetail(a, player))
                 .ToList();
-            data["foreignProposals"] = isKing ? BuildForeignProposals(playerEntity?.Id ?? "") : new List<object>();
+            data["foreignProposals"] = isKing ? BuildForeignProposals(player, playerEntity?.Id ?? "") : new List<object>();
             data["fiefs"] = BuildFiefs(kingdom, player, isKing);
+            data["foreignFiefs"] = BuildForeignFiefs(kingdom);
             data["clans"] = BuildClans(kingdom, player);
             data["kingdoms"] = BuildKingdoms(kingdom);
             data["policies"] = BuildPolicies(kingdom);
@@ -79,7 +81,8 @@ namespace AIChronicle
                 ["voteDays"] = MySettings.Instance?.CuriaVoteDays ?? 5,
                 ["quorum"] = MySettings.Instance?.CuriaQuorum ?? 0.5f,
                 ["warThreshold"] = MySettings.Instance?.CuriaWarThreshold ?? 0.5f,
-                ["fiefThreshold"] = MySettings.Instance?.CuriaFiefThreshold ?? 0.66f
+                ["fiefThreshold"] = MySettings.Instance?.CuriaFiefThreshold ?? 0.66f,
+                ["defaultTruceDays"] = TreatyService.DefaultTruceDays
             };
             return data;
         }
@@ -98,10 +101,11 @@ namespace AIChronicle
             };
         }
 
-        private static List<object> BuildForeignProposals(string playerEntityId)
+        private static List<object> BuildForeignProposals(Hero? player, string playerEntityId)
         {
             var result = new List<object>();
             if (string.IsNullOrEmpty(playerEntityId)) return result;
+            var targetKingdom = CuriaStore.GetHeroKingdom(player);
             try
             {
                 foreach (var id in AgentManager.ListPendingProposals(playerEntityId))
@@ -110,9 +114,11 @@ namespace AIChronicle
                     if (content == null) continue;
                     var meta = AgentManager.ParseProposalMeta(content);
                     var proposer = EntityManager.GetEntityById(meta.ProposerId);
+                    var proposerKingdom = CuriaStore.GetHeroKingdom(proposer?.HeroRef);
                     var typeLabel = meta.Type switch
                     {
                         "peace" => "议和",
+                        "treaty" => "战前条约",
                         "alliance" => "结盟",
                         "trade" => "贸易协定",
                         _ => meta.Type
@@ -122,13 +128,53 @@ namespace AIChronicle
                     {
                         if (line.StartsWith("message=")) message = line.Substring(8);
                     }
+                    var terms = TreatyService.ParseProposalTerms(content);
+                    var termsText = "";
+                    if (terms != null && terms.HasAnyTerm() && proposerKingdom != null && targetKingdom != null)
+                    {
+                        termsText = TreatyText.DescribeForTarget(terms,
+                            proposerKingdom.Name?.ToString() ?? "?",
+                            targetKingdom.Name?.ToString() ?? "?");
+                    }
                     result.Add(new Dictionary<string, object?>
                     {
                         ["id"] = id,
                         ["type"] = meta.Type,
                         ["typeLabel"] = typeLabel,
                         ["proposer"] = proposer?.Name ?? meta.ProposerId,
-                        ["message"] = message
+                        ["message"] = message,
+                        ["termsText"] = termsText,
+                        ["treaty"] = terms
+                    });
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        private static List<object> BuildForeignFiefs(Kingdom kingdom)
+        {
+            var result = new List<object>();
+            try
+            {
+                foreach (var s in Settlement.All)
+                {
+                    if (!s.IsTown && !s.IsCastle) continue;
+                    var owner = s.OwnerClan;
+                    var ownerKingdom = owner?.Kingdom;
+                    if (owner == null || ownerKingdom == null || ownerKingdom == kingdom) continue;
+                    if (ownerKingdom.IsEliminated || CuriaStore.IsMercenary(owner)) continue;
+                    result.Add(new Dictionary<string, object?>
+                    {
+                        ["id"] = s.StringId ?? "",
+                        ["name"] = s.Name?.ToString() ?? "",
+                        ["type"] = s.IsTown ? "城镇" : "城堡",
+                        ["ownerClan"] = owner.Name?.ToString() ?? "",
+                        ["ownerClanId"] = owner.StringId ?? "",
+                        ["ownerLeader"] = owner.Leader?.Name?.ToString() ?? "",
+                        ["ownerLeaderEntityId"] = owner.Leader != null ? (EntityManager.GetEntityByHero(owner.Leader)?.Id ?? "") : "",
+                        ["kingdomId"] = ownerKingdom.StringId ?? "",
+                        ["kingdomName"] = ownerKingdom.Name?.ToString() ?? ""
                     });
                 }
             }
@@ -239,6 +285,7 @@ namespace AIChronicle
                     var atWar = kingdom.IsAtWarWith(k);
                     var isAlly = alliance != null && alliance.IsAllyWithKingdom(kingdom, k);
                     var hasTrade = trade != null && trade.HasTradeAgreement(kingdom, k, out _);
+                    var truce = TreatyStore.FindActiveTruce(kingdom, k);
                     result.Add(new Dictionary<string, object?>
                     {
                         ["id"] = k.StringId ?? "",
@@ -246,8 +293,11 @@ namespace AIChronicle
                         ["atWar"] = atWar,
                         ["isAlly"] = isAlly,
                         ["hasTrade"] = hasTrade,
-                        ["canWar"] = !atWar,
+                        ["hasTruce"] = truce != null,
+                        ["truceUntilDay"] = truce?.TruceUntilDay ?? 0,
+                        ["canWar"] = !atWar && truce == null,
                         ["canPeace"] = atWar,
+                        ["canTreaty"] = !atWar && truce == null,
                         ["canTrade"] = !atWar && !hasTrade,
                         ["canAlliance"] = !atWar && !isAlly,
                         ["canBreakAlliance"] = isAlly
@@ -314,6 +364,8 @@ namespace AIChronicle
                 ["proposerClan"] = a.ProposerClanId,
                 ["reason"] = a.Reason,
                 ["terms"] = a.Terms,
+                ["treaty"] = a.Treaty,
+                ["hasCession"] = a.Treaty?.HasCession() == true,
                 ["target"] = CuriaText.TargetSummary(a),
                 ["targetClan"] = a.TargetClanName,
                 ["targetSettlement"] = a.TargetSettlementName,
@@ -504,6 +556,23 @@ namespace AIChronicle
             sb.AppendLine($"提议者：{agenda.ProposerName}");
             sb.AppendLine($"理由：{agenda.Reason}");
             if (!string.IsNullOrEmpty(agenda.Terms)) sb.AppendLine($"条款：{agenda.Terms}");
+            if (agenda.Treaty != null && agenda.Treaty.HasCession())
+            {
+                sb.AppendLine("割地细节：");
+                foreach (var cession in agenda.Treaty.GetCessions())
+                {
+                    var settlement = CuriaStore.FindSettlement(!string.IsNullOrWhiteSpace(cession.SettlementId)
+                        ? cession.SettlementId : cession.SettlementName);
+                    if (settlement == null) continue;
+                    var ceding = cession.CedeFrom == "proposer" ? agenda.KingdomName : agenda.TargetKingdomName;
+                    var receiving = cession.CedeFrom == "proposer" ? agenda.TargetKingdomName : agenda.KingdomName;
+                    sb.AppendLine($"- 「{settlement.Name}」（{settlement.OwnerClan?.Name}）将从{ceding}转归{receiving}。");
+                }
+            }
+            if (agenda.Treaty != null && agenda.Treaty.WarOnReject)
+                sb.AppendLine("拒绝后果：若对方拒绝，我方将自动宣战。");
+            if (agenda.Treaty != null && agenda.Treaty.TruceDays > 0)
+                sb.AppendLine($"休战条款：签约后双方休战 {agenda.Treaty.TruceDays} 天。");
             if (!string.IsNullOrEmpty(agenda.PolicyDescription)) sb.AppendLine($"政策说明：{agenda.PolicyDescription}");
             if (!string.IsNullOrEmpty(agenda.PolicyEffect)) sb.AppendLine($"政策效果：{agenda.PolicyEffect}");
             if (!string.IsNullOrEmpty(agenda.TargetDefense))
@@ -535,10 +604,10 @@ namespace AIChronicle
                 sb.AppendLine($"你的家族现状：影响力 {voterClan.Influence:F0}，封地 {voterClan.Settlements.Count} 处。");
                 var proposer = CuriaStore.FindHeroByEntityId(agenda.ProposerEntityId);
                 if (proposer != null)
-                    sb.AppendLine($"你与提议者{proposer.Name}的家族关系：{voterHero.GetRelation(proposer):F0}。");
+                    sb.AppendLine($"你与提议者{proposer.Name}的家族关系：{voterHero!.GetRelation(proposer):F0}。");
                 var king = CuriaStore.GetKing(kingdom);
                 if (king != null && king != voterHero)
-                    sb.AppendLine($"你与国王{king.Name}的关系：{voterHero.GetRelation(king):F0}。");
+                    sb.AppendLine($"你与国王{king.Name}的关系：{voterHero!.GetRelation(king):F0}。");
             }
 
             try
@@ -553,6 +622,9 @@ namespace AIChronicle
                         var isAlly = alliance != null && alliance.IsAllyWithKingdom(kingdom, target);
                         var hasTrade = trade != null && trade.HasTradeAgreement(kingdom, target, out _);
                         sb.AppendLine($"目标现状：{target.Name}；交战={kingdom.IsAtWarWith(target)}，同盟={isAlly}，贸易={hasTrade}。");
+                        var truce = TreatyStore.FindActiveTruce(kingdom, target);
+                        if (truce != null)
+                            sb.AppendLine($"双方休战条约：至第{truce.TruceUntilDay}日（{TreatyText.DescribeNeutral(truce.Terms, truce.ProposerKingdomName, truce.TargetKingdomName)}）。");
                     }
                 }
                 else if (agenda.Type == CuriaAgendaType.TransferFief)
@@ -569,6 +641,24 @@ namespace AIChronicle
                     var targetClan = CuriaStore.FindClan(agenda.TargetClanId);
                     if (targetClan != null)
                         sb.AppendLine($"目标家族现状：{targetClan.Name}，封地 {targetClan.Settlements.Count} 处，领袖 {targetClan.Leader?.Name}。");
+                }
+
+                if (agenda.Treaty != null && agenda.Treaty.HasCession())
+                {
+                    var lost = new List<string>();
+                    foreach (var cession in agenda.Treaty.GetCessions())
+                    {
+                        var settlement = CuriaStore.FindSettlement(!string.IsNullOrWhiteSpace(cession.SettlementId)
+                            ? cession.SettlementId : cession.SettlementName);
+                        if (settlement == null) continue;
+                        var garrison = settlement.Town?.GarrisonParty?.Party?.MemberRoster?.TotalManCount ?? 0;
+                        var ownerClan = settlement.OwnerClan;
+                        sb.AppendLine($"条约封地现状：{settlement.Name}（{ownerClan?.Name}），守军约 {garrison}。");
+                        if (voterClan != null && ownerClan == voterClan)
+                            lost.Add($"「{settlement.Name}」");
+                    }
+                    if (lost.Count > 0)
+                        sb.AppendLine($"注意：此条约将割让你家族的封地 {string.Join("、", lost)}；若通过并获对方接受，你将失去它们。");
                 }
             }
             catch { }

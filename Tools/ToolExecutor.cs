@@ -194,14 +194,28 @@ namespace AIChronicle
                         return DiplomacyService.ExecuteProposeTrade(args["target_kingdom"]?.ToString() ?? "", args["message"]?.ToString());
 
                     case "propose_agenda":
-                        return ExecuteProposeAgenda(
-                            args["type"]?.ToString() ?? "",
-                            args["target_kingdom"]?.ToString() ?? "",
-                            args["settlement_name"]?.ToString() ?? "",
-                            args["new_owner_entity_id"]?.ToString() ?? "",
-                            args["target_clan_name"]?.ToString() ?? "",
-                            args["policy_name"]?.ToString() ?? "",
-                            args["reason"]?.ToString() ?? "");
+                        {
+                            var agendaType = args["type"]?.ToString() ?? "";
+                            var cessions = TreatyService.ParseCessionSpec(args["cessions"]?.ToString());
+                            var terms = TreatyService.ParseToolTerms(
+                                agendaType,
+                                args["settlement_name"]?.ToString(),
+                                args["cede_from"]?.ToString(),
+                                args["tribute_amount"]?.ToObject<int>() ?? 0,
+                                args["tribute_days"]?.ToObject<int>() ?? 0,
+                                args["truce_days"]?.ToObject<int?>(),
+                                args["war_on_reject"]?.ToObject<bool?>(),
+                                cessions.Count > 0 ? cessions : null);
+                            return ExecuteProposeAgenda(
+                                agendaType,
+                                args["target_kingdom"]?.ToString() ?? "",
+                                args["settlement_name"]?.ToString() ?? "",
+                                args["new_owner_entity_id"]?.ToString() ?? "",
+                                args["target_clan_name"]?.ToString() ?? "",
+                                args["policy_name"]?.ToString() ?? "",
+                                args["reason"]?.ToString() ?? "",
+                                terms);
+                        }
 
                     case "respond_to_agenda":
                         return ExecuteRespondToAgenda(

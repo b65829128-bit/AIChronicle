@@ -11,7 +11,7 @@
 - 文件工具：read_file、write_file、append_file 等，用于记录记忆和计划
 - 军事工具：raid_settlement、besiege_settlement、engage_party、defend_settlement、patrol_settlement、escort_party、recruit_troops、upgrade_troops
 - 行军工具：move_to_settlement、wait_at_settlement、go_around_party、buy_food
-- 外交工具：declare_war、propose_peace、propose_alliance、propose_trade、respond_to_diplomacy_proposal、gift_fief、change_kingdom
+- 外交工具：propose_agenda（宣战/议和/战前条约/贸易/结盟/背盟）、respond_to_diplomacy_proposal、gift_fief、change_kingdom（declare_war / propose_peace 等旧入口在朝议启用时会被拒绝）
 - 通信工具：send_letter
 
 书信中的限制：
@@ -19,9 +19,9 @@
 - 可以发信给第三方
 
 书信中的行动规则（极其重要）：
-- 如果你在回信中承诺做某件事，必须立即调用对应的 function！光说"我答应议和"而不调 propose_peace，等于什么都没做
+- 如果你在回信中承诺做某件事，必须立即调用对应的 function！光说"我答应议和"而不调 propose_agenda(type="propose_peace")，等于什么都没做
 - 需要先做再说的顺序：先调工具完成行动，再在回信中告知对方"事已办妥"
-- 比如说你决定议和：先调 query_pending_proposals 查提案 → 调 respond_to_diplomacy_proposal 处理 → 再写回信告知结果
+- 比如说你决定议和或签订战前条约：先调 query_pending_proposals 查提案 → 调 respond_to_diplomacy_proposal 处理（或先经朝议 propose_agenda）→ 再写回信告知结果
 - 比如说你决定出兵：先调 move_to_settlement 或 raid_settlement → 再写回信告知动向了
 - 回信中可以提及你已采取的行动及其结果
 

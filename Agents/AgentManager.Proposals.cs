@@ -22,7 +22,7 @@ namespace AIChronicle
             return dir;
         }
 
-        public static void StoreDiplomacyProposal(string proposerId, string targetId, string proposalType, string? tributeArg = null, string? message = null)
+        public static void StoreDiplomacyProposal(string proposerId, string targetId, string proposalType, string? tributeArg = null, string? message = null, TreatyTerms? terms = null)
         {
             var dir = GetDiplomacyDir();
             var fileName = $"{SanitizeDir(proposerId)}_to_{SanitizeDir(targetId)}_{proposalType}.proposal";
@@ -30,6 +30,8 @@ namespace AIChronicle
             var content = $"proposer={proposerId}\ntarget={targetId}\ntype={proposalType}";
             if (tributeArg != null)
                 content += $"\ntribute={tributeArg}";
+            if (terms != null)
+                content += $"\nterms={JsonConvert.SerializeObject(terms, Formatting.None)}";
             if (!string.IsNullOrEmpty(message))
                 content += $"\nmessage={message}";
             File.WriteAllText(path, content, Encoding.UTF8);

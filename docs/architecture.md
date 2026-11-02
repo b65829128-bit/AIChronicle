@@ -452,25 +452,28 @@ Usage:
 │   ├── Kit/                    ← 原生 Kit UI 框架（KitScreen/KitTheme/组件/动态纹理/Gallery）
 │   └── Web/                    ← CEF 页面宿主（CefWebHost/CefWebScreen/HistoryCefScreen/CuriaCefScreen/Bridge；WebPage 脚手架）
 ├── Systems/                    ← 游戏系统与 Harmony 补丁
-│   ├── CuriaService.cs / .Attendance.cs / .Effects.cs ← 朝议（提议/应召/投票/结算/执行）
+│   ├── CuriaService.cs / .Attendance.cs / .Effects.cs / .Treaty.cs / .Threshold.cs ← 朝议（提议/应召/投票/结算/执行/条约/门槛）
 │   ├── CuriaModels.cs          ← 朝议数据模型
 │   ├── CuriaStore.cs           ← 朝议持久化/公开档案/日记/史料/通知
 │   ├── CuriaPageBuilder.cs     ← 朝议 CEF 数据/AI 查询/投票提示词
 │   ├── CuriaVoteMath.cs        ← 纯逻辑计票（可单测）
 │   ├── CuriaPolicyEffects.cs   ← 政策→朝议门槛/国王票权修正
+│   ├── TreatyModels.cs / TreatyText.cs ← 条约条款/三方视角文案（纯逻辑可单测）
+│   ├── TreatyStore.cs          ← 已签署条约/休战记录（World/diplomacy/treaties.json）
+│   ├── TreatyService.cs        ← 条约校验/停战/割地/赔款/休战/史料/日记
 │   ├── TokenBudget.cs          ← 全局后台 token 预算（滚动5分钟，超限推迟）
 │   ├── HistoryArchive.cs       ← 史册数据层（目录/体例分组/权限/正文；原生与 CEF 共用）
 │   ├── HistoryViewerFactory.cs ← 从当前战役读取史册权限视角
 │   ├── HistoryMarkdown.cs      ← Markdown → 原生纯文本（CEF 不可用时的 fallback）
 │   ├── EncounterDiagnostics.cs ← 遭遇状态诊断/残留自动恢复（PlayerEncounter）
-│   ├── DiplomacyService.cs     ← 外交服务（宣战/议和/结盟/贸易协定/回复提案 + FindKingdom + 盟约/贸易到期记录与清除）
+│   ├── DiplomacyService.cs     ← 外交服务（宣战/议和/战前条约/结盟/贸易协定/回复提案 + FindKingdom + 盟约/贸易到期记录与清除）
 │   ├── HistoryRecorder.cs      ← 历史记录器（监听游戏事件写入原始史料）
 │   ├── LordChatBehavior.cs     ← 对话中插入聊天选项，战役 ID 管理
 │   ├── DiplomacyBanPatch.cs    ← 拦截原版外交（禁止原版外交开关）
-│   ├── FiefAssignmentPatch.cs  ← 攻城后册封由 Agent 主导
+│   ├── FiefAssignmentPatch.cs  ← 攻城/条约受地后的国王分封（共享 QueueKingFiefDecision）
 │   ├── ExecutionNoPenaltyPatch.cs ← 处决无惩罚
 │   └── ClanDiscontinuationPatch.cs ← 独立家族永续（禁用原版 28 天灭族，MCM 可开关）
-├── docs/                       ← AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发/UI 框架与 CEF/i18n）
+├── docs/                       ← AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发/UI 框架与 CEF/i18n/朝议/条约）
 ├── AGENTS.md                  ← 常驻开发指令（本文件）
 ├── README.md                  ← 开源主入口（英文简介，指向 README_MOD.md / AGENTS.md）
 ├── CONTRIBUTING.md            ← 贡献指南（构建方法、文档维护规则、PR 流程）

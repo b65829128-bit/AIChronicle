@@ -520,12 +520,13 @@ namespace AIChronicle
                     + "步骤：\n"
                     + "1. 先调用 query_pending_proposals 查看是否有待处理的外国提案，有则用 respond_to_diplomacy_proposal 逐一处理\n"
                     + "2. 调用 query_war_status 了解战况；调用 query_agenda 查看本国朝议\n"
-                    + "3. 主动宣战/议和/贸易/结盟/退出盟约/转让封臣封地/驱逐家族，用 propose_agenda 提出并经朝议表决\n\n"
+                    + "3. 主动宣战/议和/战前条约/贸易/结盟/退出盟约/转让封臣封地/驱逐家族，用 propose_agenda 提出并经朝议表决；条约可带割地/赔款/休战条款\n\n"
                     + "规则：\n"
                     + "- 不要说你会做某件事——必须调用对应的 function，光说不做等于什么都没发生\n"
                     + "- 每次回复最多调用 3 个工具；先处理外国提案，再决定是否提出新议程\n"
                     + "- 不要虚构数据——统计来自 query_war_status 等查询工具\n"
                     + "- 你不是独裁者：主动外交与封地处置必须过朝议；你的权力是提议、投票和自由处置自己家族的封地\n"
+                    + "- 休战期内不能宣战；战前条约被拒若设了 war_on_reject 会自动开战\n"
                     + "- 绝对不要用 send_letter 处理外交事务；对外主动行动只用 propose_agenda，对外国提案用 respond_to_diplomacy_proposal";
 
             var lastWrite = File.GetLastWriteTimeUtc(path);
@@ -767,6 +768,10 @@ namespace AIChronicle
                         sb.AppendLine($"你的王国正与 {string.Join("、", enemies)} 交战。");
                     else
                         sb.AppendLine("你的王国当前无战事。");
+
+                    var truces = TreatyStore.DescribeActiveFor(kingdom);
+                    if (!string.IsNullOrEmpty(truces))
+                        sb.AppendLine($"现存休战条约：{truces}。休战期内我方不能宣战。");
                 }
                 catch { }
             }

@@ -154,9 +154,35 @@ namespace AIChronicle
                         var newOwner = args["newOwnerEntityId"]?.ToString() ?? "";
                         var targetClan = args["targetClanName"]?.ToString() ?? "";
                         var targetPolicy = args["policyName"]?.ToString() ?? "";
+                        var treaty = args["treaty"] as JObject;
+                        var cessionList = new List<TreatyCession>();
+                        if (treaty?["cessions"] is JArray cessionArray)
+                        {
+                            foreach (var item in cessionArray)
+                            {
+                                if (!(item is JObject cession)) continue;
+                                var name = cession["settlementName"]?.ToString() ?? "";
+                                if (string.IsNullOrWhiteSpace(name)) continue;
+                                cessionList.Add(new TreatyCession
+                                {
+                                    SettlementName = name,
+                                    SettlementId = cession["settlementId"]?.ToString() ?? "",
+                                    CedeFrom = cession["cedeFrom"]?.ToString() ?? ""
+                                });
+                            }
+                        }
+                        var terms = TreatyService.ParseToolTerms(
+                            type,
+                            treaty?["settlementName"]?.ToString() ?? "",
+                            treaty?["cedeFrom"]?.ToString(),
+                            treaty?["tributeAmount"]?.ToObject<int>() ?? 0,
+                            treaty?["tributeDays"]?.ToObject<int>() ?? 0,
+                            treaty?["truceDays"]?.ToObject<int?>(),
+                            treaty?["warOnReject"]?.ToObject<bool?>(),
+                            cessionList.Count > 0 ? cessionList : null);
                         PromptText("提出朝议 · 理由", "写下这项议题的政治理由（会公开给所有封臣与史官）。", reason =>
                         {
-                            if (CuriaService.Propose(Hero.MainHero, type, targetKingdom, settlement, newOwner, targetClan, targetPolicy, reason, out var msg))
+                            if (CuriaService.Propose(Hero.MainHero, type, targetKingdom, settlement, newOwner, targetClan, targetPolicy, reason, terms, out var msg))
                                 CuriaStore.Notify("[朝议] " + msg, Colors.Green);
                             else
                                 CuriaStore.Notify("[朝议] " + msg, Colors.Red);

@@ -72,7 +72,16 @@ namespace AIChronicle
                         result = DiplomacyService.ExecuteDeclareWar(agenda.TargetKingdomName, agenda.Reason);
                         break;
                     case CuriaAgendaType.ProposePeace:
-                        result = DiplomacyService.ExecuteProposePeace(agenda.TargetKingdomName, 0, 0, agenda.Reason);
+                        result = DiplomacyService.ExecuteProposePeace(
+                            agenda.TargetKingdomName,
+                            agenda.Treaty?.TributeAmount ?? 0,
+                            agenda.Treaty?.TributeDays ?? 0,
+                            agenda.Reason,
+                            agenda.Treaty);
+                        break;
+                    case CuriaAgendaType.ProposeTreaty:
+                        result = DiplomacyService.ExecuteProposeTreaty(
+                            agenda.TargetKingdomName, agenda.Treaty, agenda.Reason);
                         break;
                     case CuriaAgendaType.ProposeTrade:
                         result = DiplomacyService.ExecuteProposeTrade(agenda.TargetKingdomName, agenda.Reason);

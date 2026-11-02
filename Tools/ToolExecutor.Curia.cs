@@ -6,11 +6,11 @@ namespace AIChronicle
     public static partial class ToolExecutor
     {
         private static string ExecuteProposeAgenda(string type, string targetKingdom, string settlementName,
-            string newOwnerEntityId, string targetClanName, string targetPolicy, string reason)
+            string newOwnerEntityId, string targetClanName, string targetPolicy, string reason, TreatyTerms? terms)
         {
             var hero = AIChatClient.CurrentHero;
             if (hero == null) return "[错误] 无当前领主";
-            return CuriaService.Propose(hero, type, targetKingdom, settlementName, newOwnerEntityId, targetClanName, targetPolicy, reason, out var message)
+            return CuriaService.Propose(hero, type, targetKingdom, settlementName, newOwnerEntityId, targetClanName, targetPolicy, reason, terms, out var message)
                 ? message
                 : message;
         }

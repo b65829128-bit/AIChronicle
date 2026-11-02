@@ -1,5 +1,8 @@
+using System.Collections.Generic;
+using System.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Library;
 
 namespace AIChronicle
 {
@@ -32,27 +35,53 @@ namespace AIChronicle
             if (!openToClaim) return;                       // 非"开放归属"（如国王转让）不干预
 
             var kingdom = newOwner?.MapFaction as Kingdom;
-            if (kingdom == null || kingdom.Clans.Count <= 1) return; // 单家族王国无需再分配
+            if (kingdom == null) return;
 
             // 取消投票标记：攻城后默认归国王氏族，避免 unassigned 的忠诚惩罚；国王 Agent 决定是否再分配
             settlement.Town.IsOwnerUnassigned = false;
+            QueueKingFiefDecision(kingdom, new[] { settlement }, $"王国新攻下{settlement.Name}。");
+        }
+
+        /// <summary>
+        /// 让受地国王先决定分封：条约割地/攻城后，封地暂归统治家族，国王可 gift_fief 赐予封臣，
+        /// 也可保留王室直属。玩家国王收到 M 页提示，由玩家在「封地」页自行转让。
+        /// 同一批封地只激活一次，避免多块割地刷屏。
+        /// </summary>
+        public static void QueueKingFiefDecision(Kingdom? kingdom, IReadOnlyList<Settlement>? settlements, string intro)
+        {
+            if (kingdom == null || settlements == null || settlements.Count == 0) return;
+            if (kingdom.Clans.Count <= 1) return; // 单家族王国无需再分配
 
             var ruler = kingdom.RulingClan?.Leader;
-            if (ruler == null || ruler == Hero.MainHero) return; // 国王是人（玩家）：由玩家经秘书处处理
-            var rulerEntity = EntityManager.GetEntityByHero(ruler);
-            if (rulerEntity == null) return;
+            if (ruler == null || !ruler.IsAlive) return;
 
-            var content = $"王国新攻下{settlement.Name}，需要你决定其归属。"
-                + "请审视「内政审视」报告中的封地分配，用 gift_fief 将这座城赐予合适的家族（可考虑战功、无地而失意的家族、王国的平衡）。"
-                + "若你判断维持现状更妥，也可以不调整。";
+            var valid = settlements.Where(s => s != null).ToList();
+            if (valid.Count == 0) return;
+            var names = string.Join("、", valid.Select(s => s.Name?.ToString() ?? "?"));
+            var lead = string.IsNullOrWhiteSpace(intro) ? $"王国获得{names}。" : intro;
+
+            if (ruler == Hero.MainHero)
+            {
+                CuriaStore.Notify(
+                    $"{lead}这些封地暂归统治家族。按 M 键参政页 → 封地，用「转让自己的封地」分封；建议至少分封一块，若确实没有合适家族才保留王室。",
+                    Colors.Cyan);
+                return;
+            }
+
+            var entityId = CuriaStore.EntityIdOf(ruler);
+            if (string.IsNullOrEmpty(entityId)) return;
+            var content = $"{lead}这些封地暂时归统治家族。请审视「内政审视」报告中的封地分配，"
+                + "优先用 gift_fief 将合适的城赐予有功/无地的家族（可考虑战功、无地而失意的家族、王国的平衡）。"
+                + "只有确实没有合适家族时，才保留王室直属。";
             AgentScheduler.QueueEvent(new ActivationEvent
             {
                 Type = ActivationEventType.KingDiplomacy,
-                AgentId = rulerEntity.Id,
-                TargetId = rulerEntity.Id,
+                AgentId = entityId,
+                TargetId = entityId,
                 Content = content,
                 Depth = 0
             });
+            CuriaStore.AppendDiary(entityId, "结果", $"{lead}这些封地暂归统治家族，需要决定分封。");
         }
     }
 }

@@ -27,6 +27,7 @@ namespace AIChronicle.Tests
             Run("markdown -> plain text fallback", TestMarkdownPlainText);
             Run("main-thread epoch: drop stale + cancel waiters", TestMainThreadEpoch);
             Run("curia: weighted tally + quorum + threshold", TestCuriaVoteMath);
+            Run("treaty: terms/cession/tribute perspective", TestTreatyText);
 
             Console.WriteLine();
             Console.WriteLine($"passed: {_passed}, failed: {_failed}");
@@ -365,6 +366,64 @@ namespace AIChronicle.Tests
             AssertFalse(CuriaVoteMath.Passes(0f, 0f, 0.5f), "no votes fails");
             AssertTrue(CuriaVoteMath.Passes(20f, 10f, 2f / 3f), "2/3 threshold passes");
             AssertFalse(CuriaVoteMath.Passes(19f, 11f, 2f / 3f), "below 2/3 fails");
+        }
+
+        private static void TestTreatyText()
+        {
+            AssertEqual("proposer", TreatyText.NormalizeCedeFrom("us"), "us -> proposer");
+            AssertEqual("target", TreatyText.NormalizeCedeFrom("them"), "them -> target");
+            AssertEqual("proposer", TreatyText.NormalizeCedeFrom("我方"), "我方 -> proposer");
+            AssertEqual("", TreatyText.NormalizeCedeFrom("nonsense"), "unknown -> none");
+
+            var parsed = TreatyText.ParseCessionSpec("target:阿耳戈斯;proposer:泽昂尼卡；我方:北城");
+            AssertEqual(3, parsed.Count, "parsed cession count");
+            AssertEqual("target", parsed[0].CedeFrom, "parsed target side");
+            AssertEqual("阿耳戈斯", parsed[0].SettlementName, "parsed target fief");
+            AssertEqual("proposer", parsed[1].CedeFrom, "parsed proposer side");
+            AssertEqual("proposer", parsed[2].CedeFrom, "parsed Chinese side");
+
+            var terms = new TreatyTerms
+            {
+                TributeAmount = -500,
+                TributeDays = 30,
+                TruceDays = 60,
+                WarOnReject = true
+            };
+            terms.Cessions.Add(new TreatyCession { SettlementId = "town_1", SettlementName = "阿耳戈斯", CedeFrom = "target" });
+            terms.Cessions.Add(new TreatyCession { SettlementId = "town_2", SettlementName = "泽昂尼卡", CedeFrom = "proposer" });
+            AssertTrue(terms.HasCession(), "has cession");
+            AssertTrue(terms.HasTribute(), "has tribute");
+            AssertTrue(terms.HasConcession(), "has concession");
+            AssertTrue(terms.HasAnyTerm(), "has any term");
+            AssertEqual(2, terms.GetCessions().Count, "two cessions");
+
+            var proposerView = TreatyText.Describe(terms, "库赛特", "瓦兰迪亚");
+            AssertTrue(proposerView.Contains("我方将「泽昂尼卡」割让给瓦兰迪亚"), "proposer own cession");
+            AssertTrue(proposerView.Contains("对方将「阿耳戈斯」割让给我方"), "proposer enemy cession");
+            AssertTrue(proposerView.Contains("对方每日向我方支付 500 金"), "proposer tribute view");
+            AssertTrue(proposerView.Contains("休战 60 天"), "proposer truce view");
+            AssertTrue(proposerView.Contains("若对方拒绝，我方将宣战"), "proposer war-on-reject view");
+
+            var targetView = TreatyText.DescribeForTarget(terms, "库赛特", "瓦兰迪亚");
+            AssertTrue(targetView.Contains("对方将「泽昂尼卡」割让给你方"), "target receives cession");
+            AssertTrue(targetView.Contains("你方将「阿耳戈斯」割让给库赛特"), "target own cession");
+            AssertTrue(targetView.Contains("你方每日向库赛特支付 500 金"), "target tribute view");
+            AssertTrue(targetView.Contains("若你拒绝，对方将宣战"), "target war-on-reject view");
+
+            var legacy = new TreatyTerms
+            {
+                SettlementId = "town_3",
+                SettlementName = "旧城",
+                CedeFrom = "target"
+            };
+            AssertEqual(1, legacy.GetCessions().Count, "legacy cession fallback");
+            legacy.MigrateLegacy();
+            AssertEqual(1, legacy.Cessions.Count, "legacy migrated");
+            AssertEqual("", legacy.SettlementName, "legacy field cleared");
+
+            var truceOnly = new TreatyTerms { TruceDays = 60 };
+            AssertFalse(truceOnly.HasConcession(), "truce-only has no concession");
+            AssertTrue(truceOnly.HasAnyTerm(), "truce-only has a term");
         }
 
         private static void AssertNear(float expected, float actual, string context)

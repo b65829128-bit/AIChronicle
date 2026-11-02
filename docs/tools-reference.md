@@ -41,19 +41,19 @@
 | `go_around_party` | 行军 | 绕行回避某支部队 |
 | `query_war_status` | 查询 | 查询王国战争统计（双方阵亡/攻城/劫掠数） |
 | `query_influence` | 查询 | 查询本族当前影响力（政治资财，主要用于拉军团[超 100 可召集]与推行政策） |
-| `propose_agenda` | 朝议 | 朝议提议：宣战/议和提议/贸易提议/结盟提议/退出盟约/提出政策/废除政策/封地转让/驱逐家族；封臣/国王可用，雇佣兵不可；页面只列前提成立的类型/目标，AI 需先查询核对，服务端拒绝重复/无对象议题；一个王国一个活跃议程 |
+| `propose_agenda` | 朝议 | 朝议提议：宣战/议和提议（可带多块割地/赔款/休战条款）/战前条约/贸易提议/结盟提议/退出盟约/提出政策/废除政策/封地转让/驱逐家族；封臣/国王可用，雇佣兵不可；页面只列前提成立的类型/目标，AI 需先查询核对，服务端拒绝重复/无对象议题/休战期宣战；一个王国一个活跃议程 |
 | `respond_to_agenda` | 朝议 | 应召投票：支持/反对/弃权 + 可选一句理由；公开，入档/日记/史书 |
 | `defend_agenda` | 朝议 | 被针对家族陈情；不投票，只陈述理由，公开给所有投票者 |
 | `query_agenda` | 查询 | 默认简版：当前/最近 5 条朝议的提议者、理由、票数、门槛、结果；`detail=true` 才列全部票数与缺席 |
 | `query_policies` | 查询 | 默认摘要：政策名、StringId、是否已实施、一行实际效果、朝议修正；指定 `policy_name` 才返回完整说明/效果 |
-| `query_pending_proposals` | 查询 | 列出当前王国待处理的外交提案（无需参数，自动按当前 Entity 过滤） |
+| `query_pending_proposals` | 查询 | 列出当前王国待处理的外交提案（无需参数，自动按当前 Entity 过滤）；含条约条款与拒绝后果 |
 | `declare_war` | 外交 | 向另一王国宣战（单向，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="declare_war")` |
-| `propose_peace` | 外交 | 向另一王国提议议和（双向，附赔偿方案，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="propose_peace")` |
+| `propose_peace` | 外交 | 向另一王国提议议和（双向，附赔偿方案，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="propose_peace", ...)`；带割地/赔款/休战可走 agenda 条款 |
 | `propose_alliance` | 外交 | 向另一王国提议结盟（双向，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="propose_alliance")` |
 | `propose_trade` | 外交 | 向另一王国提议贸易协定（双向，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="propose_trade")` |
 | `end_alliance` | 外交 | 单方面终止与盟友的盟约（无需对方确认，国王专属）；朝议启用时拒绝，改用 `propose_agenda(type="break_alliance")` |
 | `end_trade_agreement` | 外交 | 单方面终止与另一王国的贸易协定（无需对方确认，国王专属） |
-| `respond_to_diplomacy_proposal` | 外交 | 接受或拒绝收到的外交提案（国王专属） |
+| `respond_to_diplomacy_proposal` | 外交 | 接受或拒绝收到的外交提案（国王专属）；条约接受会执行停战/割地/赔款/休战，拒绝按 `war_on_reject` 可能自动宣战 |
 | `gift_fief` | 外交 | 国王敕令将封地直接转让给指定封臣家族领袖（国王专属，不经过选举） |
 | `cancel_action` | 控制 | 取消当前任务，回归自主 AI |
 | `query_party_troops` | 查询 | 查看部队详情（自己/同阵营全量：金币/兵力/上限/各兵种经验升级路径/俘虏/物品/装备；异国仅侦察估计：按距离与可达性分近距/远距/传闻三档，近距/远距含规模上限估计，不泄露军饷/经验/装备等机密） |

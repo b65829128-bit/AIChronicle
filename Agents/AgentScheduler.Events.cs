@@ -133,6 +133,7 @@ namespace AIChronicle
                             var typeName = type switch
                             {
                                 "peace" => "议和",
+                                "treaty" => "战前条约",
                                 "alliance" => "结盟",
                                 "trade" => "贸易协定",
                                 _ => type
@@ -346,6 +347,7 @@ namespace AIChronicle
             var typeName = proposalType switch
             {
                 "peace" => "议和",
+                "treaty" => "战前条约",
                 "alliance" => "结盟",
                 "trade" => "贸易协定",
                 _ => proposalType

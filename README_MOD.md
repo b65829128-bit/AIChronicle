@@ -54,10 +54,10 @@
   - Agent 可以调用 `query_recent_events` 查询任意人物的近期事件（比武夺冠、被俘、释放、婚嫁、阵亡等百科记录）
   - Agent 可以调用 `query_surroundings` 扫描周围环境：当前位置、附近城镇/城堡、附近部队及其阵营关系和距离（扫描半径按**地图比例**而非绝对 km，0.2 ≈ 1-2 座城池间距）
   - Agent 可以调用 `query_war_status` 查询王国战争状态：双方阵亡数、攻下的城镇/城堡、劫掠村庄数
-  - Agent 国王可以调用 `query_pending_proposals` 列出当前待处理的外交提案（无需参数，自动过滤本国相关提案）
-  - Agent 国王的主动宣战/议和/贸易/结盟/背盟统一用 `propose_agenda`；`declare_war` / `propose_peace` / `propose_trade` / `propose_alliance` / `end_alliance` 旧工具在朝议启用时拒绝
-  - Agent 国王通过 `propose_agenda` 发起主动外交（宣战/议和/贸易/结盟/背盟），经本国朝议通过后执行；议和/贸易/结盟仍需对方国王同意
-- Agent 国王可以调用 `respond_to_diplomacy_proposal` 接受或拒绝收到的外交提案
+  - Agent 国王可以调用 `query_pending_proposals` 列出当前待处理的外交提案（无需参数，自动过滤本国相关提案；含条约条款与拒绝后果）
+  - Agent 国王的主动宣战/议和/战前条约/贸易/结盟/背盟统一用 `propose_agenda`；`declare_war` / `propose_peace` / `propose_trade` / `propose_alliance` / `end_alliance` 旧工具在朝议启用时拒绝
+  - Agent 国王通过 `propose_agenda` 发起主动外交（宣战/议和/战前条约/贸易/结盟/背盟），经本国朝议通过后执行；议和/战前条约/贸易/结盟仍需对方国王同意
+- Agent 国王可以调用 `respond_to_diplomacy_proposal` 接受或拒绝收到的外交提案；条约接受会执行停战/割地/赔款/休战，拒绝按 `war_on_reject` 可能自动宣战
 - Agent 国王可以调用 `gift_fief` 转让**自己家族**的封地；其他家族的封地必须走朝议（`transfer_fief`）
 - Agent 氏族领袖可以调用 `change_kingdom` 变换阵营：离国、加入、叛逃、当雇佣兵、禅让王位
   - `abdicate`：国王指定继承人禅让（支持同氏族或同王国其他氏族领袖）
@@ -88,7 +88,7 @@
 - 点击联系人 → 关闭面板、打开与该人的**往来线程窗口**：面对面说话与信件在同一个窗口连贯展示，信件用 📜 标记（古铜色）区分；打开线程即标记已读，角标清零
 - **写信 = 发送真实信件**：在线程窗口输入内容发送，左下角显示"预计 X 小时后送达"，对方收到后以信件形式回信（进入同一线程，并带上你们此前的聊天记录——对方记得你们认识过）
 - 战役地图上按 **M 键**打开**参政页**（CEF，五页签：朝议 / 外交 / 封地 / 密陈 / 秘书）
-  - **朝议**：查看进行中/历史议程，投票（支持/反对/弃权 + 可选理由），提出新议题，跳 O 写信游说
+  - **朝议**：查看进行中/历史议程，投票（支持/反对/弃权 + 可选理由），提出新议题（含战前条约/附条件议和的割地/赔款/休战条款），跳 O 写信游说
   - **外交**：待处理外国提案（接受/拒绝）、当前战和/盟约/贸易、国王问询线程（回复/遣使）
   - **封地**：国王自己的封地自由转让；封臣封地→提转让/夺封议程；驱逐家族；新城封赏
   - **密陈**：封臣给国王的密陈；国王可读本国密陈
@@ -109,7 +109,8 @@
 
 ### AI 外交系统
 
-- AI 国王可以向他国发起外交提案；主动宣战/议和/贸易/结盟/背盟都必须先经朝议，对外国提案仍由对方国王的 Agent 审视处理
+- AI 国王可以向他国发起外交提案；主动宣战/议和/战前条约/贸易/结盟/背盟都必须先经朝议，对外国提案仍由对方国王的 Agent 审视处理
+- **战前条约（最后通牒）**：朝议通过后，国王可向未交战国提出割地/赔款要求；对方接受则割地/赔款、不开战并进入休战；拒绝时若设了 `war_on_reject` 会自动宣战，否则只记宣战理由。和平条约也可附割地/赔款，无条件和平仍可单独提出。休战期内我方不能宣战
 - 当 AI 国王向**玩家**发起外交提案时，玩家会**弹出按钮对话框**（接受/拒绝），不会由 AI 自动处理
 - **玩家**的外交主动行为在 **M 键参政页**执行：提议程、投票、接受/拒绝外国提案、遣使问询；秘书处只查询
 
@@ -117,25 +118,26 @@
 
 > **朝议是王国层面的公开表决：封臣或国王提出一段有明确目标的议题，应召的封臣家族领袖投票，通过则执行原版动作，不通过则无事发生；结果写入公开档案、Agent 日记与史书。**
 
-- **九类议题**：`declare_war` 宣战、`propose_peace` 议和提议、`propose_trade` 贸易提议、`propose_alliance` 结盟提议、`break_alliance` 退出盟约、`enact_policy` 提出政策、`revoke_policy` 废除政策、`transfer_fief` 封地转让/夺封、`expel_clan` 驱逐家族。
-- **谁能提议**：国王或任一封臣家族领袖（宣战/议和/贸易/结盟/背盟）；封地转让由国王（夺封/再分配）或该封地所属家族领袖（自愿转让）提出；驱逐家族仅国王。雇佣兵无权提议、投票或参政。页面只列出当前前提成立的类型/目标：未交战才列宣战，交战中才列议和，无贸易才列贸易，未结盟才列结盟，已结盟才列背盟；服务端同样校验，AI 不合前提的提议会被拒绝。
+- **十类议题**：`declare_war` 宣战、`propose_peace` 议和提议（可带割地/赔款/休战条款）、`propose_treaty` 战前条约（最后通牒）、`propose_trade` 贸易提议、`propose_alliance` 结盟提议、`break_alliance` 退出盟约、`enact_policy` 提出政策、`revoke_policy` 废除政策、`transfer_fief` 封地转让/夺封、`expel_clan` 驱逐家族。
+- **谁能提议**：国王或任一封臣家族领袖（宣战/议和/战前条约/贸易/结盟/背盟）；封地转让由国王（夺封/再分配）或该封地所属家族领袖（自愿转让）提出；驱逐家族仅国王。雇佣兵无权提议、投票或参政。页面只列出当前前提成立的类型/目标：未交战且无休战才列宣战/战前条约，交战中才列议和，无贸易才列贸易，未结盟才列结盟，已结盟才列背盟；服务端同样校验，AI 不合前提的提议会被拒绝。
 - **谁能投票**：所有封臣家族领袖（含无地者）；雇佣兵无票。国王（自由时）与玩家必然被应召；被针对的家族**不投票**，但会单独获得陈情机会（陈情公开给所有投票者）。玩家作为普通封臣即使被俘/逃亡仍保留投票权；**国王被俘/流亡则不保留席位**，界面显示“国王未参与”及原因（被俘/流亡/已故/无统治者），封臣可趁机推动不利于王室的议程；国王已故则议程失效。
 - **权重**：`DiplomacyModel.GetClanStrength`（原版选王同款，含影响力/封地/部队/金币/技能），公开显示。国王的家族没有额外票权。
 - **全量/应召**：合格封臣数 ≤「全量阈值」（默认 6）时全部投票；超过则启用应召制：国王/玩家/提议者固定，加上利害相关、权重最高、最久未应召的家族，直到应召权重 ≥ 全国权重 50%（quorum）或达到软上限（默认 6）。所有出席理由（固定/利害/权重/轮换）与未出席者都会记录。
-- **门槛**：宣战/议和/贸易/结盟/政策 50%；封地转让/驱逐/背盟 2/3。出席权重不足 quorum → 流会，不通过。
+- **门槛**：宣战/议和/贸易/结盟/政策 50%；封地转让/驱逐/背盟 2/3；议和/战前条约含割地时按 2/3，纯赔款 50%。出席权重不足 quorum → 流会，不通过。
 - **生命周期**：提议（理由必填）→ 被针对家族陈情（1 游戏天）→ 投票（默认 5 游戏天；应召者全部表态可提前结算；到期未表态=弃权，自动按已有票数结算）→ 结算 → 执行 → 入档/入史/写日记。提议者默认支持且计入最终票数；玩家投票一经提交不可更改。一个王国同时只有一个活跃议程；提议有冷却。
 - **议程期间暂停该王国的随机国王政务/封臣自省**，专心处理议程；其他王国不受影响。
 - **稳定生效**：文本只是理由；类型+目标参数决定效果，提案时校验、结算时再校验、执行器只调用现有游戏动作、幂等与审计；不会出现“文字通过了但游戏里没发生”。
+- **条约条款（P0–P2 + 多块割地）**：战前条约/附条件议和把条款结构化写入议程：可多块割地（每块标明我方/对方，双方可同时割地）、每日赔款金额与天数、赔款方向、休战天数、战前条约的“拒绝即宣战”。提议时公开给选民；通过后由国王发出提案，对方国王接受时依次停战/赔款/割地/休战，拒绝时战前条约可按 `war_on_reject` 自动宣战。割地走原版封地交易 API（`ChangeOwnerOfSettlementAction.ApplyByBarter`），受地一方先归对方/我方国王家族；被割封臣会触发封地审视。**受地国王随后会收到一次分封决策**（AI 国王用 `gift_fief`；玩家在 M 页「封地」处理；单家族王国跳过），避免新城全数沉在王室。详细契约见 `docs/plan-treaty.md`。
 - **公开与可读**：`World/curia/{王国}/agenda_{id}.json`（结构化）+ `.txt`（史官/人类可读摘要）；本国封臣/国王 + 史官可读，他国不可读。Agent 用 `query_agenda` 或 `read_file` 查看；史官可读所有国家并在编年史中写“朝议”场景。已结束议程默认每国保留最近 200 条，旧档自动清理，不会无限积累。
-- **日记**：AI 投票者记「决定」；结果出来后提议者、国王、投票者、被针对家族记「结果」；未出席的 AI 封臣记「情报」并合理化缺席原因（前线/围城/路远/未召见/染病等）。玩家不强制写日记。
+- **日记**：AI 投票者记「决定」；结果出来后提议者、国王、投票者、被针对家族记「结果」；未出席的 AI 封臣记「情报」并合理化缺席原因（前线/围城/路远/未召见/染病等）。玩家不强制写日记。**条约签署/被拒/被撕毁会写入双方王国所有主要封臣（家族领袖，含国王）的日记**，让封臣记住条约义务与毁约事实。
 - **玩家入口**：**M 键参政页**（CEF）五页签——朝议 / 外交 / 封地 / 密陈 / 秘书；投票、提议、陈情、接受外国提案、遣使问询都用原生文本输入框（与聊天一致）；CEF 失败回退为秘书处查询。
 - **秘书处只查询**：`M` 页签的秘书只保留 `query_*` + `query_agenda` + 只读文件工具；不再提供公开谏言、诏令、换国、外交动作。
 - **公开谏言/诏令已移除**：`submit_advisory` / `submit_edict` 工具删除；国王的“评价”=在议程上的投票+理由，国王的“宣示”=自己提的议程。密陈（`submit_secret_advisory`）保留为只呈国王的私人渠道。
 - **玩家家族动作**：加入别国/当雇佣兵/脱离王国使用原版家族/王国界面；`change_kingdom` 对玩家直接拒绝（AI 仍可用）。
-- **政策**：`enact_policy` / `revoke_policy` 是九类议程的一部分；页面只列可提出/可废除政策，并在提交前显示 `PolicyObject.SecondaryEffects` 的实际效果。AI 提案前用 `query_policies` 查看效果，投票提示词也会带上政策说明与效果。
-- **政策→朝议修正**：Precarial Land Tenure 封地门槛 −8%、Feudal Inheritance 封地门槛 +8%、War Tax 宣战门槛 +10%、Royal Privilege 国王票权 ×1.2；页面在政策效果下方和提议页都会提示，AI 投票提示也会带上。
+- **政策**：`enact_policy` / `revoke_policy` 是十类议程的一部分；页面只列可提出/可废除政策，并在提交前显示 `PolicyObject.SecondaryEffects` 的实际效果。AI 提案前用 `query_policies` 查看效果，投票提示词也会带上政策说明与效果。
+- **政策→朝议修正**：Precarial Land Tenure 封地/割地条约门槛 −8%、Feudal Inheritance 封地/割地条约门槛 +8%、War Tax 宣战/战前条约门槛 +10%、Royal Privilege 国王票权 ×1.2；页面在政策效果下方和提议页都会提示，AI 投票提示也会带上。
 - **接管原版影响力投票**：朝议启用时，原版政策、封地归属/转让、驱逐家族的 UI 按钮与底层 Election 都被禁用；AI 自动发起的原版政策表决同样被 `KingdomPolicyDecision.IsAllowed()` 拦截。
-- **旧工具限制**：`declare_war` / `propose_peace` / `propose_trade` / `propose_alliance` / `end_alliance` 在朝议启用时拒绝执行并提示改用 `propose_agenda`；`gift_fief` 只允许国王转让自己家族的封地；其他封地走朝议。贸易终止 `end_trade_agreement` 仍是国王直接工具。
+- **旧工具限制**：`declare_war` / `propose_peace` / `propose_trade` / `propose_alliance` / `end_alliance` 在朝议启用时拒绝执行并提示改用 `propose_agenda`；条约条款也只走 `propose_agenda`（没有独立的 `propose_treaty` 工具）；`gift_fief` 只允许国王转让自己家族的封地；其他封地走朝议。贸易终止 `end_trade_agreement` 仍是国王直接工具。
 
 ### 盟约/贸易协定到期记录
 
@@ -158,7 +160,7 @@
 - 战役地图上按 **H 键**打开史书 UI（1100×700 内容区，默认新版 Web 阅读页：古籍式目录 + 书页正文，无外层画框），**目录按体例分组显示**（本纪 → 世家 → 列传 → 编年史 → 纪事 → 其他 → 政务文献，编年史按年份倒序），字体大小可调，并显示篇目序号、纪年、字数与阅读进度。**史官编年史按 Markdown 渲染**（`##` 分节、`**` 强调、`>` 史官曰引用块；Web 页不可用/关闭时原生 fallback 去标记显示）；密陈（以及旧档谏言/诏令）仍是实体角色扮演产出的纯文本，不做 Markdown 解释
 - NPC Agent 可通过 `read_file` 阅读编年史——历史成为 NPC 的共同知识
 - 史官提示词（`historian_rules.txt`、`yearly_chronicle_prompt.txt`、`biography_prompt.txt`、`special_chronicle_prompt.txt`）全部热重载
-- 史料记录类型：war_declared（含宣战宣言）/ peace_made / siege_started / siege_failed / siege_abandoned / battle_fought（野战/解围野战大会战，双方总兵力≥600 才入史，附兵力与胜负）/ settlement_captured / fief_granted（国王册封，含册封宣言）/ kingdom_destroyed / kingdom_created / hero_killed / clan_changed_kingdom / clan_leader_changed / marriage / clan_created（天意建族）/ alliance_made（结盟）/ alliance_broken（单方背盟）/ alliance_expired（盟约期满而罢，与背盟区分）/ trade_made（订立贸易协定）/ trade_broken（单方终止贸易协定）/ trade_expired（贸易协定期满而罢，与毁约区分）/ curia_proposed / curia_passed / curia_rejected / curia_applied / curia_failed（朝议的提议/通过/未通过/执行/失败）/ policy_enacted / policy_revoked（朝议通过的政策实施/废除）
+- 史料记录类型：war_declared（含宣战宣言）/ peace_made / siege_started / siege_failed / siege_abandoned / battle_fought（野战/解围野战大会战，双方总兵力≥600 才入史，附兵力与胜负）/ settlement_captured / fief_granted（国王册封，含册封宣言）/ kingdom_destroyed / kingdom_created / hero_killed / clan_changed_kingdom / clan_leader_changed / marriage / clan_created（天意建族）/ alliance_made（结盟）/ alliance_broken（单方背盟）/ alliance_expired（盟约期满而罢，与背盟区分）/ trade_made（订立贸易协定）/ trade_broken（单方终止贸易协定）/ trade_expired（贸易协定期满而罢，与毁约区分）/ curia_proposed / curia_passed / curia_rejected / curia_applied / curia_failed（朝议的提议/通过/未通过/执行/失败）/ treaty_proposed / treaty_signed / treaty_rejected / treaty_broken / treaty_cession / treaty_failed（条约的提出/签署/被拒/撕毁/割地/执行失败）/ policy_enacted / policy_revoked（朝议通过的政策实施/废除）
 
 > 史文文件扩展名仍为 `.txt`（内容为 Markdown），避免破坏既有战役目录扫描与 NPC 的 `read_file` 路径；旧纯文本史文仍可正常阅读（无 Markdown 标记的段落照常显示）。
 
@@ -178,7 +180,7 @@
 - **国王自己的封地**可用 `gift_fief` 自由转让/封赏（可附 `reason` 册封理由）；**封臣家族的封地不能直接夺**——国王必须提 `transfer_fief` 朝议，2/3 通过后执行
 - **被夺方激活**：朝议通过夺封/驱逐后，被针对家族被激活审视处境（FiefReview 事件）——可接受 / 写信交涉 / 联络他国 / 转投他国（`change_kingdom`）/ 起兵，触发内政矛盾，史官记入编年史
 - 封地审视规则：`fief_review_rules.txt`（热重载）；审视上下文含外交/朝议分类工具，封臣**知道**自己能转投
-- **攻城后定归属**：城镇/城堡被攻下（无论玩家或 AI）不再触发原版影响力投票，改由国王 Agent 决定（P1 级激活，与外交提案同级），用 `gift_fief` 赐予合适家族；攻城后默认归国王氏族。国王是玩家时由玩家经 **M 键参政页**处理。开关：MCM「册封由 Agent 主导」
+- **攻城后定归属**：城镇/城堡被攻下（无论玩家或 AI）不再触发原版影响力投票，改由国王 Agent 决定（P1 级激活，与外交提案同级），用 `gift_fief` 赐予合适家族；攻城后默认归国王氏族。国王是玩家时会收到左下角提示，经 **M 键参政页「封地」**处理。开关：MCM「册封由 Agent 主导」。条约割地也复用同一分封提示。
 
 ### 封臣自立建国（实验性，未经过实机测试）
 
@@ -493,7 +495,7 @@ _Module/Prompts/
 
 | 设置项 | 说明 | 默认值 |
 |--------|------|--------|
-| 启用朝议 | 九类行动经朝议表决；关闭恢复旧工具（不推荐） | 开启 |
+| 启用朝议 | 十类行动经朝议表决（含战前条约/附条件议和）；关闭恢复旧工具（不推荐） | 开启 |
 | 全量阈值（家族数） | 合格封臣数 ≤ 此值时全部投票；超过则启用应召制 | `6` |
 | 应召上限（家族数） | 应召制下最多激活的 AI 投票家族；软上限，quorum 优先 | `6` |
 | 强制全量朝议 | 每次朝议激活所有合格封臣（成本高） | 关闭 |
@@ -615,8 +617,11 @@ AIChronicle/
 │   ├── Kit/                 # 原生 Kit UI 框架（KitScreen/KitTheme/组件/动态纹理/Gallery）
 │   └── Web/                 # CEF 页面宿主（CefWebScreen/CefWebHost/CefBridge/HistoryCefScreen/CuriaCefScreen/WebPage 脚手架）
 ├── Systems/                 # 游戏系统与 Harmony 补丁
-│   ├── CuriaService.cs / .Attendance.cs / .Effects.cs # 朝议核心（提议/应召/投票/结算/执行）
+│   ├── CuriaService.cs / .Attendance.cs / .Effects.cs / .Treaty.cs / .Threshold.cs # 朝议核心（提议/应召/投票/结算/执行/条约校验/门槛）
 │   ├── CuriaPolicyEffects.cs # 政策→朝议修正（门槛/国王票权）
+│   ├── TreatyModels.cs / TreatyText.cs # 条约条款/三方视角文案（纯逻辑可单测）
+│   ├── TreatyStore.cs       # 已签署条约/休战记录（World/diplomacy/treaties.json）
+│   ├── TreatyService.cs     # 条约校验/停战/割地/赔款/休战/史料/日记
 │   ├── TokenBudget.cs       # 全局后台 token 预算/延迟
 │   ├── CuriaModels.cs       # 朝议数据模型
 │   ├── CuriaStore.cs        # 朝议持久化 + 文案 + 权限辅助 + 日记/史料
@@ -626,17 +631,17 @@ AIChronicle/
 │   ├── HistoryViewerFactory.cs # 从当前战役读取史册权限视角
 │   ├── HistoryMarkdown.cs   # Markdown → 原生纯文本（CEF 不可用时的 fallback）
 │   ├── EncounterDiagnostics.cs # 遭遇状态诊断/残留自动恢复（PlayerEncounter）
-│   ├── DiplomacyService.cs  # 外交服务（宣战/议和/结盟/贸易/回复提案）
+│   ├── DiplomacyService.cs  # 外交服务（宣战/议和/战前条约/结盟/贸易/回复提案）
 │   ├── HistoryRecorder.cs   # 历史记录器（监听游戏事件自动写入原始史料）
 │   ├── LordChatBehavior.cs  # CampaignBehavior：对话中插入聊天选项，管理战役 ID
 │   ├── DiplomacyBanPatch.cs # Harmony 补丁，禁止原版 AI 外交（MCM 可开关）
-│   ├── FiefAssignmentPatch.cs # 攻城后册封由 Agent 主导
+│   ├── FiefAssignmentPatch.cs # 攻城/条约受地后的国王分封
 │   ├── ExecutionNoPenaltyPatch.cs # 处决无惩罚
 │   └── ClanDiscontinuationPatch.cs # 独立家族永续（禁用原版 28 天灭族，MCM 可开关）
 ├── AGENTS.md                # AI 开发工作流文档（常驻指令 + docs/ 索引）
 ├── README_MOD.md            # 本文件（功能说明）
 ├── LICENSES/                # 第三方许可（CefSharp/CEF；发布包会一并复制）
-├── docs/                    # AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发/UI 框架与 CEF/i18n）
+├── docs/                    # AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发/UI 框架与 CEF/i18n/朝议/条约）
 ├── scripts/
 │   ├── ci-health.mjs        # 仓库健康检查（JSON/switch 同步、CEF 条件编译、密钥/个人路径扫描）
 │   ├── package.py           # Linux/跨平台打包（编译+部署+zip，含 NAudio + CEF 原生文件）
@@ -685,9 +690,19 @@ AIChronicle/
 - 游戏版本：Bannerlord v1.4.8
 - 模组版本：**v2.4.0**
 
+### 条约（战前通牒 / 附条件议和，P0–P2 + 多块割地）
+
+- **战前条约**：`propose_agenda(type="propose_treaty", ...)`，向未交战且无休战的王国提出割地/赔款要求；至少含一项。对方接受则割地/赔款、不开战并进入休战；拒绝时按 `war_on_reject` 自动宣战或只记宣战理由。
+- **附条件议和**：`propose_agenda(type="propose_peace", ...)` 可带同样的割地/赔款/休战条款；留空即无条件和平。
+- **条款**：多块城镇/城堡（`cessions="target:城A;proposer:城B"`，或单块 `settlement_name` + `cede_from=proposer|target`）+ 每日赔款（`tribute_amount` 正数我方付、负数对方付；`tribute_days`）+ 可选 `truce_days`；战前条约另有 `war_on_reject`。
+- **执行**：接受时停战 → 赔款 → 割地 → 休战 → 史料/日记；割地走原版封地交易 API，受地一方先归对方/我方国王家族，被割封臣触发封地审视。**受地国王随后收到一次分封决策**：AI 国王应在 `KingDiplomacy` 激活中优先用 `gift_fief` 赐予有功/无地家族，确无合适家族才保留王室；玩家国王收到左下角提示，在 M 页「封地」自行分封。
+- **休战**：签约后 N 天内我方不能宣战；`declare_war`/`propose_agenda(declare_war)` 会被拒绝。其他路径开战记 `treaty_broken`。
+- **记忆**：签署/被拒/撕毁写入双方所有主要封臣（家族领袖，含国王）的日记；史料新增 `treaty_*`。
+- **UI**：M 键朝议提议表单新增条约条款区；议程详情、外交提案卡片、当前外交表（休战列）都会显示。
+
 ### v2.4.0 更新要点
 
-- **朝议（Curia）**：九类议程（宣战/议和提议/贸易提议/结盟提议/退出盟约/提出政策/废除政策/封地转让/驱逐家族）经王国公开表决；朝议取代公开谏言与诏令，成为国王与封臣之间的正式政治程序。
+- **朝议（Curia）**：v2.4.0 为九类议程（宣战/议和提议/贸易提议/结盟提议/退出盟约/提出政策/废除政策/封地转让/驱逐家族）经王国公开表决；后续新增 `propose_treaty` 与议和条款（见上）。朝议取代公开谏言与诏令，成为国王与封臣之间的正式政治程序。
 - **应召制**：封臣家族领袖（含无地）投票，雇佣兵无权；全量阈值 6（MCM 可调），超过则按固定/利害/权重/轮换应召，quorum 50%、软上限；被针对家族不投票但可陈情。
 - **结盟/背盟入朝议**：`propose_alliance` 与 `end_alliance` 直连工具在朝议启用时拒绝；结盟提议 50%，退出盟约 2/3。贸易终止仍是国王直接工具。
 - **国王权力边界**：国王自己的封地自由处置；封臣封地只能通过 2/3 朝议夺封/再分配；主动宣战/议和/贸易/结盟/背盟/政策/驱逐也须朝议；旧 `declare_war`/`propose_peace`/`propose_trade`/`propose_alliance`/`end_alliance` 直连工具在朝议启用时拒绝。

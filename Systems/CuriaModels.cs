@@ -16,7 +16,8 @@ namespace AIChronicle
         EnactPolicy,
         RevokePolicy,
         TransferFief,
-        ExpelClan
+        ExpelClan,
+        ProposeTreaty
     }
 
     [JsonConverter(typeof(StringEnumConverter))]
@@ -93,6 +94,9 @@ namespace AIChronicle
         public string ProposerName { get; set; } = "";
         public string Reason { get; set; } = "";
         public string Terms { get; set; } = "";
+
+        /// <summary>结构化条约条款（战前条约/带条件议和）；无条件议和与旧议程为 null。</summary>
+        public TreatyTerms? Treaty { get; set; }
 
         // 外交类目标
         public string TargetKingdomId { get; set; } = "";

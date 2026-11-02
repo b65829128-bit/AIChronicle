@@ -19,6 +19,8 @@
     <Compile Include="../../Systems/HistoryArchive.cs" Link="HistoryArchive.cs" />
     <Compile Include="../../Systems/HistoryMarkdown.cs" Link="HistoryMarkdown.cs" />
     <Compile Include="../../Systems/CuriaVoteMath.cs" Link="CuriaVoteMath.cs" />
+    <Compile Include="../../Systems/TreatyModels.cs" Link="TreatyModels.cs" />
+    <Compile Include="../../Systems/TreatyText.cs" Link="TreatyText.cs" />
     <Compile Include="../../Core/SafeFileIO.cs" Link="SafeFileIO.cs" />
   </ItemGroup>
 

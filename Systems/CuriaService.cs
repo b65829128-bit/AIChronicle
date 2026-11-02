@@ -28,6 +28,7 @@ namespace AIChronicle
         {
             _states.Clear();
             _activeAgendas.Clear();
+            TreatyStore.ResetForNewCampaign();
             _settingsWarned = false;
             _lastTickDay = -1;
             // 读档时顺手清理旧档积压；正常情况下每次议程结束也会按 CuriaHistoryKeep 清理。
@@ -155,7 +156,8 @@ namespace AIChronicle
         // ================= 提议 =================
 
         public static bool Propose(Hero proposer, string typeText, string targetKingdom, string settlementName,
-            string newOwnerEntityId, string targetClanName, string targetPolicy, string reason, out string message)
+            string newOwnerEntityId, string targetClanName, string targetPolicy, string reason,
+            TreatyTerms? treatyTerms, out string message)
         {
             message = "";
             if (!Enabled)
@@ -248,14 +250,14 @@ namespace AIChronicle
                 CreatedLabel = CuriaStore.CurrentLabel,
                 CreatedDay = CuriaStore.Today,
                 DeadlineDay = CuriaStore.Today + (MySettings.Instance?.CuriaVoteDays ?? 5),
-                DefenseDeadlineDay = CuriaStore.Today + 1,
-                Threshold = GetThreshold(kingdom, type)
+                DefenseDeadlineDay = CuriaStore.Today + 1
             };
 
             switch (type)
             {
                 case CuriaAgendaType.DeclareWar:
                 case CuriaAgendaType.ProposePeace:
+                case CuriaAgendaType.ProposeTreaty:
                 case CuriaAgendaType.ProposeTrade:
                 case CuriaAgendaType.ProposeAlliance:
                 case CuriaAgendaType.BreakAlliance:
@@ -288,9 +290,19 @@ namespace AIChronicle
                             message = $"[错误] 你已与{target.Name}处于战争状态";
                             return false;
                         }
+                        if (type == CuriaAgendaType.DeclareWar && TreatyStore.FindActiveTruce(kingdom, target) is { } warTruce)
+                        {
+                            message = $"[错误] 你与{target.Name}签有休战条约（至第{warTruce.TruceUntilDay}日），不能宣战";
+                            return false;
+                        }
                         if (type == CuriaAgendaType.ProposePeace && !kingdom.IsAtWarWith(target))
                         {
                             message = $"[错误] 你并未与{target.Name}交战，无需议和";
+                            return false;
+                        }
+                        if (type == CuriaAgendaType.ProposeTreaty && kingdom.IsAtWarWith(target))
+                        {
+                            message = $"[错误] 你已与{target.Name}交战，请用议和提议，而不是战前条约";
                             return false;
                         }
                         if (type == CuriaAgendaType.ProposeTrade)
@@ -333,13 +345,25 @@ namespace AIChronicle
                             }
                         }
 
+                        if (!TryResolveTreatyTerms(kingdom, target, type, proposer, treatyTerms,
+                                out var finalizedTerms, out var treatyError))
+                        {
+                            message = "[错误] " + treatyError;
+                            return false;
+                        }
+
                         agenda.Kind = CuriaAgendaKind.External;
                         agenda.TargetKingdomId = target.StringId ?? "";
                         agenda.TargetKingdomName = target.Name?.ToString() ?? "";
+                        agenda.Treaty = finalizedTerms;
                         agenda.Terms = type switch
                         {
                             CuriaAgendaType.DeclareWar => $"王国对{target.Name}宣战",
-                            CuriaAgendaType.ProposePeace => $"授权国王向{target.Name}提出议和",
+                            CuriaAgendaType.ProposeTreaty =>
+                                $"授权国王向{target.Name}提出战前条约：{TreatyText.Describe(finalizedTerms!, kingdom.Name?.ToString() ?? "", target.Name?.ToString() ?? "")}",
+                            CuriaAgendaType.ProposePeace when finalizedTerms != null =>
+                                $"授权国王向{target.Name}提出和平条约：{TreatyText.Describe(finalizedTerms, kingdom.Name?.ToString() ?? "", target.Name?.ToString() ?? "")}",
+                            CuriaAgendaType.ProposePeace => $"授权国王向{target.Name}提出无条件议和",
                             CuriaAgendaType.ProposeAlliance => $"授权国王向{target.Name}提出结盟",
                             CuriaAgendaType.BreakAlliance => $"解除{kingdom.Name}与{target.Name}的盟约",
                             _ => $"授权国王向{target.Name}提出贸易协定"
@@ -482,6 +506,8 @@ namespace AIChronicle
                     }
             }
 
+            agenda.Threshold = GetThreshold(kingdom, type, agenda.Treaty?.HasCession() == true);
+
             // 提议者自动支持（若在选民池内；被针对的强制夺封/驱逐提议者是国王，不会被排除）
             var voters = BuildVoters(kingdom, agenda);
             var proposerVote = voters.FirstOrDefault(v => v.IsProposer) ?? voters.FirstOrDefault(v => v.ClanId == agenda.ProposerClanId);
@@ -534,20 +560,6 @@ namespace AIChronicle
             if (all == null) return null;
             return all.FirstOrDefault(p => string.Equals(p.StringId, key, StringComparison.OrdinalIgnoreCase))
                 ?? all.FirstOrDefault(p => string.Equals(p.Name?.ToString(), key, StringComparison.OrdinalIgnoreCase));
-        }
-
-        private static float GetThreshold(Kingdom? kingdom, CuriaAgendaType type)
-        {
-            var s = MySettings.Instance;
-            float value;
-            if (type == CuriaAgendaType.EnactPolicy || type == CuriaAgendaType.RevokePolicy)
-                value = s?.CuriaPolicyThreshold ?? 0.5f;
-            else if (type == CuriaAgendaType.TransferFief || type == CuriaAgendaType.ExpelClan
-                     || type == CuriaAgendaType.BreakAlliance)
-                value = s?.CuriaFiefThreshold ?? 0.66f;
-            else
-                value = s?.CuriaWarThreshold ?? 0.5f;
-            return CuriaPolicyEffects.AdjustThreshold(kingdom, type, value);
         }
 
         private static List<CuriaVote> BuildVoters(Kingdom kingdom, CuriaAgenda agenda)
@@ -692,7 +704,7 @@ namespace AIChronicle
             agenda.TotalWeight = totalWeight;
             agenda.QuorumWeight = quorum;
             agenda.SummonedWeight = selected.Sum(v => v.Weight);
-            agenda.Threshold = GetThreshold(kingdom, agenda.Type);
+            agenda.Threshold = GetThreshold(kingdom, agenda.Type, agenda.Treaty?.HasCession() == true);
             agenda.Status = CuriaAgendaStatus.Voting;
             agenda.VotingStartedDay = CuriaStore.Today;
             agenda.DeadlineDay = CuriaStore.Today + (MySettings.Instance?.CuriaVoteDays ?? 5);

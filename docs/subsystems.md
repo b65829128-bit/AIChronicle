@@ -80,7 +80,7 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 - **HistoryRecorder**：`RecordMerit` 写 `World/court/{王国}_merit.txt`（围攻/攻克/失利，真实事件记录），供内政审视读取
 - **diplomacy_rules.txt**：明示国王内外政务、赐地/夺封职权、夺封须师出有名（`gift_fief` 可附 `reason`）
 - **被夺方激活（FiefReview）**：`DiplomacyService.ExecuteTransferFief` 转让封地后，若原主（非国王本人）被夺封 → `AgentScheduler.QueueFiefReview` 激活原主审视处境（可写信/上表/转投他国，`intent="fief_review"` 分类含 diplomacy）。矛盾来自「失去的人」，得利方不激活
-- **攻城后定归属（册封由 Agent 主导）**：`FiefAssignmentPatch.cs` 拦截原版攻城后的 `SettlementClaimantDecision` 投票（Prefix 拦 `DailyTickSettlement`）；Postfix 在 `OnSettlementOwnerChanged`（openToClaim、多家族王国）取消 unassigned 标记（攻城后默认归国王氏族，防忠诚惩罚）并激活国王 Agent（P1 级 KingDiplomacy，带归属指示）。不区分攻城者是玩家或 AI——统一国王决定；国王是玩家时由玩家经秘书处处理。**手动注册**（OnGameStart Type.GetType + harmony.Patch，CampaignBehaviors 类 PatchAll 会静默跳过）。MCM「册封由 Agent 主导」
+- **攻城后定归属（册封由 Agent 主导）**：`FiefAssignmentPatch.cs` 拦截原版攻城后的 `SettlementClaimantDecision` 投票（Prefix 拦 `DailyTickSettlement`）；Postfix 在 `OnSettlementOwnerChanged`（openToClaim、多家族王国）取消 unassigned 标记（攻城后默认归国王氏族，防忠诚惩罚）并激活国王 Agent（P1 级 KingDiplomacy，带归属指示）。不区分攻城者是玩家或 AI——统一国王决定；国王是玩家时收到左下角提示，经 M 键参政页「封地」自行分封。条约割地也走同一 `QueueKingFiefDecision` 分封入口。**手动注册**（OnGameStart Type.GetType + harmony.Patch，CampaignBehaviors 类 PatchAll 会静默跳过）。MCM「册封由 Agent 主导」
 - **军情迷雾**：`query_party_troops` 自己/同阵营全量精确；异国按距离与可达性分近距/远距/传闻三档（`GetIntelRadii` 按地图尺度相对锚），跨海不可达降为传闻——打破「完美信息→和平均衡」
 
 ## 4. 盟约/贸易协定到期记录（轻量拉取式，无 LLM）
@@ -120,6 +120,7 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 | 天意建族 | 静态入口 `HistoryRecorder.RecordClanCreated`（create_clan 调用） | `clan_created` |
 | 结盟/背盟/盟约期满 | `DiplomacyService` 接受 alliance 提案 / `ExecuteEndAlliance` / 每日到期检测 | `alliance_made` / `alliance_broken` / `alliance_expired` |
 | 贸易协定/终止/期满 | `DiplomacyService` 接受 trade 提案 / `ExecuteEndTradeAgreement` / 每日到期检测 | `trade_made` / `trade_broken` / `trade_expired` |
+| 条约提出/签署/被拒/撕毁/割地/失败 | `DiplomacyService.ExecuteProposeTreaty` / `TreatyService` / `HistoryRecorder.OnWarDeclared` | `treaty_proposed` / `treaty_signed` / `treaty_rejected` / `treaty_broken` / `treaty_cession` / `treaty_failed` |
 
 每条事件以 JSONL 格式追加到 `World/history/events_{year}.txt`：
 ```json
@@ -166,22 +167,24 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 
 ## 6. 朝议（Curia）
 
-> 设计契约见 `docs/plan-curia.md`。核心：**九类行动经王国公开表决；文本是理由，类型+参数是机制；通过执行、不通过无事发生。**
+> 设计契约见 `docs/plan-curia.md`；条约条款见 `docs/plan-treaty.md`。核心：**十类行动经王国公开表决；文本是理由，类型+参数是机制；通过执行、不通过无事发生。**
 
-- **九类议题**：`declare_war` / `propose_peace` / `propose_trade` / `propose_alliance` / `break_alliance` / `enact_policy` / `revoke_policy` / `transfer_fief` / `expel_clan`。
+- **十类议题**：`declare_war` / `propose_peace`（可带割地/赔款/休战条款）/ `propose_treaty`（战前条约）/ `propose_trade` / `propose_alliance` / `break_alliance` / `enact_policy` / `revoke_policy` / `transfer_fief` / `expel_clan`。
 - **选民**：所有封臣家族领袖（含无地）；雇佣兵无票。国王（自由时）/玩家必召；被针对家族不投票但单独陈情。玩家作为普通封臣被俘/流亡仍保留投票权；国王被俘/流亡不保留席位（界面显示原因）；其他 AI 被俘/逃亡不召；国王已故则议程失效。
 - **权重**：`DiplomacyModel.GetClanStrength`（原版选王同款），公开；国王无额外票权。
 - **全量/应召**：合格封臣数 ≤ `CuriaFullCouncilThreshold`（默认 6）或强制全量时全部投票；否则固定（国王/玩家/提议者）+ 利害前 3 + 权重补到 quorum 50% + 轮换 1-2，软上限 `CuriaAttendanceCap`（默认 6，quorum 优先）。每人记录 `SummonReason`（固定/利害/权重/轮换），未出席记 `未获召见`。
-- **门槛**：战/和/贸/结盟/政策 50%；封地/驱逐/背盟 2/3。quorum 不足 → 流会。
+- **门槛**：战/和/贸/结盟/政策 50%；封地/驱逐/背盟 2/3；议和/战前条约含割地时按 2/3，纯赔款 50%。quorum 不足 → 流会。
 - **状态机**：`Proposed`（待陈情，1 天）→ `Voting`（默认 5 天）→ `Passed/Rejected` → `Applied/Failed`。提议者默认支持且计入最终票数；投票一经提交不可更改；全部应召者表态可提前结算，截止日强制按已有票数结算（未表态=弃权）。一个王国同一时间一个活跃议程。
 - **暂停随机激活**：`AgentScheduler.CheckKingActivations` / `CheckSelfReviewActivations` 发现该王国有活跃议程且 `CuriaPauseRandomActivations` 开启时跳过；`CuriaVote`/`CuriaDefense` 为 P0（有截止日，优先于随机政务）。
 - **稳定执行**：`CuriaService.Propose` 校验；`CuriaService.Effects` 结算前重校验；执行器调用 `DiplomacyService` 的现有动作；`AIChatClient.CurrentHero` 临时设为国王以复用 `GetDiplomacyHero`；失败标记 `Failed`，不崩游戏。
+- **条约**：`propose_treaty` 只对未交战且无休战的王国；至少含割地或赔款（割地可多块，双方可同时割地）。`propose_peace` 条款可选（空=无条件和平）。条款写入 `CuriaAgenda.Treaty` 并公开；通过后由 `ExecuteProposeTreaty` / `ExecuteProposePeace` 发出 `.proposal`（含 `terms=` JSON）。对方接受时 `TreatyService` 依次执行停战/赔款/割地/休战，并写 `treaty_signed` 与双方家族领袖日记；拒绝写 `treaty_rejected`，战前条约按 `war_on_reject` 决定是否自动宣战。活跃休战由 `TreatyStore` 记录，`ExecuteDeclareWar`/`propose_agenda(declare_war)` 会拒绝；其他路径开战记 `treaty_broken`。
+- **条约割地**：逐块 `ChangeOwnerOfSettlementAction.ApplyByBarter`，受地一方先归对方/我方国王家族，随后 `FiefAssignmentPatch.QueueKingFiefDecision` 触发一次受地国王分封决策（AI 国王优先 `gift_fief` 分封、确无合适家族才保留王室；玩家 M 页提示；单家族王国跳过）；被割封臣按家族合并触发一次 `FiefReview`。`treaty_cession` 史料通过 `PendingTreatyCessionText` 拦截，不记成攻城。
 - **国王缺席提示**：议程详情会显示“国王未参与”及原因（无统治者/已故/被俘/流亡/未获应召），便于排查。
 - **数据**：`World/curia/{王国}/state.json` + `agenda_{id}.json` + `agenda_{id}.txt`（公开摘要）。权限 `AgentManager.IsCuriaAllowed`：本国成员 + 史官；他国不可读。已结束议程默认每国保留最近 200 条（`CuriaHistoryKeep`），旧档在 `FinishAgenda` 后清理，读档时也会清理一次；`query_agenda` 只读最近 10/30 条，不随存档无限增长。
-- **日记/史书**：代码代写 AI 投票者「决定」、参与者「结果」、未出席者「情报」；`HistoryRecorder.RecordCuriaEvent` 写 `curia_proposed/passed/rejected/applied/failed`；史官可读 `World/curia/` 并在编年史写朝议场景。
+- **日记/史书**：代码代写 AI 投票者「决定」、参与者「结果」、未出席者「情报」；`HistoryRecorder.RecordCuriaEvent` 写 `curia_proposed/passed/rejected/applied/failed`；条约另写 `treaty_proposed/signed/rejected/broken/cession/failed`，并把签署/被拒/撕毁写入**双方所有主要封臣（家族领袖，含国王）**的日记；史官可读 `World/curia/` 与条约史料并在编年史写朝议/条约场景。
 - **玩家入口**：M 键 `CuriaCefScreen`（CEF；朝议/外交/封地/密陈/秘书）；页面动作经 `CefBridge` + `MainThreadExecutor`；文本输入走原生 `InformationManager.ShowTextInquiry`；CEF 失败回退秘书处查询。秘书处 `chancery` 只保留 query + 只读文件工具。
-- **前提过滤**：`BuildKingdoms` 输出 `canWar/canPeace/canTrade/canAlliance/canBreakAlliance`；CEF 只列当前有效类型与目标，AI 提示词要求先查询，`CuriaService.Propose` 硬校验并拒绝重复/无对象议题。
+- **前提过滤**：`BuildKingdoms` 输出 `canWar/canPeace/canTreaty/canTrade/canAlliance/canBreakAlliance` + `hasTruce/truceUntilDay`；CEF 只列当前有效类型与目标，AI 提示词要求先查询，`CuriaService.Propose` 硬校验并拒绝重复/无对象议题/休战期宣战。
 - **政策效果**：`enact_policy` / `revoke_policy` 直接 `Kingdom.AddPolicy` / `RemovePolicy`；提案、投票、公开档案都带 `PolicyObject.SecondaryEffects` 的实际效果文本；AI 可用 `query_policies` 查询。
-- **失效影响力条款的替代**：`CuriaPolicyEffects` 把 4 条受影响政策映射为朝议修正——Precarial 封地门槛 −8%、Feudal 封地门槛 +8%、War Tax 宣战门槛 +10%、Royal Privilege 国王票权 ×1.2；UI 与 AI 提示均显示。
+- **失效影响力条款的替代**：`CuriaPolicyEffects` 把 4 条受影响政策映射为朝议修正——Precarial 封地/割地条约门槛 −8%、Feudal 封地/割地条约门槛 +8%、War Tax 宣战/战前条约门槛 +10%、Royal Privilege 国王票权 ×1.2；UI 与 AI 提示均显示。
 - **接管原版投票**：朝议启用时，`KingdomPolicyDecision` / `SettlementClaimantDecision` / `SettlementClaimantPreliminaryDecision` 的 `IsAllowed()` 返回 false；政策/封地/驱逐的 VM 按钮 getter 与 Execute 也被 Harmony 拦截，AI 原版政策表决不会发生。
-- **旧入口**：`submit_advisory`/`submit_edict` 删除；`declare_war`/`propose_peace`/`propose_trade`/`propose_alliance`/`end_alliance` 在朝议启用时拒绝；`gift_fief` 仅国王自己封地；玩家 `change_kingdom` 拒绝；原版 `ExpelClanFromKingdomDecision` 在朝议启用时取消（手动 Harmony）。贸易终止 `end_trade_agreement` 仍直接。
+- **旧入口**：`submit_advisory`/`submit_edict` 删除；`declare_war`/`propose_peace`/`propose_treaty`/`propose_trade`/`propose_alliance`/`end_alliance` 在朝议启用时拒绝（注意 `propose_treaty` 不是独立工具，只存在于 `propose_agenda` 类型中）；`gift_fief` 仅国王自己封地；玩家 `change_kingdom` 拒绝；原版 `ExpelClanFromKingdomDecision` 在朝议启用时取消（手动 Harmony）。贸易终止 `end_trade_agreement` 仍直接。

@@ -281,6 +281,14 @@ namespace AIChronicle
                         sb.AppendLine($"  🏪 与 {other.Name} 贸易协定");
                 }
 
+                foreach (var treaty in TreatyStore.ListActiveFor(k))
+                {
+                    var otherName = treaty.ProposerKingdomName == kName
+                        ? treaty.TargetKingdomName
+                        : treaty.ProposerKingdomName;
+                    sb.AppendLine($"  📜 与 {otherName} 休战至第{treaty.TruceUntilDay}日：{TreatyText.DescribeNeutral(treaty.Terms, treaty.ProposerKingdomName, treaty.TargetKingdomName)}");
+                }
+
                 foreach (var el in expiryLines)
                 {
                     if (el.Contains(kName))
@@ -985,6 +993,7 @@ namespace AIChronicle
                 var typeName = type switch
                 {
                     "peace" => "议和",
+                    "treaty" => "战前条约",
                     "alliance" => "结盟",
                     "trade" => "贸易协定",
                     _ => type
@@ -996,27 +1005,18 @@ namespace AIChronicle
                 var msgLine = pContent.Split('\n')
                     .FirstOrDefault(l => l.StartsWith("message="))?.Substring(8);
 
-                var tributeLine = pContent.Split('\n')
-                    .FirstOrDefault(l => l.StartsWith("tribute="));
-
                 sb.AppendLine($"{i + 1}. [{typeName}] 来自 {proposerName}（{proposerId}）");
                 sb.AppendLine($"   ID: {p}");
 
-                if (tributeLine != null && type == "peace")
+                var terms = TreatyService.ParseProposalTerms(pContent);
+                if (terms != null && terms.HasAnyTerm())
                 {
-                    var tributeData = tributeLine.Substring(8); // "500_30"
-                    var parts = tributeData.Split('_');
-                    if (parts.Length == 2
-                        && int.TryParse(parts[0], out var tAmount)
-                        && int.TryParse(parts[1], out var tDays))
-                    {
-                        var tributeDesc = tAmount > 0
-                            ? $"对方愿每日付 {tAmount} 金币 × {tDays} 天"
-                            : tAmount < 0
-                                ? $"对方要求每日付 {Math.Abs(tAmount)} 金币 × {tDays} 天"
-                                : "无赔款";
-                        sb.AppendLine($"   赔款：{tributeDesc}");
-                    }
+                    var proposerKingdom = CuriaStore.GetHeroKingdom(pe?.HeroRef);
+                    var myKingdom = CuriaStore.GetHeroKingdom(actingHero);
+                    var desc = TreatyText.DescribeForTarget(terms,
+                        proposerKingdom?.Name?.ToString() ?? "?",
+                        myKingdom?.Name?.ToString() ?? "?");
+                    sb.AppendLine($"   条约条款：{desc}");
                 }
 
                 if (!string.IsNullOrEmpty(msgLine))

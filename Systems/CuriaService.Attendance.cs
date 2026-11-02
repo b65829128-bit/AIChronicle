@@ -82,7 +82,8 @@ namespace AIChronicle
                 var kingdom = clan.Kingdom;
                 if (kingdom == null) return score;
 
-                if (agenda.Type == CuriaAgendaType.DeclareWar || agenda.Type == CuriaAgendaType.ProposePeace)
+                if (agenda.Type == CuriaAgendaType.DeclareWar || agenda.Type == CuriaAgendaType.ProposePeace
+                    || agenda.Type == CuriaAgendaType.ProposeTreaty)
                 {
                     var target = CuriaStore.FindKingdom(agenda.TargetKingdomName);
                     if (target != null)
@@ -91,6 +92,19 @@ namespace AIChronicle
                         var trade = Campaign.Current?.GetCampaignBehavior<ITradeAgreementsCampaignBehavior>();
                         if (trade != null && trade.HasTradeAgreement(kingdom, target, out _)) score += 25;
                         score += BorderScore(clan, target);
+                        if (agenda.Treaty != null && agenda.Treaty.HasCession())
+                        {
+                            foreach (var cession in agenda.Treaty.GetCessions())
+                            {
+                                var ceded = CuriaStore.FindSettlement(
+                                    !string.IsNullOrWhiteSpace(cession.SettlementId) ? cession.SettlementId : cession.SettlementName);
+                                if (ceded?.OwnerClan == clan)
+                                {
+                                    score += 90;
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
                 else if (agenda.Type == CuriaAgendaType.ProposeTrade)

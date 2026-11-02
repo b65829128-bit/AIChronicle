@@ -1,6 +1,6 @@
 # 朝议（Curia）设计文档
 
-> 状态：已确认，v1 已实现（v2.4.0，编译与纯逻辑测试通过；游戏内实测待补）。本文是实现的契约；代码、提示词、MCM 与文档应与此一致。
+> 状态：已确认，v1 已实现（v2.4.0，编译与纯逻辑测试通过；游戏内实测待补）。条约（战前条约/附条件议和）P0–P2 已实现，见 `docs/plan-treaty.md`。本文是实现的契约；代码、提示词、MCM 与文档应与此一致。
 
 ## 1. 一句话
 
@@ -10,12 +10,13 @@
 
 ## 2. 范围
 
-### v1 做的九类议题
+### v1 做的十类议题
 
 | 类型 | 提议者 | 目标参数 | 通过后的动作 | 门槛 |
 |---|---|---|---|---|
 | `declare_war` 宣战 | 国王或任一封臣家族领袖 | 目标王国 | `DiplomacyService.ExecuteDeclareWar(king, target, reason)` | 50% |
-| `propose_peace` 议和提议 | 国王或任一封臣家族领袖 | 目标王国 | 以国王名义创建议和提案（对方国王仍要同意） | 50% |
+| `propose_peace` 议和提议 | 国王或任一封臣家族领袖 | 目标王国 + 可选割地/赔款/休战条款 | 以国王名义创建和平条约提案（对方国王仍要同意）；条款可为空=无条件和平 | 50%（含割地 2/3） |
+| `propose_treaty` 战前条约 | 国王或任一封臣家族领袖 | 目标王国 + 割地/赔款条款 | 以国王名义向未交战国提出战前条约；对方接受则不开战，拒绝可选自动宣战 | 50%（含割地 2/3） |
 | `propose_trade` 贸易提议 | 国王或任一封臣家族领袖 | 目标王国 | 以国王名义创建贸易提案（对方国王仍要同意） | 50% |
 | `propose_alliance` 结盟提议 | 国王或任一封臣家族领袖 | 目标王国 | 以国王名义创建同盟提案（对方国王仍要同意） | 50% |
 | `break_alliance` 退出盟约 | 国王或任一封臣家族领袖 | 目标王国 | `DiplomacyService.ExecuteEndAlliance(king, target)`，立即解除盟约 | 2/3 |
@@ -28,7 +29,8 @@
 
 - 不做私战、局部战争、王国级战争之外的战争状态。
 - 不做合法性数值、威望条、名分分数。
-- 不做国王“独断绕过”：上述九类行动在 v1 只有朝议一条合法路径（国王自己的封地、新城封赏除外）。
+- 不做国王“独断绕过”：上述十类行动在 v1 只有朝议一条合法路径（国王自己的封地、新城封赏除外）。
+- 不做对方朝议批准、多笔赔款、一次性赔款、讨价还价（P3）；条约本身支持多块割地/双方同时割地。
 - 不做征税/政策/忠诚度改造；不碰原版繁荣度与忠诚度。
 - 不做玩家快速加入别国/当雇佣兵的便捷入口；使用原版界面。
 - 不做文化专属门槛；先用一套通用规则，文化风味留到后续。
@@ -104,7 +106,7 @@ Agenda {
   id, kingdomId, type, status,
   proposerEntityId, proposerClanId, reason,
   targetKingdomId | targetSettlementId + targetClanId + newOwnerClanId | targetClanId,
-  terms, defense, kingReason,
+  terms, treaty(TreatyTerms|null), defense, kingReason,
   createdAt, deadline, votes[], summoned[], absent[],
   supportWeight, opposeWeight, abstainWeight, totalWeight, quorumWeight,
   threshold, outcome, effectResult, failureReason
@@ -131,7 +133,8 @@ Agenda {
 ### 6.4 执行器
 
 - 宣战：`DiplomacyService.ExecuteDeclareWar(king, target, reason)`（新增带 acting hero 的重载）。
-- 议和/贸易：`DiplomacyService.ExecuteProposePeace(king, ...)` / `ExecuteProposeTrade(king, ...)`（新增重载），仍走现有提案与对方国王响应。
+- 议和/贸易：`DiplomacyService.ExecuteProposePeace(king, ..., terms)` / `ExecuteProposeTrade(king, ...)`（新增重载），仍走现有提案与对方国王响应；带条款时由 `TreatyService` 校验并执行割地/赔款/休战。
+- 战前条约：`DiplomacyService.ExecuteProposeTreaty(king, terms, reason)`；对方接受后由 `TreatyService.AcceptTreaty` 执行，拒绝时按 `war_on_reject` 决定是否自动宣战。
 - 封地转让：`DiplomacyService.ApplyTransferFiefDirect(king, settlement, newOwner, reason)`（从现有 `ExecuteTransferFief` 抽出核心，保留 `PendingFiefGrantText` 与 `FiefReview`）。
 - 驱逐：`DiplomacyService.ApplyExpelClan(king, targetClan, reason)`（`ChangeKingdomAction.ApplyByLeaveKingdom`）。
 - 所有执行器只在主线程运行；异常捕获、写 `debug_logs`、标记 `failed`，不崩游戏。
@@ -156,7 +159,7 @@ Agenda {
 
 **M 键打开 CEF 参政页**（不是 C 键，C 被原版占用）。页签：
 
-- **朝议**：活跃议程与历史；投票（支持/反对/弃权，可选理由）；提议程；游说入口（跳 O 书信）。
+- **朝议**：活跃议程与历史；投票（支持/反对/弃权，可选理由）；提议程（含战前条约/附条件议和条款区）；游说入口（跳 O 书信）。
 - **外交**：待处理外国提案（接受/拒绝）；当前战争/盟约/贸易；国王问询线程（回复/遣使）。
 - **封地**：国王自己的封地自由转让；封臣封地→提议转让/夺封；新城封赏；驱逐家族；查看封地争议记录。
 - **密陈**：封臣给国王的密陈；国王可读本国密陈。
@@ -182,7 +185,7 @@ Agenda {
 | 公开谏言/诏令文件 | 旧档保留为只读历史；新系统不写 |
 
 - 外交“接受/拒绝外国提案”（`respond_to_diplomacy_proposal`）保留为国王的对外回应，不需要内部朝议。
-- 同盟、背盟、政策已并入九类朝议；贸易终止 `end_trade_agreement` 仍保留为国王直接工具。
+- 同盟、背盟、政策已并入十类朝议；贸易终止 `end_trade_agreement` 仍保留为国王直接工具。
 
 ## 9.3 成本预算
 
@@ -240,9 +243,10 @@ Agenda {
 ## 12. 代码落点（实现清单）
 
 - `Systems/CuriaModels.cs`：枚举、`CuriaVote`、`CuriaAgenda`、`CuriaState`。
+- `Systems/TreatyModels.cs` / `TreatyText.cs` / `TreatyStore.cs` / `TreatyService.cs`：条约条款、文案、持久化、校验/执行/日记。`docs/plan-treaty.md`。
 - `Systems/CuriaStore.cs`：读写 JSON/TXT、目录、权限辅助、日记、史料、通知。
-- `Systems/CuriaService.cs`：验证、提议、应召、投票、陈情、结算、执行器、页面数据、查询文本。
-- `Systems/CuriaEffects.cs`（可并入 Service）：九类执行器与重校验。
+- `Systems/CuriaService.cs` / `.Treaty.cs` / `.Threshold.cs`：验证、提议、应召、投票、陈情、结算、执行器、页面数据、查询文本；条约条款校验与门槛计算拆为 partial。
+- `Systems/CuriaEffects.cs`（可并入 Service）：十类执行器与重校验（含条约）。
 - `Agents/AgentScheduler.Curia.cs`：`CuriaVote`/`CuriaDefense` 事件、队列、暂停随机激活、Tick 结算。
 - `Tools/ToolExecutor.Curia.cs`：`propose_agenda`、`respond_to_agenda`、`defend_agenda`、`query_agenda`。
 - `UI/Web/CuriaCefScreen.cs`：M 键 CEF 参政页宿主；页面动作回主线程；原生文本输入；刷新。
@@ -257,7 +261,8 @@ Agenda {
 
 ## 13. 测试
 
-- 纯逻辑：权重/应召/quorum/门槛/三种结果；全量阈值边界；被针对家族排除；自愿 vs 夺封；冷却；失效重校验；幂等。
+- 纯逻辑：权重/应召/quorum/门槛/三种结果；全量阈值边界；被针对家族排除；自愿 vs 夺封；冷却；失效重校验；幂等；条约条款三方视角/割让与赔款方向/休战。
+- 运行验证补充：战前条约接受（不开战）与拒绝（自动宣战/不自动）、休战拦截、条约割地/赔款/双方日记。
 - 工具 JSON 与 switch 同步（`scripts/ci-health.mjs`）。
 - 编译 `dotnet build -c Release -f net472`；纯逻辑测试；CI health。
 - 运行验证边界：不能替代进游戏实测；重点检查 CEF 页面加载、M 键入口、投票流、封地转让/宣战效果。

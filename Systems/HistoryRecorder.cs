@@ -19,6 +19,8 @@ namespace AIChronicle
         public static string? PendingFiefGrantText;
         /// <summary>宣战宣言：由 ExecuteDeclareWar 在宣战前设置（国王的宣战声明），OnWarDeclared 读取后清空——历史与现实形成对照的素材。</summary>
         public static string? PendingWarDeclaration;
+        /// <summary>条约割地：由 TreatyService 在 ApplyByBarter 前设置，OnSettlementOwnerChanged 读取后清空并记 treaty_cession（不误记为攻城易主）。</summary>
+        public static string? PendingTreatyCessionText;
         /// <summary>死亡时原始身份标记：BeforeHeroKilled 捕获（统治者/族长/成员/冒险者），OnHeroKilled 读取后清空。
         /// 用途：KillCharacterAction 在触发 HeroKilled 前已完成族长/国王继任改选，实时判断会误判身份，
         /// 导致关闭「所有贵族立传」时国王/族长不立传。</summary>
@@ -259,6 +261,7 @@ namespace AIChronicle
             {
                 DiplomacyService.ClearAgreementTracking("盟约", warK1, warK2);
                 DiplomacyService.ClearAgreementTracking("贸易", warK1, warK2);
+                TreatyService.OnWarDeclared(warK1, warK2);
             }
 
             var attacker = FactionName(faction1);
@@ -306,6 +309,15 @@ namespace AIChronicle
             if (detail == ChangeOwnerOfSettlementAction.ChangeOwnerOfSettlementDetail.BySiege)
             {
                 _recentSiegeCaptures.Remove(settlement);
+                return;
+            }
+            // 条约割地：独立史料，不能记成攻城/普通易主
+            var treatyCession = PendingTreatyCessionText;
+            if (!string.IsNullOrEmpty(treatyCession))
+            {
+                PendingTreatyCessionText = null;
+                _recentSiegeCaptures.Remove(settlement);
+                RecordEvent("treaty_cession", treatyCession!);
                 return;
             }
             // 其他易主（叛乱/灭族/离国/交易等）：若是刚攻下的城（去重标记残留），跳过，避免与"攻克"重复

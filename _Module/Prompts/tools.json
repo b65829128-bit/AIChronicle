@@ -369,7 +369,7 @@
   {
     "name": "propose_peace",
     "category": "diplomacy",
-    "description": "[CURIA] 主动议和在朝议启用时被拒绝；请用 propose_agenda(type=\"propose_peace\", target_kingdom=..., reason=...)。\n\nPropose a peace treaty to end a war with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You must be at war with the target kingdom.\n- tribute_amount: daily tribute to transfer. Positive = you pay them, negative = they pay you. 0 for no tribute.\n- tribute_days: how many days the tribute lasts.\n- message: a personal statement to the other ruler. Explain why you want peace, any terms, etc.\n- This is NOT unilateral — the other ruler decides. Be prepared for rejection.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
+    "description": "[CURIA] 主动议和在朝议启用时被拒绝；请用 propose_agenda(type=\"propose_peace\", target_kingdom=..., reason=...)。\n\nPropose a peace treaty to end a war with another kingdom. The target kingdom's ruler will review and accept/reject.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- You must be at war with the target kingdom.\n- tribute_amount: daily tribute to transfer. Positive = you pay them, negative = they pay you. 0 for no tribute.\n- tribute_days: how many days the tribute lasts.\n- In Curia mode this direct tool is rejected; use propose_agenda(type=\"propose_peace\") with the same tribute parameters plus optional cessions (side:town;side:town) or settlement_name/cede_from/truce_days for a conditional peace.\n- message: a personal statement to the other ruler. Explain why you want peace, any terms, etc.\n- This is NOT unilateral — the other ruler decides. Be prepared for rejection.\n- After calling, the proposal is sent to the other kingdom's ruler for review.",
     "parameters": [
       {
         "name": "target_kingdom",
@@ -454,13 +454,13 @@
   {
     "name": "query_pending_proposals",
     "category": "diplomacy",
-    "description": "List all pending diplomatic proposals addressed to YOUR kingdom. This is how you discover what other rulers are asking of you.\n\nUsage:\n- Call this FIRST when making diplomatic decisions, before query_war_status.\n- No parameters needed — automatically returns only proposals where YOUR kingdom is the recipient.\n- Returns: proposal ID, type (peace/alliance/trade), proposer's name, and any attached message.\n- If the list is empty, there are no pending proposals to respond to.\n- You can then respond to each proposal individually with respond_to_diplomacy_proposal.",
+    "description": "List all pending diplomatic proposals addressed to YOUR kingdom. This is how you discover what other rulers are asking of you.\n\nUsage:\n- Call this FIRST when making diplomatic decisions, before query_war_status.\n- No parameters needed — automatically returns only proposals where YOUR kingdom is the recipient.\n- Returns: proposal ID, type (peace/treaty/alliance/trade), proposer's name, any attached message, and the full treaty terms (cession/tribute/truce/rejection consequence) when present.\n- If the list is empty, there are no pending proposals to respond to.\n- You can then respond to each proposal individually with respond_to_diplomacy_proposal.",
     "parameters": []
   },
   {
     "name": "respond_to_diplomacy_proposal",
     "category": "diplomacy",
-    "description": "Accept or reject a pending diplomatic proposal sent to you by another kingdom's ruler.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- The proposal_id is the EXACT filename shown in your pending proposals list — copy it directly, do NOT modify or guess. For example: \"拉盖娅_lord_1_14_to_卡拉多格_lord_5_1_alliance\"\n- Set accepted=true to agree, or false to reject.\n- If accepted, the action takes effect immediately (peace treaty/alliance/trade agreement formed).\n- If rejected, the proposal is discarded.\n- You should only respond to proposals targeted at your kingdom.",
+    "description": "Accept or reject a pending diplomatic proposal sent to you by another kingdom's ruler.\n\nUsage:\n- Call this ONLY if you are the ruler of your kingdom.\n- The proposal_id is the EXACT filename shown in your pending proposals list — copy it directly, do NOT modify or guess. For example: \"拉盖娅_lord_1_14_to_卡拉多格_lord_5_1_alliance\"\n- Set accepted=true to agree, or false to reject.\n- If accepted, the action takes effect immediately (peace/alliance/trade formed; a treaty may also transfer a fief and start daily tribute, and may create a truce). For a treaty, weigh the demanded fief/tribute against the cost of continued war or the risk of the proposer declaring war on rejection.\n- If rejected, the proposal is discarded.\n- You should only respond to proposals targeted at your kingdom.",
     "parameters": [
       {
         "name": "proposal_id",
@@ -769,22 +769,52 @@
   {
     "name": "propose_agenda",
     "category": "council",
-    "description": "Propose a formal agenda (朝议) to the kingdom's council. Only clan leaders of a kingdom may propose; mercenaries cannot. The proposal is public and its reason is shown to every summoned clan leader and the historian.\n\nUsage:\n- Before calling, verify the precondition: declare_war only against a kingdom you are NOT at war with; propose_peace only against a kingdom you ARE at war with; propose_trade only if not at war and no existing trade agreement; propose_alliance only if not at war and not already allied; break_alliance only if already allied; enact_policy only if not active; revoke_policy only if active. Do not propose duplicate or precondition-false agendas; the service will reject them.\n- Call this when you want the kingdom to take one of nine formal actions: declare war, propose peace, propose trade, propose alliance, break alliance, enact a policy, revoke a policy, transfer a vassal fief, or expel a clan.\n- type must be one of: declare_war, propose_peace, propose_trade, propose_alliance, break_alliance, enact_policy, revoke_policy, transfer_fief, expel_clan.\n- For declare_war/propose_peace/propose_trade/propose_alliance/break_alliance: set target_kingdom to the other kingdom's Chinese name or StringId.\n- For enact_policy/revoke_policy: call query_policies first, then set policy_name to the policy name or StringId; enact only if not already active, revoke only if active. The policy effect is shown to voters.\n- For transfer_fief: set settlement_name to the town/castle and new_owner_entity_id to the new owner clan leader's entity id or name. Only the king (confiscation/reassignment) or the fief's current owner clan leader (voluntary transfer) may propose. The ruler clan's own fiefs are free to transfer and cannot be targeted by an agenda.\n- For expel_clan: set target_clan_name; only the king may propose; the target clan's clan leader is summoned to defend but does not vote.\n- reason is mandatory: write the political justification in Chinese, as it will be recorded in the agenda archive and the chronicle.\n- Only one agenda may be active per kingdom; the proposer automatically supports the proposal.\n- Do NOT call this for responding to a foreign proposal or for routine military movement. Alliance proposals and breaking alliances are agenda types here.",
+    "description": "Propose a formal agenda (朝议) to the kingdom's council. Only clan leaders of a kingdom may propose; mercenaries cannot. The proposal is public and its reason is shown to every summoned clan leader and the historian.\n\nUsage:\n- Before calling, verify the precondition: declare_war only against a kingdom you are NOT at war with; propose_peace only against a kingdom you ARE at war with; propose_trade only if not at war and no existing trade agreement; propose_alliance only if not at war and not already allied; break_alliance only if already allied; enact_policy only if not active; revoke_policy only if active. Do not propose duplicate or precondition-false agendas; the service will reject them.\n- Call this when you want the kingdom to take one of ten formal actions: declare war, propose peace, propose a pre-war treaty (ultimatum), propose trade, propose alliance, break alliance, enact a policy, revoke a policy, transfer a vassal fief, or expel a clan.\n- Treaties (propose_treaty for a pre-war ultimatum, propose_peace with terms for a conditional peace) use structured terms: cession of one or more towns/castles (cessions = \"side:town;side:town\", or the single settlement_name + cede_from fallback; side = proposer/target; both sides may cede at once) and/or daily tribute (tribute_amount, positive = your kingdom pays the target, negative = the target pays you; tribute_days), optional truce_days, and war_on_reject (pre-war treaty only). The target ruler accepts or rejects; if accepted, peace/cession/tribute take effect and a truce may block new wars. A pre-war treaty must contain a cession or tribute; unconditional peace is propose_peace with no terms.\n- type must be one of: declare_war, propose_peace, propose_treaty, propose_trade, propose_alliance, break_alliance, enact_policy, revoke_policy, transfer_fief, expel_clan.\n- For declare_war/propose_peace/propose_treaty/propose_trade/propose_alliance/break_alliance: set target_kingdom to the other kingdom's Chinese name or StringId.\n- For propose_treaty: target must NOT be at war with you and must not be under an active truce; include at least one concession. For propose_peace: target must be at war with you; terms are optional (omit all for unconditional peace).\n- For enact_policy/revoke_policy: call query_policies first, then set policy_name to the policy name or StringId; enact only if not already active, revoke only if active. The policy effect is shown to voters.\n- For transfer_fief: set settlement_name to the town/castle and new_owner_entity_id to the new owner clan leader's entity id or name. Only the king (confiscation/reassignment) or the fief's current owner clan leader (voluntary transfer) may propose. The ruler clan's own fiefs are free to transfer and cannot be targeted by an agenda.\n- For expel_clan: set target_clan_name; only the king may propose; the target clan's clan leader is summoned to defend but does not vote.\n- reason is mandatory: write the political justification in Chinese, as it will be recorded in the agenda archive and the chronicle.\n- Only one agenda may be active per kingdom; the proposer automatically supports the proposal.\n- Do NOT call this for responding to a foreign proposal or for routine military movement. Alliance proposals and breaking alliances are agenda types here.",
     "parameters": [
       {
         "name": "type",
         "type": "string",
-        "description": "Agenda type: declare_war | propose_peace | propose_trade | propose_alliance | break_alliance | enact_policy | revoke_policy | transfer_fief | expel_clan"
+        "description": "Agenda type: declare_war | propose_peace | propose_treaty | propose_trade | propose_alliance | break_alliance | enact_policy | revoke_policy | transfer_fief | expel_clan"
       },
       {
         "name": "target_kingdom",
         "type": "string",
-        "description": "Target kingdom name or StringId for declare_war/propose_peace/propose_trade. Use empty string otherwise."
+        "description": "Target kingdom name or StringId for declare_war/propose_peace/propose_treaty/propose_trade. Use empty string otherwise."
+      },
+      {
+        "name": "cede_from",
+        "type": "string",
+        "description": "Single-fief fallback for propose_treaty/propose_peace: proposer = your kingdom cedes the fief; target = the other kingdom cedes it. Prefer cessions when there is more than one fief."
+      },
+      {
+        "name": "tribute_amount",
+        "type": "integer",
+        "description": "For propose_treaty/propose_peace: daily tribute. Positive = your kingdom pays the target; negative = the target pays your kingdom; 0 = no tribute."
+      },
+      {
+        "name": "tribute_days",
+        "type": "integer",
+        "description": "Number of days the tribute lasts; 0 if no tribute. Required > 0 when tribute_amount is non-zero."
+      },
+      {
+        "name": "truce_days",
+        "type": "integer",
+        "description": "Days of truce after signing (0 = no truce). Omit to use the default (60 for propose_treaty, 0 for propose_peace). The truce blocks new war declarations between the two kingdoms until it expires."
+      },
+      {
+        "name": "war_on_reject",
+        "type": "boolean",
+        "description": "propose_treaty only: if true (default), a rejection automatically declares war; if false, rejection only records a casus belli."
+      },
+      {
+        "name": "cessions",
+        "type": "string",
+        "description": "Multiple cessions for propose_treaty/propose_peace, format side:town;side:town (side = proposer or target; Chinese 我方/对方 accepted). Example: target:阿耳戈斯;proposer:泽昂尼卡. Both sides may cede at once. Empty if using the single settlement_name/cede_from fallback."
       },
       {
         "name": "settlement_name",
         "type": "string",
-        "description": "Target town/castle name for transfer_fief. Use empty string otherwise."
+        "description": "Town/castle name for transfer_fief, or a single fief to cede in propose_treaty/propose_peace (with cede_from). Use cessions for more than one fief."
       },
       {
         "name": "new_owner_entity_id",

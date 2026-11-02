@@ -29,6 +29,7 @@
   var TYPE_LABEL = {
     declare_war: '宣战',
     propose_peace: '议和提议',
+    propose_treaty: '战前条约',
     propose_trade: '贸易提议',
     propose_alliance: '结盟提议',
     break_alliance: '退出盟约',
@@ -544,6 +545,7 @@
     var ks = d.kingdoms || [];
     if (ks.some(function (k) { return !!k.canWar; })) types.push('declare_war');
     if (ks.some(function (k) { return !!k.canPeace; })) types.push('propose_peace');
+    if (ks.some(function (k) { return !!k.canTreaty; })) types.push('propose_treaty');
     if (ks.some(function (k) { return !!k.canTrade; })) types.push('propose_trade');
     if (ks.some(function (k) { return !!k.canAlliance; })) types.push('propose_alliance');
     if (ks.some(function (k) { return !!k.canBreakAlliance; })) types.push('break_alliance');
@@ -571,6 +573,7 @@
     return (d.kingdoms || []).filter(function (k) {
       if (type === 'declare_war') return !!k.canWar;
       if (type === 'propose_peace') return !!k.canPeace;
+      if (type === 'propose_treaty') return !!k.canTreaty;
       if (type === 'propose_trade') return !!k.canTrade;
       if (type === 'propose_alliance') return !!k.canAlliance;
       if (type === 'break_alliance') return !!k.canBreakAlliance;
@@ -581,6 +584,25 @@
         label: k.name + (k.atWar ? '（交战中）' : '') + (k.hasTrade ? '（有贸易）' : '') + (k.isAlly ? '（同盟）' : '')
       };
     });
+  }
+
+  function numberInput(value, min, max) {
+    var input = el('input');
+    input.type = 'number';
+    input.min = String(min);
+    input.max = String(max);
+    input.value = String(value);
+    return input;
+  }
+
+  function checkboxRow(labelText, checked) {
+    var label = el('label', 'check-row');
+    var input = el('input');
+    input.type = 'checkbox';
+    input.checked = !!checked;
+    label.appendChild(input);
+    label.appendChild(el('span', '', labelText));
+    return { el: label, input: input };
   }
 
   function renderProposeForm() {
@@ -612,10 +634,12 @@
     kField.appendChild(kSel.el);
     grid.appendChild(kField);
 
-    var allFiefs = d.player && d.player.isKing
-      ? (d.fiefs && d.fiefs.vassal ? d.fiefs.vassal : [])
-      : (d.fiefs && d.fiefs.own ? d.fiefs.own : []);
-    var fiefList = transferableFiefs(allFiefs, d.clans);
+    var allOwnFiefs = d.player && d.player.isKing
+      ? ((d.fiefs && d.fiefs.own) || []).concat((d.fiefs && d.fiefs.vassal) || [])
+      : ((d.fiefs && d.fiefs.own) || []);
+    var fiefList = transferableFiefs(d.player && d.player.isKing
+      ? ((d.fiefs && d.fiefs.vassal) || [])
+      : ((d.fiefs && d.fiefs.own) || []), d.clans);
 
     var sField = el('div', 'field');
     sField.appendChild(el('div', 'field-label', '目标封地'));
@@ -647,6 +671,101 @@
     pField.appendChild(pEffect);
     grid.appendChild(pField);
 
+    var treatyBox = el('div', 'field full');
+    treatyBox.appendChild(el('div', 'field-label', '条约条款（议和 / 战前条约）'));
+    var treatyGrid = el('div', 'form-grid treaty-grid');
+    treatyBox.appendChild(treatyGrid);
+
+    function addTreatyField(label, control, full) {
+      var f = el('div', 'field' + (full ? ' full' : ''));
+      f.appendChild(el('div', 'field-label', label));
+      f.appendChild(control.el || control);
+      treatyGrid.appendChild(f);
+      return f;
+    }
+
+    var cessionListEl = el('div', 'cession-list');
+    var cessionField = addTreatyField('割地（可多块，双方可同时割地）', cessionListEl, true);
+    var cessionRows = [];
+    var addCessionBtn = el('button', 'btn ghost small', '+ 添加割地');
+    cessionField.appendChild(addCessionBtn);
+
+    function cessionOptions(side) {
+      if (side === 'proposer') return allOwnFiefs;
+      if (side === 'target') {
+        return (d.foreignFiefs || []).filter(function (f) { return f.kingdomName === kSel.value; });
+      }
+      return [];
+    }
+
+    function cessionFiefOptions(side) {
+      return cessionOptions(side).map(function (f) {
+        return { value: f.name, label: f.name + '（' + f.ownerClan + '）' };
+      });
+    }
+
+    function updateCessionRowFiefs(item) {
+      item.fief.setOptions(cessionFiefOptions(item.dir.value), item.fief.value);
+      item.fief.el.classList.toggle('hidden', !item.dir.value);
+    }
+
+    function updateAllCessionFiefs() {
+      for (var i = 0; i < cessionRows.length; i++) updateCessionRowFiefs(cessionRows[i]);
+    }
+
+    function addCessionRow(prefill) {
+      prefill = prefill || {};
+      var row = el('div', 'cession-row');
+      var dir = createDropdown([
+        { value: '', label: '不割地' },
+        { value: 'proposer', label: '我方割让' },
+        { value: 'target', label: '对方割让' }
+      ], prefill.cedeFrom || '');
+      var fief = createDropdown([], prefill.settlementName || '');
+      var remove = el('button', 'btn ghost small', '移除');
+      row.appendChild(dir.el);
+      row.appendChild(fief.el);
+      row.appendChild(remove);
+      var item = { dir: dir, fief: fief, row: row };
+      cessionRows.push(item);
+      cessionListEl.appendChild(row);
+      dir.onChange = function () { updateCessionRowFiefs(item); };
+      remove.addEventListener('click', function () {
+        var idx = cessionRows.indexOf(item);
+        if (idx >= 0) cessionRows.splice(idx, 1);
+        if (row.parentNode) row.parentNode.removeChild(row);
+      });
+      updateCessionRowFiefs(item);
+      return item;
+    }
+
+    addCessionRow({});
+    addCessionBtn.addEventListener('click', function () { addCessionRow({ cedeFrom: 'target' }); });
+
+    var tributeSel = createDropdown([
+      { value: 'none', label: '不赔款' },
+      { value: 'proposer', label: '我方支付' },
+      { value: 'target', label: '对方支付' }
+    ], 'none');
+    addTreatyField('赔款方向', tributeSel);
+
+    var amountInput = numberInput(0, 0, 100000);
+    var amountField = addTreatyField('每日金额', amountInput);
+    var daysInput = numberInput(0, 0, 3600);
+    var daysField = addTreatyField('持续天数', daysInput);
+
+    var truceInput = numberInput(0, 0, 720);
+    var truceTouched = false;
+    truceInput.addEventListener('input', function () { truceTouched = true; });
+    addTreatyField('签约后休战天数（0 = 不设；战前条约默认 60）', truceInput);
+
+    var warCheck = checkboxRow('若对方拒绝，自动宣战（仅战前条约）', true);
+    var warField = addTreatyField('拒绝后果', warCheck.el, true);
+
+    var treatyHint = el('div', 'field-help', '可添加多块割地，双方可同时割地；战前条约至少要有割地或赔款，议和留空即无条件和平。');
+    treatyBox.appendChild(treatyHint);
+    grid.appendChild(treatyBox);
+
     function updatePolicyEffect() {
       var selected = null;
       var policies = d.policies || [];
@@ -671,6 +790,15 @@
       nSel.setOptions(newOwnerOptionsData(d.clans, f ? f.ownerClan : ''), nSel.value);
     };
 
+    function updateTributeFields() {
+      var show = tributeSel.value !== 'none';
+      amountField.classList.toggle('hidden', !show);
+      daysField.classList.toggle('hidden', !show);
+    }
+
+    tributeSel.onChange = updateTributeFields;
+    kSel.onChange = function () { updateAllCessionFiefs(); };
+
     card.appendChild(grid);
     var actions = el('div', 'form-actions');
     var submit = el('button', 'btn primary', '写理由并提交');
@@ -680,31 +808,62 @@
 
     function updateFields() {
       var t = typeSel.value;
-      var external = t === 'declare_war' || t === 'propose_peace' || t === 'propose_trade'
-        || t === 'propose_alliance' || t === 'break_alliance';
+      var external = t === 'declare_war' || t === 'propose_peace' || t === 'propose_treaty'
+        || t === 'propose_trade' || t === 'propose_alliance' || t === 'break_alliance';
       var isPolicy = t === 'enact_policy' || t === 'revoke_policy';
+      var isTreaty = t === 'propose_treaty';
+      var showTreaty = isTreaty || t === 'propose_peace';
       kField.classList.toggle('hidden', !external);
       if (external) kSel.setOptions(kingdomOptionsForType(d, t), kSel.value);
       sField.classList.toggle('hidden', t !== 'transfer_fief');
       nField.classList.toggle('hidden', t !== 'transfer_fief');
       cField.classList.toggle('hidden', t !== 'expel_clan');
       pField.classList.toggle('hidden', !isPolicy);
+      treatyBox.classList.toggle('hidden', !showTreaty);
+      warField.classList.toggle('hidden', !isTreaty);
+      if (!truceTouched) {
+        truceInput.value = isTreaty
+          ? String((d.settings && d.settings.defaultTruceDays) || 60)
+          : '0';
+      }
       if (isPolicy) {
         pSel.setOptions(policyOptionsForType(d, t), pSel.value);
         updatePolicyEffect();
+      }
+      if (showTreaty) {
+        updateAllCessionFiefs();
+        updateTributeFields();
       }
     }
     typeSel.onChange = updateFields;
     updateFields();
 
     submit.addEventListener('click', function () {
+      var tributeDir = tributeSel.value;
+      var tributeAmount = Math.abs(parseInt(amountInput.value || '0', 10) || 0);
+      if (tributeDir === 'none') tributeAmount = 0;
+      if (tributeDir === 'target') tributeAmount = -tributeAmount;
+      var tributeDays = tributeAmount === 0 ? 0 : (parseInt(daysInput.value || '0', 10) || 0);
+      var cessions = [];
+      for (var i = 0; i < cessionRows.length; i++) {
+        var row = cessionRows[i];
+        if (!row.dir.value || !row.fief.value) continue;
+        cessions.push({ cedeFrom: row.dir.value, settlementName: row.fief.value });
+      }
       var payload = {
         type: typeSel.value,
         targetKingdom: kSel.value || '',
         settlementName: sSel.value || '',
         newOwnerEntityId: nSel.value || '',
         targetClanName: cSel.value || '',
-        policyName: pSel.value || ''
+        policyName: pSel.value || '',
+        treaty: {
+          cessions: cessions,
+          tributeAmount: tributeAmount,
+          tributeDays: tributeDays,
+          truceDays: parseInt(truceInput.value || '0', 10) || 0,
+          warOnReject: warCheck.input.checked
+        }
       };
       dispatch('propose', payload);
       setStatus('请在弹窗中填写议题理由…');
@@ -726,6 +885,7 @@
       d.foreignProposals.forEach(function (p) {
         var f = el('div', 'field');
         f.appendChild(el('div', 'field-label', p.proposer + ' 提议' + p.typeLabel));
+        if (p.termsText) f.appendChild(el('div', 'field-value reason', '条约条款（对方视角）：' + p.termsText));
         if (p.message) f.appendChild(el('div', 'field-value reason', p.message));
         var row = el('div', 'btn-row');
         var yes = el('button', 'btn good', '接受');
@@ -751,7 +911,7 @@
     var table = el('table', 'vote-table');
     var thead = el('thead');
     var trh = el('tr');
-    ['王国', '状态', '贸易'].forEach(function (h) { trh.appendChild(el('th', '', h)); });
+    ['王国', '状态', '贸易', '休战'].forEach(function (h) { trh.appendChild(el('th', '', h)); });
     thead.appendChild(trh); table.appendChild(thead);
     var tbody = el('tbody');
     (d.kingdoms || []).forEach(function (k) {
@@ -760,6 +920,7 @@
       var st = k.atWar ? '交战中' : (k.isAlly ? '同盟' : '和平');
       tr.appendChild(el('td', '', st));
       tr.appendChild(el('td', '', k.hasTrade ? '有' : '无'));
+      tr.appendChild(el('td', '', k.hasTruce ? ('至第' + k.truceUntilDay + '日') : '—'));
       tbody.appendChild(tr);
     });
     table.appendChild(tbody); card2.appendChild(table);

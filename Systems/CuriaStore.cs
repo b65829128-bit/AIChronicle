@@ -457,6 +457,7 @@ namespace AIChronicle
             CuriaAgendaType.RevokePolicy => "废除政策",
             CuriaAgendaType.TransferFief => "封地转让",
             CuriaAgendaType.ExpelClan => "驱逐家族",
+            CuriaAgendaType.ProposeTreaty => "战前条约",
             _ => type.ToString()
         };
 
@@ -532,6 +533,14 @@ namespace AIChronicle
                 case "议和":
                     type = CuriaAgendaType.ProposePeace;
                     return true;
+                case "propose_treaty":
+                case "treaty":
+                case "ultimatum":
+                case "条约":
+                case "战前条约":
+                case "最后通牒":
+                    type = CuriaAgendaType.ProposeTreaty;
+                    return true;
                 case "propose_trade":
                 case "trade":
                 case "贸易":
@@ -584,7 +593,7 @@ namespace AIChronicle
             return a.Type switch
             {
                 CuriaAgendaType.DeclareWar or CuriaAgendaType.ProposePeace or CuriaAgendaType.ProposeTrade
-                    or CuriaAgendaType.ProposeAlliance or CuriaAgendaType.BreakAlliance
+                    or CuriaAgendaType.ProposeAlliance or CuriaAgendaType.BreakAlliance or CuriaAgendaType.ProposeTreaty
                     => a.TargetKingdomName,
                 CuriaAgendaType.EnactPolicy or CuriaAgendaType.RevokePolicy
                     => a.TargetPolicyName,

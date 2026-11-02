@@ -51,11 +51,12 @@ namespace AIChronicle
             return Has(kingdom, RoyalPrivilege) ? KingWeightMultiplier : 1f;
         }
 
-        public static float AdjustThreshold(Kingdom? kingdom, CuriaAgendaType type, float baseThreshold)
+        public static float AdjustThreshold(Kingdom? kingdom, CuriaAgendaType type, float baseThreshold, bool hasCession = false)
         {
             var value = baseThreshold;
-            if (type == CuriaAgendaType.TransferFief) value += FiefThresholdDelta(kingdom);
-            if (type == CuriaAgendaType.DeclareWar) value += WarThresholdDelta(kingdom);
+            if (type == CuriaAgendaType.TransferFief || hasCession) value += FiefThresholdDelta(kingdom);
+            if (type == CuriaAgendaType.DeclareWar || (type == CuriaAgendaType.ProposeTreaty && !hasCession))
+                value += WarThresholdDelta(kingdom);
             return Math.Max(0.05f, Math.Min(0.95f, value));
         }
 
@@ -65,9 +66,9 @@ namespace AIChronicle
             if (policy == null) return "";
             return policy.StringId switch
             {
-                PrecarialLandTenure => "封地转让/夺封门槛 −8%",
-                FeudalInheritance => "封地转让/夺封门槛 +8%",
-                WarTax => "宣战门槛 +10%",
+                PrecarialLandTenure => "封地转让/割地条约门槛 −8%",
+                FeudalInheritance => "封地转让/割地条约门槛 +8%",
+                WarTax => "宣战/战前条约门槛 +10%",
                 RoyalPrivilege => "国王家族票权 ×1.2",
                 _ => ""
             };
@@ -78,9 +79,9 @@ namespace AIChronicle
         {
             if (kingdom == null) return "";
             var parts = new System.Collections.Generic.List<string>();
-            if (Has(kingdom, PrecarialLandTenure)) parts.Add("临时土地占有：封地门槛 −8%");
-            if (Has(kingdom, FeudalInheritance)) parts.Add("封建继承：封地门槛 +8%");
-            if (Has(kingdom, WarTax)) parts.Add("战争税：宣战门槛 +10%");
+            if (Has(kingdom, PrecarialLandTenure)) parts.Add("临时土地占有：封地/割地条约门槛 −8%");
+            if (Has(kingdom, FeudalInheritance)) parts.Add("封建继承：封地/割地条约门槛 +8%");
+            if (Has(kingdom, WarTax)) parts.Add("战争税：宣战/战前条约门槛 +10%");
             if (Has(kingdom, RoyalPrivilege)) parts.Add("王室特权：国王票权 ×1.2");
             return string.Join("；", parts);
         }
