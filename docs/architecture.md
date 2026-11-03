@@ -195,6 +195,14 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 **为什么是日记而不是注入**：日记是拉取式（agent 自觉读写，见克制原则），不占上下文；注入任何记忆内容都会膨胀上下文、稀释提示。检索工具（grep 的 context_lines/max_results）为此设计。
 
+**静默见闻（silent tidings）**：战争、封地易主、围城、死亡、会战、赠礼/索取等与某个 Agent 有关、但不值得叫醒它的事件，由代码以 `情报：…` 静默写进它的日记（零 LLM、零 UI）。设计契约见 `docs/plan-silent-memory.md`，四条硬规则：
+- **只写「情报」**，永不代写决定/评价/结果——Agent 下次激活读到后自己决定是否升格；`结果` 仍只表示"我的计划有结局"。
+- **受众由事件钩子处的游戏对象计算**（亲历 / 直接利害 / 体制三环），环越外文本越短；不在消费端解析摘要字符串，也不落盘"谁该知道"。
+- **按 (Agent, 事件日) 缓冲**，激活前 / 跨日 / 退出时 flush；同日多条合并成一行「今日见闻」，受 MCM「每日见闻上限」约束。
+- **读取走 `read_diary`**：默认最近 40 条，从尾部读；`read_file` 读整本会被工具结果上限头截断，反而看不到最新条目。
+
+**日记按年分卷**：跨年时 `decisions/diary.txt` 中往年条目移入 `decisions/diary_{year}.txt`（追加、去重），本年条目留在原文件；`read_diary` 头部列出往年卷名，旧卷仍可用 `read_file` / `grep` 访问。
+
 ## 10.1 数字与 Agent 的分工（朝议的设计原则）
 
 **数字描述世界，Agent 做判断。**
@@ -215,6 +223,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 - 自我审视类激活前（**国王政务 KingDiplomacy / 封地审视 FiefReview / 外交问询回应 KingConsult / 封臣自省 SelfReview / 密使回应 EnvoyReceived**），先比较日记最新条目日期与 chat_logs 各文件最新消息日期
 - 若日记落后（存在"比日记更新的往来"），跑一次**巩固 pass**：agent 自读日记 + 较新往来 → 把值得记住的决定/承诺/计策/结果/战略 `append_file` 补记进 diary。静默执行，不写 chat_logs、不弹玩家消息
 - 只在落后时触发，多数时候零成本；受 MCM「启用记忆巩固」开关控制（默认开）
+- **自写水位（`decisions/.diary_authored`）**：判断"日记是否落后"优先看 Agent 自己最后一次写日记/巩固的日期，而不是日记文件里最大的日期。否则系统代笔的「情报」会把日记日期推进到今天，巩固 pass 永远不再触发（且它的读取同样会被头截断）。
 - 日期解析兼容两种写法：日记 `[1090春3]`/`[1090年冬第9日]`、聊天 `[第1090年，春季第15日]`——日记格式务必保持统一，否则程序无法可靠判断"谁更新"
 - 巩固提示词文件化、可热重载：`consolidation_rules.txt`（intent 规则）+ `memory_consolidation.txt`（激活指令）
 
@@ -425,7 +434,9 @@ Usage:
 │   ├── ContextBuilder.cs       ← Context 动态组装器
 │   ├── AIChatClient.cs         ← LLM API 客户端（HTTP 流式请求、SSE 解析、多轮循环），工具调用委托给 ToolExecutor
 │   ├── PromptManager.cs        ← 提示词管理器（文件热重载、战役目录、角色 JSON）
-│   ├── MemoryConsolidator.cs   ← 记忆巩固（diary 权威化保底：自我审视前检测日记落后并补记）
+│   ├── MemoryConsolidator.cs   ← 记忆巩固（diary 权威化保底：自写水位 + 跨年卷扫描）
+│   ├── DiaryStore.cs           ← 日记结构化操作（日期解析/最近条目/按年分卷，纯逻辑可单测）
+│   ├── SilentDiary.cs          ← 静默见闻（事件分派/文本渲染/缓冲/幂等）
 │   ├── AgentScheduler.cs       ← 事件调度器基类（优先级队列、Tick、国王激活、盟约到期检测）
 │   ├── AgentScheduler.Events.cs  ← 事件处理（ProcessEvent/玩家事件/外交提案轮询）
 │   ├── AgentScheduler.Advisory.cs ← 封臣自省系统（公平轮转、选池、QueueSelfReview）
@@ -467,13 +478,14 @@ Usage:
 │   ├── HistoryMarkdown.cs      ← Markdown → 原生纯文本（CEF 不可用时的 fallback）
 │   ├── EncounterDiagnostics.cs ← 遭遇状态诊断/残留自动恢复（PlayerEncounter）
 │   ├── DiplomacyService.cs     ← 外交服务（宣战/议和/战前条约/结盟/贸易协定/回复提案 + FindKingdom + 盟约/贸易到期记录与清除）
-│   ├── HistoryRecorder.cs      ← 历史记录器（监听游戏事件写入原始史料）
+│   ├── HistoryRecorder.cs      ← 历史记录器（监听游戏事件写入原始史料；同时投递静默见闻）
+│   ├── SilentDiaryText.cs      ← 静默见闻人名/地名渲染（{国}·{族}家族的{名}，纯逻辑可单测）
 │   ├── LordChatBehavior.cs     ← 对话中插入聊天选项，战役 ID 管理
 │   ├── DiplomacyBanPatch.cs    ← 拦截原版外交（禁止原版外交开关）
 │   ├── FiefAssignmentPatch.cs  ← 攻城/条约受地后的国王分封（共享 QueueKingFiefDecision）
 │   ├── ExecutionNoPenaltyPatch.cs ← 处决无惩罚
 │   └── ClanDiscontinuationPatch.cs ← 独立家族永续（禁用原版 28 天灭族，MCM 可开关）
-├── docs/                       ← AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发/UI 框架与 CEF/i18n/朝议/条约）
+├── docs/                       ← AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发/UI 框架与 CEF/i18n/朝议/条约/静默见闻）
 ├── AGENTS.md                  ← 常驻开发指令（本文件）
 ├── README.md                  ← 开源主入口（英文简介，指向 README_MOD.md / AGENTS.md）
 ├── CONTRIBUTING.md            ← 贡献指南（构建方法、文档维护规则、PR 流程）

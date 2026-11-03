@@ -771,6 +771,42 @@ namespace AIChronicle
             }
         }
 
+        private bool _silentDiaryEnabled = true;
+
+        [SettingPropertyBool("启用静默见闻", Order = 23, RequireRestart = false,
+            HintText = "开启：战争、封地易主、围城、死亡、会战、赠礼等与某个 Agent 有关、但不值得叫醒它的事件，由系统以「情报」形式静默写进它的 decisions/diary.txt（零 LLM、不弹窗）。它下次激活时会读到。关闭后不再代笔，已有日记不受影响。")]
+        [SettingPropertyGroup("游戏设置")]
+        public bool SilentDiaryEnabled
+        {
+            get => _silentDiaryEnabled;
+            set
+            {
+                if (_silentDiaryEnabled != value)
+                {
+                    _silentDiaryEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _silentDiaryDailyCap = 3;
+
+        [SettingPropertyInteger("每日见闻上限", 1, 5, Order = 24, RequireRestart = false,
+            HintText = "单个 Agent 每天最多记几条静默见闻（同日的多条会合并成一行「今日见闻」）。这是防洪水阀，不是目标值——大多数日子应当是 0 条。")]
+        [SettingPropertyGroup("游戏设置")]
+        public int SilentDiaryDailyCap
+        {
+            get => _silentDiaryDailyCap;
+            set
+            {
+                if (_silentDiaryDailyCap != value)
+                {
+                    _silentDiaryDailyCap = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private bool _disableClanDiscontinuation = true;
 
         [SettingPropertyBool("独立家族永不失踪", Order = 21, RequireRestart = false,

@@ -327,6 +327,18 @@ Agent 任何时候都可以调 `browse_tools("military")` 解锁某类工具，�
   - 开关：MCM「启用记忆巩固」（默认开）
   - 提示词可热重载：`consolidation_rules.txt`（行为规则）+ `memory_consolidation.txt`（激活指令）
 
+### 静默见闻（Silent Diary）
+
+- **世界事件会自动进入相关 Agent 的日记，零 LLM、不唤醒、不弹窗**：战争/议和、封地易主（册封/攻取）、围城开始/解围/攻城失败、贵族死亡、大会战、赠礼/索取、下令劫掠等，由系统以 `[年季节日] 情报：…` 写入相关 Agent 的 `decisions/diary.txt`；Agent 下次激活时读到，自己决定要不要升格成「评价」「决定」或补记「结果」
+- **只写情报，不代写判断**：系统绝不代写决定/评价/战略/结果——日记的主体性仍属于 Agent。（朝议/条约/分封既有的系统代笔是另一条通道，保持不变）
+- **受众按关系分环**：亲历者（第二人称、给细节）、直接利害的氏族领袖、相关王国统治者；环越外文本越短，避免"全知"；玩家按普通 Entity 处理（玩家自己的日记不写）
+- **人名格式统一**：`{国}·{族}家族的{名}`，不用代词，保证 grep 可检索；定居点只写地名
+- **读取工具 `read_diary`**：默认返回最近 40 条（可按类型过滤），头部给出总条数、行号区间与往年卷名；解决"日记越长、`read_file` 头截断越看不到新内容"的问题
+- **按年分卷**：跨年时把往年条目移入 `decisions/diary_{year}.txt`，`diary.txt` 只留本年；旧卷仍可 `read_file` / `grep`
+- **与记忆巩固兼容**：系统代笔不推进 `decisions/.diary_authored` 水位，避免"日记被系统写到今天"导致巩固 pass 永不触发
+- 配置：MCM「启用静默见闻」（默认开）、「每日见闻上限」（默认 3，同日多条合并为「今日见闻」）
+- 设计契约：`docs/plan-silent-memory.md`
+
 ### 提示词系统（文件化、可热重载）
 
 所有提示词均为**中文文本文件**，存储在模组目录下，玩家可随时编辑，游戏内实时生效（热重载）。
@@ -472,6 +484,8 @@ _Module/Prompts/
 | 家族总数补充阈值 | 在世贵族/佣兵家族总数低于此值触发补充（单位：家族，原版约 80）。封臣与佣兵是动态身份，故只按总数判定——只有真正灭族才拉低计数 | `70` |
 | 家族补充冷却（游戏天） | 天意每次降下血脉后的冷却。冷却期内即使仍低于下限也不重复激活，避免"永动机"式连补 | `5` |
 | 启用记忆巩固 | 自我审视（国王政务/封地审视/外交问询/封臣自省/密使回应）激活前，若日记落后于聊天记录，先跑一次巩固——把最近往来中值得记住的决定/承诺/计策/战略补记进 decisions/diary.txt，避免照陈旧日记行事。只在日记落后时触发 | 开启 |
+| 启用静默见闻 | 战争/议和、封地易主、围城、死亡、会战、赠礼/索取等与某个 Agent 有关、但不值得叫醒它的事件，由系统以「情报」静默写进它的 decisions/diary.txt（零 LLM、不弹窗），下次激活时读到；关闭后不再代笔，已有日记不受影响 | 开启 |
+| 每日见闻上限 | 单个 Agent 每天最多记几条静默见闻；同日多条合并成一行「今日见闻」。这是防洪水阀，不是目标值 | `3` |
 | 独立家族永不失踪 | 开启后无王国的独立家族（灭国幸存者/自愿离国者/丢光封地者）不再被原版 28 天计时器自动灭族，永久保留，契合封臣自省与玩家劝降；关闭恢复原版（28 天不加入势力即灭族，仅剩百科） | 开启 |
 | 史书字体大小 | 史书 UI 中编年史正文的字号（Web 页会按版面换算） | `28` |
 | 史书使用 Web 阅读页 | 默认开启：H 键打开新版全 Web 史书（古籍式目录 + 书页正文，1100×700 内容区、页面铺满无外框；正史 Markdown 渲染，密陈（及旧档谏言/诏令）纯文本，显示字数与阅读进度）；关闭改用原生史书。CEF 初始化失败自动回退 | 开启 |
@@ -599,14 +613,15 @@ AIChronicle/
 │   ├── ContextBuilder.cs    # 动态上下文组装（persona + 能力 + 模板）
 │   ├── AIChatClient.cs      # HTTP 客户端，SSE 流式请求，多轮工具调度
 │   ├── PromptManager.cs     # 提示词管理器（文件热重载、战役目录、角色 JSON 读写）
-│   ├── MemoryConsolidator.cs # 记忆巩固（diary 权威化保底）
+│   ├── MemoryConsolidator.cs # 记忆巩固（diary 权威化保底；自写水位 + 跨年卷）
+│   ├── DiaryStore.cs / SilentDiary.cs # 日记分卷/最近条目 + 静默见闻（事件分派/缓冲/幂等）
 │   ├── AgentScheduler.cs    # 事件调度器基类（优先级队列、Tick）
 │   ├── AgentScheduler.Events.cs / Advisory.cs / Historian.cs / Fate.cs  # 事件处理/封臣自省/史官/天意
 │   └── PartyBehaviorManager.cs # 部队行为状态机（PendingAction + Tick）
 ├── Entities/                # Entity 统一抽象
 │   ├── Entity.cs            # Entity 数据模型（统一玩家/NPC，附能力标签）
 │   └── EntityManager.cs     # Entity 生命周期管理、查找与缓存
-├── Tools/                   # 工具执行器（56 个游戏工具 + 17 个文件/通信工具，按领域拆 partial）
+├── Tools/                   # 工具执行器（56 个游戏工具 + 18 个文件/通信工具，按领域拆 partial）
 │   ├── ToolExecutor.cs      # 基类（工具入口 ExecuteToolCall + 共享助手）
 │   ├── ToolExecutor.Query.cs / Intel.cs / Military.cs / Social.cs / Diplomacy.cs / Fate.cs / Curia.cs
 ├── UI/                      # 界面层
@@ -632,7 +647,8 @@ AIChronicle/
 │   ├── HistoryMarkdown.cs   # Markdown → 原生纯文本（CEF 不可用时的 fallback）
 │   ├── EncounterDiagnostics.cs # 遭遇状态诊断/残留自动恢复（PlayerEncounter）
 │   ├── DiplomacyService.cs  # 外交服务（宣战/议和/战前条约/结盟/贸易/回复提案）
-│   ├── HistoryRecorder.cs   # 历史记录器（监听游戏事件自动写入原始史料）
+│   ├── HistoryRecorder.cs   # 历史记录器（监听游戏事件自动写入原始史料；同时投递静默见闻）
+│   ├── SilentDiaryText.cs   # 静默见闻人名/地名渲染（{国}·{族}家族的{名}，纯逻辑可单测）
 │   ├── LordChatBehavior.cs  # CampaignBehavior：对话中插入聊天选项，管理战役 ID
 │   ├── DiplomacyBanPatch.cs # Harmony 补丁，禁止原版 AI 外交（MCM 可开关）
 │   ├── FiefAssignmentPatch.cs # 攻城/条约受地后的国王分封
@@ -641,7 +657,7 @@ AIChronicle/
 ├── AGENTS.md                # AI 开发工作流文档（常驻指令 + docs/ 索引）
 ├── README_MOD.md            # 本文件（功能说明）
 ├── LICENSES/                # 第三方许可（CefSharp/CEF；发布包会一并复制）
-├── docs/                    # AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发/UI 框架与 CEF/i18n/朝议/条约）
+├── docs/                    # AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发/UI 框架与 CEF/i18n/朝议/条约/静默见闻）
 ├── scripts/
 │   ├── ci-health.mjs        # 仓库健康检查（JSON/switch 同步、CEF 条件编译、密钥/个人路径扫描）
 │   ├── package.py           # Linux/跨平台打包（编译+部署+zip，含 NAudio + CEF 原生文件）

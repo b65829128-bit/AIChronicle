@@ -93,6 +93,7 @@ namespace AIChronicle
             // 放在 base 之前，确保 base/行为初始化期间投递的动作也属于新 epoch。
             MainThreadExecutor.BeginCampaign();
             CuriaService.ResetForNewCampaign();
+            SilentDiary.ResetForNewCampaign();
 
             base.OnGameStart(game, gameStarter);
 
@@ -254,6 +255,9 @@ namespace AIChronicle
             MainThreadExecutor.EndCampaign();
 
             base.OnGameEnd(game);
+
+            // 退出前把当日未落盘的静默见闻写完，避免"最多丢一天"变成常态
+            SilentDiary.FlushAll();
 
             KitGalleryScreen.CloseIfOpen();
             EntityManager.ResetForNewCampaign();

@@ -61,6 +61,7 @@ namespace AIChronicle
                 return $"[错误] {AIChatClient.CurrentHero.Name} 只有 {AIChatClient.CurrentHero.Gold} 金币，不足以赠送 {amount} 金币";
 
             GiveGoldAction.ApplyBetweenCharacters(AIChatClient.CurrentHero, target, amount);
+            SilentDiary.OnGift(AIChatClient.CurrentHero, target, $"{amount}金币");
 
             return $"已赠予{target.Name} {amount} 金币。{AIChatClient.CurrentHero.Name} 剩余 {AIChatClient.CurrentHero.Gold} 金币。";
         }
@@ -98,6 +99,7 @@ namespace AIChronicle
                 if (target != Hero.MainHero)
                 {
                     GiveGoldAction.ApplyBetweenCharacters(target, currentHero, amount);
+                    SilentDiary.OnRequest(currentHero, target, $"{amount}金币");
                     return RequestResolution.Done($"{target.Name} 支付了 {amount} 金币。");
                 }
                 return RequestResolution.Popup();
@@ -162,6 +164,7 @@ namespace AIChronicle
 
                 myParty.ItemRoster.AddToCounts(item, -count);
                 targetParty.ItemRoster.AddToCounts(item, count);
+                SilentDiary.OnGift(hero, target, $"{count}个{itemNameStr}");
                 return $"已将 {count} 个 {itemNameStr} 交给 {target.Name}。";
             }
 
@@ -223,6 +226,7 @@ namespace AIChronicle
 
                         targetParty.ItemRoster.AddToCounts(item, -count);
                         myParty.ItemRoster.AddToCounts(item, count);
+                        SilentDiary.OnRequest(currentHero, target, $"{count}个{name}");
                         return RequestResolution.Done($"{target.Name} 给出了 {count} 个 {name}。");
                     }
                     return RequestResolution.Error($"[未找到] {target.Name} 身上没有 \"{itemName}\"。");

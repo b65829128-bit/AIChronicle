@@ -4,7 +4,7 @@
 {newer_files}
 
 请执行记忆巩固（这是你私下的记忆整理，不要写信给任何人，不要做任何外交或军事动作）：
-1. 用 read_file 读取 decisions/diary.txt（你的日记）
+1. 用 read_diary 翻阅你的日记（decisions/diary.txt，最近 40 条）；需要更早的条目再用 read_file 或往年卷 decisions/diary_{年份}.txt
 2. 用 read_file 读取上述较新的往来记录
 3. 判断其中哪些值得长期记住：你做出的或明确认可的决定、承诺、计策、约定、对局势或他人的新认知、长期战略
 4. 用 append_file 把值得记住的补记到 decisions/diary.txt，条目格式统一为 [年季节日] 类型：内容，类型用 决定/承诺/计策/情报/评价/结果/战略

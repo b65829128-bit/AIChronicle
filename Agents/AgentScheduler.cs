@@ -77,6 +77,7 @@ namespace AIChronicle
         private static readonly System.Collections.Concurrent.ConcurrentQueue<ActivationEvent> _pendingPlayerProposals = new();
         private static bool _playerProposalShowing;
         private static int _lastChronicleYear;
+        private static int _lastDiaryRotationYear;
         private static int _lastExpiryCheckDay = -1;
         private static int _lastClanReplenishDay = -1;
         private static bool _historianInitialized;
@@ -116,9 +117,11 @@ namespace AIChronicle
             while (_pendingPlayerProposals.TryDequeue(out _)) { }
             _playerProposalShowing = false;
             _lastChronicleYear = 0;
+            _lastDiaryRotationYear = 0;
             _lastExpiryCheckDay = -1;
             _lastClanReplenishDay = -1;
             _historianInitialized = false;
+            SilentDiary.ResetForNewCampaign();
             _lastAdvisoryCheck.Clear();
             _lastSelfReviewDay.Clear();
             _lastIndependentReviewCheck.Clear();
@@ -437,6 +440,8 @@ namespace AIChronicle
 
         public static void Tick()
         {
+            // 跨日把静默见闻落盘（缓冲按事件日分组，日期不会错位）
+            SilentDiary.FlushIfDayChanged();
             CheckExpiringAgreements();
             CuriaService.Tick();
 
@@ -474,6 +479,9 @@ namespace AIChronicle
                     Colors.Yellow));
                 return;
             }
+
+            // 激活前把静默见闻写进日记（主线程：写盘前的实体查找不碰游戏对象），本次 read_diary 即可见
+            SilentDiary.FlushPending(evt.AgentId);
 
             SpawnTask(() => ProcessEvent(evt));
         }
@@ -554,7 +562,7 @@ namespace AIChronicle
                     + proposalLines
                     + curiaNote
                     + consultNote
-                    + $"\n（提示：你的长期战略方针、承诺、计策都记在 decisions/diary.txt（条目类型含「战略」）。每次审视先 read_file 读取日记回顾你的战略走向与既往承诺，据此做连贯决策；若 chat_logs/ 有比日记更新的往来，以它们为准，并把新决定/新战略补记进日记。）\n\n"
+                    + $"\n（提示：你的长期战略方针、承诺、计策都记在 decisions/diary.txt（条目类型含「战略」）。每次审视先 read_diary 翻阅日记回顾你的战略走向与既往承诺，据此做连贯决策；若 chat_logs/ 有比日记更新的往来，以它们为准，并把新决定/新战略补记进日记。）\n\n"
                     + $"然后依据你自己的判断行动：主动外交/封地/驱逐一律用 propose_agenda（宣战/议和/贸易/结盟/背盟/转让封地/驱逐家族）；具体规则见系统提示中的 diplomacy_rules。\n"
                     + "不要幻想或虚构数据。不要用 send_letter 处理外交事务——外交只走 propose_agenda / respond_to_diplomacy_proposal。";
 
@@ -586,6 +594,14 @@ namespace AIChronicle
                 _historianInitialized = true;
                 _lastChronicleYear = CampaignTime.Now.GetYear;
                 return;
+            }
+
+            // 日记按年分卷：把往年条目移入 decisions/diary_{year}.txt，diary.txt 只留本年
+            var rotateYear = CampaignTime.Now.GetYear;
+            if (rotateYear > _lastDiaryRotationYear && !string.IsNullOrEmpty(PromptManager.CampaignDir))
+            {
+                _lastDiaryRotationYear = rotateYear;
+                DiaryStore.RotateAll(Path.Combine(PromptManager.CampaignDir, "NPCs"), rotateYear);
             }
 
             var currentYear = CampaignTime.Now.GetYear;

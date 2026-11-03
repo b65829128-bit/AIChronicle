@@ -150,6 +150,14 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 - 原始史料（`events_*.txt`）对 NPC 只读
 - 写入历史目录的权限保留给 `__historian__` entity
 
+### 静默见闻（Silent Diary）
+
+- `HistoryRecorder` / `ToolExecutor` / `ToolExecutor.Social` / `ToolExecutor.Military` 在事件钩子处投递 `SilentDiary`：战争/议和、封地易主（册封/攻取）、围城开始/解围/攻城失败、贵族死亡、大会战、赠礼、索取、下令劫掠
+- 分派按**亲历 / 直接利害（氏族领袖）/ 体制（王国统治者）**三环；环越外文本越短；玩家按普通 Entity 处理，玩家自己的日记不写
+- 以 `情报：…` 写入相关 Agent 的 `decisions/diary.txt`（零 LLM、不弹窗、不注入上下文）；按 (Agent, 事件日) 缓冲，激活前 / 跨日 / 退出时 flush；同日多条合并「今日见闻」
+- 读取走 `read_diary`（默认最近 40 条，按类型过滤）；跨年自动分卷 `decisions/diary_{year}.txt`；`decisions/.diary_authored` 记录 Agent 自写水位，防止系统代笔把日记日期推新、骗过记忆巩固
+- MCM「启用静默见闻」「每日见闻上限」（默认开 / 3 条）；契约见 `docs/plan-silent-memory.md`
+
 ### 年份检测
 
 - `AgentScheduler` 用 `_lastChronicleYear` 追踪上次处理年份，初始值 = 游戏起始年份

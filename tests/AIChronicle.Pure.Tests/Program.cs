@@ -28,6 +28,10 @@ namespace AIChronicle.Tests
             Run("main-thread epoch: drop stale + cancel waiters", TestMainThreadEpoch);
             Run("curia: weighted tally + quorum + threshold", TestCuriaVoteMath);
             Run("treaty: terms/cession/tribute perspective", TestTreatyText);
+            Run("diary: parse dates + select recent", TestDiaryParseAndSelect);
+            Run("diary: rotation plan", TestDiaryRotationPlan);
+            Run("diary: rotation files + dedupe", TestDiaryRotationFiles);
+            Run("silent diary: hero naming", TestSilentDiaryText);
 
             Console.WriteLine();
             Console.WriteLine($"passed: {_passed}, failed: {_failed}");
@@ -424,6 +428,101 @@ namespace AIChronicle.Tests
             var truceOnly = new TreatyTerms { TruceDays = 60 };
             AssertFalse(truceOnly.HasConcession(), "truce-only has no concession");
             AssertTrue(truceOnly.HasAnyTerm(), "truce-only has a term");
+        }
+
+        private static void TestDiaryParseAndSelect()
+        {
+            var lines = new[]
+            {
+                "[1089春3] 决定：与南帝国结盟",
+                "[1089年冬第9日] 情报：库赛特·乌尔克汗家族的巴图劫掠了你的村子",
+                "[1090夏1] 结果：结盟已成",
+                "",
+                "无日期的手写行"
+            };
+
+            AssertTrue(DiaryStore.TryParseYear("[1089春3] 决定：x", out var y1) && y1 == 1089, "compact year");
+            AssertTrue(DiaryStore.TryParseYear("[1089年冬第9日] 情报：x", out var y2) && y2 == 1089, "long year");
+            AssertFalse(DiaryStore.TryParseYear("无日期", out _), "no date");
+            AssertTrue(DiaryStore.TryParseDateKey("[1089春3] x", out var key1)
+                       && DiaryStore.TryParseDateKey("[1089春3] y", out var key2)
+                       && key1 == key2, "date key stable");
+
+            AssertEqual("决定", DiaryStore.ParseType(lines[0]), "type");
+            AssertEqual("情报", DiaryStore.ParseType(lines[1]), "long type");
+            AssertEqual<string?>(null, DiaryStore.ParseType("无日期的手写行"), "no type");
+
+            var recent = DiaryStore.SelectRecent(lines, 2, null);
+            AssertEqual(2, recent.Count, "recent count");
+            AssertEqual(3, recent[0].LineNumber, "recent keeps line numbers");
+            AssertEqual(5, recent[1].LineNumber, "free text kept");
+
+            var intel = DiaryStore.SelectRecent(lines, 10, "情报");
+            AssertEqual(1, intel.Count, "type filter");
+            AssertEqual(2, intel[0].LineNumber, "type filter line");
+            AssertEqual(1, DiaryStore.CountByType(lines, "情报"), "count by type");
+            AssertEqual(4, DiaryStore.CountEntries(lines), "count entries");
+        }
+
+        private static void TestDiaryRotationPlan()
+        {
+            var lines = new[]
+            {
+                "[1088春1] 决定：a",
+                "[1089夏2] 情报：b",
+                "[1090秋3] 决定：c",
+                "无日期的手写行",
+                ""
+            };
+
+            var plan = DiaryStore.PlanRotation(lines, 1090);
+            AssertEqual(2, plan.MovedCount, "moved");
+            AssertEqual(1, plan.MoveByYear[1088].Count, "1088 bucket");
+            AssertEqual(1, plan.MoveByYear[1089].Count, "1089 bucket");
+            AssertEqual(2, plan.KeepLines.Count, "current year + undated kept");
+            AssertTrue(plan.KeepLines.Contains("[1090秋3] 决定：c"), "current year kept");
+            AssertTrue(plan.KeepLines.Contains("无日期的手写行"), "undated kept");
+        }
+
+        private static void TestDiaryRotationFiles()
+        {
+            var root = NewTempDir();
+            var nl = Environment.NewLine;
+            try
+            {
+                Write(root, "decisions/diary.txt", "[1089春1] 决定：a" + nl + "[1090夏2] 决定：b" + nl);
+                Write(root, "decisions/diary_1089.txt", "[1089春1] 决定：a" + nl);
+
+                var moved = DiaryStore.Rotate(root, 1090);
+                AssertEqual(1, moved, "one line moved");
+
+                var current = File.ReadAllText(Path.Combine(root, "decisions", "diary.txt"));
+                AssertFalse(current.Contains("1089春1"), "old line removed from current diary");
+                AssertTrue(current.Contains("1090夏2"), "current year kept");
+
+                var archive = File.ReadAllText(Path.Combine(root, "decisions", "diary_1089.txt"));
+                var lines = archive.Split(new[] { nl }, StringSplitOptions.None);
+                AssertEqual(1, lines.Count(l => l.Contains("1089春1")), "archive dedupe");
+            }
+            finally
+            {
+                Cleanup(root);
+            }
+        }
+
+        private static void TestSilentDiaryText()
+        {
+            AssertEqual("库赛特·乌尔克汗家族的巴图", SilentDiaryText.Hero("库赛特", "乌尔克汗", "巴图"), "full hero");
+            AssertEqual("德赫家族的炎萌", SilentDiaryText.Hero("", "德赫", "炎萌"), "clan only");
+            AssertEqual("瓦兰迪亚的德瑟特", SilentDiaryText.Hero("瓦兰迪亚", "", "德瑟特"), "kingdom only");
+            AssertEqual("某人", SilentDiaryText.Hero("", "", ""), "fallback");
+            AssertEqual("德赫家族的炎萌（女皇）", SilentDiaryText.Hero("", "德赫家族", "炎萌", "女皇"), "role, no double suffix");
+            AssertEqual("乌尔克汗堡（南帝国）", SilentDiaryText.Settlement("乌尔克汗堡", "南帝国"), "settlement");
+            AssertEqual("乌尔克汗堡", SilentDiaryText.Settlement("乌尔克汗堡", ""), "settlement without kingdom");
+
+            var line = "库赛特·乌尔克汗家族的巴图劫掠了你的村子。";
+            AssertFalse(line.Contains("他") || line.Contains("她") || line.Contains("其"), "no pronouns");
+            AssertEqual("今日见闻", SilentDiaryText.Clean("今日见闻。"), "clean trims punctuation");
         }
 
         private static void AssertNear(float expected, float actual, string context)

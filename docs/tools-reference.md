@@ -71,11 +71,12 @@
 | `create_clan` | 通用 | 天意建族（家族补充系统）：建新贵族家族（成员 3-6 人程序生成、家族等级 2、族长带兵、旗帜随机、入原始史料但不激活史官）。仅 `__fate__` 实体可用（能力门控）。**代码强制每次激活只建一族**（LLM 可能连建多族，曾致原生崩溃）；英雄创建对齐游戏叛乱建族模式（先建英雄→注册进族→置 Active）；成员模板用 `CultureObject.RebelliousHeroTemplates`（Lord 模板不在 NotableTemplates，`GetRandomTemplateByOccupation(Lord)` 恒 null 的死路径已弃）；**预算只在建族成功后才占用**（失败不消耗、可重试） |
 | `create_kingdom` | 外交 | 封臣/独立氏族领袖自立建国（**实验性功能：未经实机测试，为未来功能提前做的准备**）。门槛对齐原版 KingdomCreationModel（tier4 + 城镇/城堡≥1 + 兵≥100）；排除玩家（走原版总督对话）/国王/雇佣兵；封臣建国先叛乱脱离旧国（保封地、对旧国及其交战方宣战）再建国；文化参数精确优先再模糊匹配，不自创文化（CultureObject 是 XML 静态内容）；国号查重；史官自动入史 + 建国纪事；称王后 `EntityManager.RefreshEntity` 补 Diplomat 能力 |
 
-## 3. 文件工具（agent_tools.json，17 个）
+## 3. 文件工具（agent_tools.json，18 个）
 
 | 工具 | 说明 |
 |------|------|
-| `read_file` | 读取文件内容（支持行号范围） |
+| `read_file` | 读取文件内容（支持行号范围；长文件首行给出总行数与读取区间） |
+| `read_diary` | 读自己的日记（默认最近 40 条，可按类型过滤；从尾部读，避免长日记被工具结果上限头截断而看不到新条目；头部给总条数与往年卷名） |
 | `write_file` | 创建新文件或完整重写 |
 | `write_chronicle` | 史官成文落盘（体例/名称/正文，系统按「名称+体例.txt」规范命名，仅 `__historian__` 可用，Chronicler 能力门控；正文用 Markdown：`##` 分节、`**` 强调、`>` 史官曰，不重复篇名） |
 | `append_file` | 追加内容到文件末尾 |
@@ -106,7 +107,7 @@
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous（conversation 亦激活） |
 | military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops, form_army, release_prisoner, execute_prisoner | autonomous（conversation 亦激活） |
 | diplomacy | declare_war（朝议启用时拒绝）, propose_peace（拒绝）, propose_alliance（拒绝）, propose_trade（拒绝）, end_alliance（拒绝，改用 break_alliance）, respond_to_diplomacy_proposal, gift_fief（仅自己封地）, change_kingdom（AI 可用，玩家拒绝）, create_kingdom（实验性）, consult_king, reply_consult | diplomacy（conversation 亦激活） |
-| file | read_file, write_file, write_chronicle（仅史官）, append_file, edit_file, delete_file, move_file, list_dir, glob, grep, record_resolve | letter, autonomous, conversation, self_review |
+| file | read_file, read_diary, write_file, write_chronicle（仅史官）, append_file, edit_file, delete_file, move_file, list_dir, glob, grep, record_resolve | letter, autonomous, conversation, self_review |
 | communication | send_letter, send_envoy, reply_envoy, submit_secret_advisory | letter（conversation 亦激活）；send_envoy/reply_envoy 在 self_review 激活 |
 
 **玩家发起的聊天（conversation）是全功能通道**——所有分类默认激活。理由：AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全，对话里达成的承诺（议和/出兵/换国/写信/放人）就无法兑现。能力门控照旧：国王专属工具（朝议提议/结盟/问询）仍只有国王拿到，部队工具仍只有带兵者拿到，`change_kingdom` 仅氏族领袖可用——所以对话里每个 NPC 的可用工具由身份决定。

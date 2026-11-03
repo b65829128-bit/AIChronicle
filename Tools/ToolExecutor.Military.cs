@@ -111,6 +111,7 @@ namespace AIChronicle
             var ra = PartyBehaviorManager.GetOrCreateAction(AIChatClient.CurrentHero);
             ra.Behavior = AiBehavior.RaidSettlement;
             ra.TargetSettlement = target;
+            SilentDiary.OnRaid(AIChatClient.CurrentHero, target);
             return $"部队已出发劫掠{target.Name}。";
         }
 

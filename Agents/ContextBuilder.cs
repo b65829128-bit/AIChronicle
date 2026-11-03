@@ -641,7 +641,7 @@ namespace AIChronicle
             return LoadRulesFile("consolidation_rules.txt", ref _cachedConsolidationRules, ref _lastConsolidationRulesCheck)
                 ?? ("你就是{name}，{title}。你正在进行一次私下的记忆巩固（系统触发的记忆整理）。\n\n"
                     + "规则：\n"
-                    + "- 只做记忆整理：用 read_file 读取你的日记与系统指出的较新往来记录，用 append_file 把值得长期记住的内容补记进 decisions/diary.txt\n"
+                    + "- 只做记忆整理：用 read_diary 翻阅你的日记、用 read_file 读取系统指出的较新往来记录，用 append_file 把值得长期记住的内容补记进 decisions/diary.txt\n"
                     + "- 只追加、不删除、不改写旧条目；旧决定被推翻时补记 [日期] 结果：…\n"
                     + "- 不要写信、不要做任何外交或军事动作，不要回复任何人\n"
                     + "- 若没有值得记录的往来，直接回复「无需记录」");
@@ -670,7 +670,7 @@ namespace AIChronicle
         {
             return LoadRulesFile("self_review_rules.txt", ref _cachedSelfReviewRules, ref _lastSelfReviewRulesCheck)
                 ?? "你就是{name}，{title}。你正处在一个独处的时刻，审视你自己的处境、家族与将来。\n\n"
-                + "开始之前，先 read_file 读取 decisions/diary.txt 回顾你的日记——尤其那些还没有「结果」标记的计策、承诺与计划（它们仍被视为正在进行中）；若 chat_logs/ 里有比日记更新的往来，以聊天记录为准。\n\n"
+                + "开始之前，先调用 read_diary 翻阅最近的日记——尤其那些还没有「结果」标记的计策、承诺与计划（它们仍被视为正在进行中）；若 chat_logs/ 里有比日记更新的往来，以聊天记录为准。日记里由系统代写的「情报」是你听到/看到的见闻，不是你的判断。\n\n"
                 + "你接下来要做的事，只关乎你自己。你可以：\n"
                 + "- 经营家族：整备军队、移防自保、处置战俘\n"
                 + "- 经营关系：向某人示好、馈赠，或疏远\n"

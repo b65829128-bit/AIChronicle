@@ -284,6 +284,9 @@ namespace AIChronicle
 
             TtsService.Stop(); // 玩家发言即打断旧语音
 
+            // 玩家对话也是该 Agent 的一次激活：先把当日静默见闻落盘（主线程），本次 read_diary 可见
+            SilentDiary.FlushPending(_agentId);
+
             var userMsg = _inputText.Trim();
             InputText = "";
             IsLoading = true;
@@ -418,6 +421,7 @@ namespace AIChronicle
                                 toolDesc = tc.Name switch
                                 {
                                     "read_file" => $"读取了记忆：{path}",
+                                    "read_diary" => "翻阅了日记",
                                     "append_file" => $"更新了记忆：{path}",
                                     "write_file" => $"写入了文件：{path}",
                                     "edit_file" => $"修改了文件：{path}",

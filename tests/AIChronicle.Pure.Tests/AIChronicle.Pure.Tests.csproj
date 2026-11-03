@@ -22,6 +22,8 @@
     <Compile Include="../../Systems/TreatyModels.cs" Link="TreatyModels.cs" />
     <Compile Include="../../Systems/TreatyText.cs" Link="TreatyText.cs" />
     <Compile Include="../../Core/SafeFileIO.cs" Link="SafeFileIO.cs" />
+    <Compile Include="../../Agents/DiaryStore.cs" Link="DiaryStore.cs" />
+    <Compile Include="../../Systems/SilentDiaryText.cs" Link="SilentDiaryText.cs" />
   </ItemGroup>
 
 </Project>

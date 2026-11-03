@@ -97,8 +97,10 @@ namespace AIChronicle
             // 能力门控照旧——国王专属工具仍只有国王拿到，部队工具只有带兵者拿到。
             "conversation" => new[] { "universal", "query", "social", "file", "diplomacy", "movement", "military", "communication" },
             "letter" => new[] { "universal", "query", "file", "communication", "movement", "military", "diplomacy" },
-            "diplomacy" => new[] { "universal", "query", "diplomacy" },
-            "king_consult" => new[] { "universal", "query", "diplomacy" },
+            // diplomacy/king_consult 的规则要求先翻阅日记、再读 goals/plan_*.txt——必须带 file 分类，
+            // 否则 read_diary/read_file 根本不在工具表里（规则与工具表不一致的旧 bug）。
+            "diplomacy" => new[] { "universal", "query", "diplomacy", "file" },
+            "king_consult" => new[] { "universal", "query", "diplomacy", "file" },
             "historian" => new[] { "universal", "query", "file" },
             "clan_replenishment" => new[] { "universal", "query", "file" },
             "fief_review" => new[] { "universal", "query", "file", "communication", "diplomacy", "council" },
@@ -786,7 +788,11 @@ namespace AIChronicle
                         }
                         var toolCap = MySettings.Instance?.MaxToolResultChars ?? 4000;
                         if (toolCap > 0 && toolResult.Length > toolCap)
-                            toolResult = toolResult.Substring(0, toolCap) + "\n…（工具结果过长，已截断；请用更精确的查询或读取具体文件）";
+                        {
+                            var originalLength = toolResult.Length;
+                            toolResult = toolResult.Substring(0, toolCap)
+                                         + $"\n…（工具结果过长：共 {originalLength} 字符，已显示前 {toolCap} 字符；请用更精确的查询、缩小范围，或用 line_start 分段读取）";
+                        }
                         toolResults[callId] = toolResult;
                         messageList.Add(new JObject { ["role"] = "tool", ["tool_call_id"] = callId, ["content"] = toolResult });
                     }

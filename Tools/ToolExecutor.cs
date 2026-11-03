@@ -89,6 +89,11 @@ namespace AIChronicle
                         var lineCount = args["line_count"]?.ToObject<int?>();
                         return AgentManager.ExecuteReadFile(path, lineStart, lineCount);
 
+                    case "read_diary":
+                        return AgentManager.ExecuteReadDiary(
+                            args["recent"]?.ToObject<int?>() ?? 40,
+                            args["type"]?.ToString());
+
                     case "append_file":
                         var apath = args["path"]?.ToString() ?? "";
                         var content = args["content"]?.ToString() ?? "";

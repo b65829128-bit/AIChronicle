@@ -37,6 +37,9 @@ namespace AIChronicle
             var end = Math.Min(start + count, lines.Length);
 
             var result = new StringBuilder();
+            // 文件较长时给出总行数与本次区间：否则工具结果被截断后，agent 会以为文件已读完。
+            if (lines.Length > 40)
+                result.AppendLine($"（共 {lines.Length} 行；本次第 {start + 1}–{end} 行）");
             for (var i = start; i < end; i++)
                 result.AppendLine((i + 1) + ": " + lines[i]);
 
@@ -62,11 +65,13 @@ namespace AIChronicle
 
             var line = content.Replace("\r", "").Replace("\n", " ").Trim();
             SafeFileIO.AppendAllText(fullPath, line + Environment.NewLine);
+            if (cleanPath == "decisions/diary.txt")
+                MemoryConsolidator.AdvanceWatermark(_agentDir);
             return "已写入。";
         }
 
         /// <summary>日记日期前缀（与日记检索解析兼容的紧凑格式）：[1090春3] / [1089冬12]。</summary>
-        private static string GetDiaryDatePrefix()
+        public static string GetDiaryDatePrefix()
         {
             var now = CampaignTime.Now;
             var season = now.GetSeasonOfYear switch
@@ -98,14 +103,21 @@ namespace AIChronicle
             var diaryPath = Path.Combine(_agentDir, "decisions", "diary.txt");
             Directory.CreateDirectory(Path.GetDirectoryName(diaryPath)!);
             SafeFileIO.AppendAllText(diaryPath, line + Environment.NewLine);
+            MemoryConsolidator.AdvanceWatermark(_agentDir);
             return "已记入日记。";
         }
 
         /// <summary>
-        /// 系统代写的日记条目（朝议等结构化事件用）：沿用 [年季节日] 类型：内容 格式。
+        /// 系统代写的日记条目（朝议/条约/静默见闻用）：沿用 [年季节日] 类型：内容 格式。
         /// 只给 AI 实体写；玩家（Controller=Human）不写，避免污染玩家档案。
         /// </summary>
         public static void AppendSystemDiary(string entityId, string type, string content)
+        {
+            AppendSystemDiary(entityId, type, content, GetDiaryDatePrefix());
+        }
+
+        /// <summary>同上，但由调用方指定日期前缀（静默见闻用事件发生日，而非 flush 日）。</summary>
+        public static void AppendSystemDiary(string entityId, string type, string content, string datePrefix)
         {
             if (string.IsNullOrWhiteSpace(entityId) || string.IsNullOrWhiteSpace(type) || string.IsNullOrWhiteSpace(content))
                 return;
@@ -116,13 +128,94 @@ namespace AIChronicle
                     return;
                 var dir = EntityManager.GetEntityDirectory(entityId);
                 Directory.CreateDirectory(Path.Combine(dir, "decisions"));
-                var line = $"{GetDiaryDatePrefix()} {type}：{content.Replace("\r", "").Replace("\n", " ").Trim()}";
+                var prefix = string.IsNullOrWhiteSpace(datePrefix) ? GetDiaryDatePrefix() : datePrefix;
+                var line = $"{prefix} {type}：{content.Replace("\r", "").Replace("\n", " ").Trim()}";
                 SafeFileIO.AppendAllText(Path.Combine(dir, "decisions", "diary.txt"), line + Environment.NewLine);
             }
             catch
             {
                 // 日记失败不影响朝议结算
             }
+        }
+
+        /// <summary>
+        /// 读取自己的日记（默认最近 40 条）。日记会随年数增长，read_file 读整本会被工具结果上限头截断、
+        /// 反而看不到最新条目——所以日记用这个工具从尾部读，行号保留，便于继续用 read_file 精确读旧段。
+        /// </summary>
+        public static string ExecuteReadDiary(int recent, string? type)
+        {
+            if (string.IsNullOrEmpty(_agentDir))
+                return "[错误] 无当前实体目录";
+
+            var diaryPath = Path.Combine(_agentDir, "decisions", "diary.txt");
+            var lines = File.Exists(diaryPath) ? SafeFileIO.ReadAllLines(diaryPath) : Array.Empty<string>();
+            var total = DiaryStore.CountEntries(lines);
+            var filter = string.IsNullOrWhiteSpace(type) ? null : type!.Trim();
+            var entries = DiaryStore.SelectRecent(lines, recent <= 0 ? 40 : recent, filter);
+            var archives = DiaryStore.ListArchives(_agentDir);
+
+            var sb = new StringBuilder();
+            sb.Append("你的日记（decisions/diary.txt）：共 ").Append(total).Append(" 条");
+            if (filter != null)
+                sb.Append("，其中「").Append(filter).Append("」").Append(DiaryStore.CountByType(lines, filter)).Append(" 条");
+
+            if (entries.Count == 0)
+            {
+                if (total == 0)
+                    sb.AppendLine("（尚是空白）。");
+                else if (filter != null)
+                    sb.AppendLine($"（没有「{filter}」类型的条目）。");
+                else
+                    sb.AppendLine("。");
+            }
+            else
+            {
+                sb.AppendLine($"；以下为最近 {entries.Count} 条（第 {entries[0].LineNumber}–{entries[entries.Count - 1].LineNumber} 行）。");
+            }
+
+            if (archives.Count > 0)
+            {
+                sb.Append("往年日记：");
+                sb.Append(string.Join("、", archives.Select(a => $"decisions/{a.FileName}（{a.Count} 条）")));
+                sb.AppendLine("（可用 read_file 查阅）。");
+            }
+
+            sb.AppendLine("---");
+
+            if (entries.Count == 0)
+                return sb.ToString().TrimEnd();
+
+            // 从最新往回装，保证最新条目一定可见；更早的整条省略。
+            // 预算跟随 MCM 的工具结果上限：否则用户把上限调低后，尾部最新条目又会被头截断。
+            var toolCap = MySettings.Instance?.MaxToolResultChars ?? 4000;
+            var budget = Math.Max(400, Math.Min(3000, toolCap - 1200));
+            var outLines = new List<string>();
+            var used = 0;
+            for (var i = entries.Count - 1; i >= 0; i--)
+            {
+                var line = entries[i].LineNumber + ": " + entries[i].Text;
+                if (used + line.Length + 1 > budget)
+                {
+                    // 单条极长时至少保留最新一条（截断），否则会出现"有日记但什么也没显示"
+                    if (outLines.Count == 0)
+                    {
+                        var cut = Math.Max(40, budget - 20);
+                        outLines.Add(line.Length > cut ? line.Substring(0, cut) + "…" : line);
+                    }
+                    break;
+                }
+                outLines.Insert(0, line);
+                used += line.Length + 1;
+            }
+
+            var omitted = entries.Count - outLines.Count;
+            if (omitted > 0)
+                sb.AppendLine($"（更早的 {omitted} 条已省略；从第 {entries[0].LineNumber} 行起可用 read_file 读）");
+
+            foreach (var l in outLines)
+                sb.AppendLine(l);
+
+            return sb.ToString().TrimEnd();
         }
 
         public static string ExecuteGrep(string pattern, string path, int maxResults, int contextLines, bool caseSensitive)
@@ -333,6 +426,8 @@ namespace AIChronicle
 
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
             SafeFileIO.WriteAllText(fullPath, content.Trim());
+            if (cleanPath == "decisions/diary.txt")
+                MemoryConsolidator.AdvanceWatermark(_agentDir);
             return "已写入。";
         }
 

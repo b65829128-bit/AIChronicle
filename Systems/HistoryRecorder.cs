@@ -25,6 +25,10 @@ namespace AIChronicle
         /// 用途：KillCharacterAction 在触发 HeroKilled 前已完成族长/国王继任改选，实时判断会误判身份，
         /// 导致关闭「所有贵族立传」时国王/族长不立传。</summary>
         private static string? _pendingHeroDeathTitle;
+        // 死亡时的氏族/王国快照：HeroKilled 触发时继任已完成，实时查 Clan.Leader 会指向继任者，静默见闻需要"死者当时的身份"
+        private Clan? _pendingDeathClan;
+        private Hero? _pendingDeathClanLeader;
+        private Kingdom? _pendingDeathKingdom;
         private readonly HashSet<Settlement> _recentSiegeCaptures = new();
         // 围城开始时即记录攻城方名号——结束时 LeaderParty 可能已被击败/解散而取不到名字（史料 "?" 的根源）
         private readonly Dictionary<Settlement, (int Attackers, int Defenders, string Leader, string Kingdom)> _siegeStartTroops = new();
@@ -272,6 +276,8 @@ namespace AIChronicle
                 ? $"{attacker}向{defender}宣战"
                 : $"{attacker}向{defender}宣战。宣战宣言：「{declaration}」";
             RecordEvent("war_declared", summary);
+            if (faction1 is Kingdom warK1Side && faction2 is Kingdom warK2Side)
+                SilentDiary.OnWarDeclared(warK1Side, warK2Side);
         }
 
         private void OnMakePeace(IFaction faction1, IFaction faction2, MakePeaceAction.MakePeaceDetail detail)
@@ -279,6 +285,8 @@ namespace AIChronicle
             var side1 = FactionName(faction1);
             var side2 = FactionName(faction2);
             RecordEvent("peace_made", $"{side1}与{side2}议和");
+            if (faction1 is Kingdom peaceK1 && faction2 is Kingdom peaceK2)
+                SilentDiary.OnPeace(peaceK1, peaceK2);
         }
 
         private void OnSettlementOwnerChanged(Settlement settlement, bool openToClaim, Hero newOwner, Hero oldOwner, Hero capturer, ChangeOwnerOfSettlementAction.ChangeOwnerOfSettlementDetail detail)
@@ -303,12 +311,14 @@ namespace AIChronicle
                     ? $"册封：将{name}从{oldClan}（{oldLeader}）转予{newClan}（{newLeader}）"
                     : $"{grantNote}：将{name}从{oldClan}（{oldLeader}）转予{newClan}（{newLeader}）";
                 RecordEvent("fief_granted", summary);
+                SilentDiary.OnSettlementChanged(settlement, oldOwner, newOwner, capturer, isGrant: true);
                 return;
             }
             // 攻城夺城（BySiege）：攻克记录已由 OnSiegeCompleted 写入，这里只消费去重标记，不再记"易主"
             if (detail == ChangeOwnerOfSettlementAction.ChangeOwnerOfSettlementDetail.BySiege)
             {
                 _recentSiegeCaptures.Remove(settlement);
+                SilentDiary.OnSettlementChanged(settlement, oldOwner, newOwner, capturer, isGrant: false);
                 return;
             }
             // 条约割地：独立史料，不能记成攻城/普通易主
@@ -331,6 +341,7 @@ namespace AIChronicle
 
             var summary2 = $"{sName}易主：从{oldKingdom}的{oldClanName}转归{newKingdom}的{newClanName}";
             RecordEvent("settlement_captured", summary2);
+            SilentDiary.OnSettlementChanged(settlement, oldOwner, newOwner, capturer, isGrant: false);
         }
 
         private void OnSiegeStarted(SiegeEvent siegeEvent)
@@ -357,6 +368,7 @@ namespace AIChronicle
                 RecordEvent("siege_started", $"{attackerKingdom}的{attackerLeader}率{attackers}人围攻{settlement.Name}，守军{defenders}人");
             else
                 RecordEvent("siege_started", $"{attackerKingdom}的{attackerLeader}围攻{settlement.Name}");
+            SilentDiary.OnSiegeStarted(settlement, attackerParty?.LeaderHero);
             RecordMerit(attackerKingdom, attackerLeader, "围攻", settlement.Name?.ToString() ?? "?");
         }
 
@@ -404,6 +416,7 @@ namespace AIChronicle
             else
             {
                 RecordEvent("siege_failed", $"{attackerKingdom}的{attackerLeader}围攻{settlement.Name}失败，攻城部队被击败");
+                SilentDiary.OnSiegeLifted(settlement, "攻城失败");
                 RecordMerit(attackerKingdom, attackerLeader, "攻城失利", settlement.Name?.ToString() ?? "?");
             }
         }
@@ -449,6 +462,7 @@ namespace AIChronicle
 
             var summary = $"{attackerKingdom}的{attackerLeader}率{attackerTroops}人与{defenderKingdom}的{defenderLeader}所部{defenderTroops}人{where}展开{battleKind}{resultPart}，双方共损失约{casualties}人";
             RecordEvent("battle_fought", summary);
+            SilentDiary.OnBattle(mapEvent, attacker.LeaderParty?.LeaderHero, defender.LeaderParty?.LeaderHero, location);
         }
 
         private void OnSiegeEnded(SiegeEvent siegeEvent)
@@ -476,6 +490,7 @@ namespace AIChronicle
             attackerLeader ??= "?";
             attackerKingdom ??= "?";
             RecordEvent("siege_abandoned", $"{attackerKingdom}的{attackerLeader}放弃了对{settlement.Name}的围攻");
+            SilentDiary.OnSiegeLifted(settlement, "敌军撤退");
         }
 
         private void OnKingdomDestroyed(Kingdom kingdom)
@@ -522,6 +537,13 @@ namespace AIChronicle
 
             RecordEvent("hero_killed", summary);
 
+            // 静默见闻：家族/王国里的相关人物记住"谁死了"（只写情报，不写评价）
+            SilentDiary.OnHeroKilled(victim, killer,
+                _pendingDeathClan ?? victim.Clan,
+                _pendingDeathClanLeader,
+                _pendingDeathKingdom ?? victim.Clan?.Kingdom,
+                title, cause);
+
             // 传记摘要带上受害者编号（StringId），供史官用 query_character 精确查询——重名者多，仅凭姓名会张冠李戴
             var idTag = string.IsNullOrEmpty(victim.StringId) ? "" : $"（{victim.StringId}）";
 
@@ -529,6 +551,9 @@ namespace AIChronicle
             // HeroKilled 触发时继任改选已完成，实时查 Clan.Leader/RulingClan.Leader 会把国王/族长误判成普通成员，
             // 关闭「所有贵族立传」时导致国王/族长不立传。
             _pendingHeroDeathTitle = null; // 用完即清
+            _pendingDeathClan = null;
+            _pendingDeathClanLeader = null;
+            _pendingDeathKingdom = null;
 
             if (title.EndsWith("统治者"))
             {
@@ -558,6 +583,10 @@ namespace AIChronicle
         private void OnBeforeHeroKilled(Hero victim, Hero killer, KillCharacterAction.KillCharacterActionDetail detail, bool showNotifications)
         {
             if (victim == null) return;
+            // 身份/氏族快照：此回调先于继任改选，记录"死者当时"的氏族与领袖
+            _pendingDeathClan = victim.Clan;
+            _pendingDeathClanLeader = victim.Clan?.Leader;
+            _pendingDeathKingdom = victim.Clan?.Kingdom;
             var clan = victim.Clan;
             if (clan == null)
             {

@@ -22,6 +22,23 @@
     ]
   },
   {
+    "name": "read_diary",
+    "category": "file",
+    "description": "Read your own diary (decisions/diary.txt) — the index of your long-term memory.\n\nUsage:\n- Call this at the start of every self-review, decision, or letter to recall what you decided, promised, plotted, and what you have recently heard.\n- Returns your most recent entries (default 40, newest last) with their original file line numbers; older entries are omitted to keep the result small. Use read_file with line_start to read an omitted range.\n- Use type to filter: 决定 / 承诺 / 计策 / 情报 / 评价 / 结果 / 战略 / 决心.\n- Entries of type 情报 are tidings the system recorded on your behalf (things you saw or heard), NOT your own judgments. You may turn them into 评价 or 决定 yourself; when an outcome becomes known, append a 结果 entry.\n- Past years are archived as decisions/diary_{year}.txt; read them with read_file when you need deeper history.",
+    "parameters": [
+      {
+        "name": "recent",
+        "type": "integer",
+        "description": "How many recent entries to return. Default 40. Use a smaller number for a quick glance."
+      },
+      {
+        "name": "type",
+        "type": "string",
+        "description": "Only return entries of this type: 决定 / 承诺 / 计策 / 情报 / 评价 / 结果 / 战略 / 决心. Omit for all types."
+      }
+    ]
+  },
+  {
     "name": "append_file",
     "category": "file",
     "description": "Append new information to one of your personal files.\n\nUsage:\n- Use this when you learn something new about the other person: their identity, background, intentions, or opinions.\n- Only write to files in your personal directory.\n- Do NOT overwrite — new information is always appended, never replaced.\n- The content should be a single concise sentence in Chinese.",

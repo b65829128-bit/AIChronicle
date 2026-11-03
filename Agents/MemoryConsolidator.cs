@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
 
 namespace AIChronicle
@@ -55,17 +56,66 @@ namespace AIChronicle
             return true;
         }
 
-        /// <summary>日记最新条目日期键；无有效条目返回 -1。</summary>
-        private static int DiaryLatest(string diaryPath)
+        /// <summary>
+        /// 日记水位文件（Agent 自己最后一次写日记 / 巩固完成的日期键）。
+        /// 存在的理由：系统代笔的「情报」会把日记日期推进到今天，若继续用"日记最新日期"判断落后，
+        /// 记忆巩固会被系统代笔骗过、永远不再触发。水位只由 Agent 自己的写入推进。
+        /// </summary>
+        private const string WatermarkFileName = ".diary_authored";
+
+        private static int SeasonIndexOf(CampaignTime time) => time.GetSeasonOfYear switch
+        {
+            CampaignTime.Seasons.Spring => 0,
+            CampaignTime.Seasons.Summer => 1,
+            CampaignTime.Seasons.Autumn => 2,
+            CampaignTime.Seasons.Winter => 3,
+            _ => 0
+        };
+
+        /// <summary>Agent 自己写了一条日记（或完成一次巩固）后推进水位。</summary>
+        public static void AdvanceWatermark(string agentDir)
+        {
+            if (string.IsNullOrEmpty(agentDir)) return;
+            try
+            {
+                var now = CampaignTime.Now;
+                var key = DateKey(now.GetYear, SeasonIndexOf(now), now.GetDayOfSeason + 1);
+                var dir = Path.Combine(agentDir, "decisions");
+                Directory.CreateDirectory(dir);
+                SafeFileIO.WriteAllText(Path.Combine(dir, WatermarkFileName), key.ToString());
+            }
+            catch { }
+        }
+
+        private static int ReadWatermark(string agentDir)
         {
             try
             {
-                if (!File.Exists(diaryPath)) return -1;
-                var lines = SafeFileIO.ReadAllLines(diaryPath);
+                var path = Path.Combine(agentDir, "decisions", WatermarkFileName);
+                if (!File.Exists(path)) return -1;
+                return int.TryParse(SafeFileIO.ReadAllText(path).Trim(), out var key) ? key : -1;
+            }
+            catch { return -1; }
+        }
+
+        /// <summary>日记最新条目日期键：优先看 Agent 自写水位；旧档无水位时扫描全部日记卷（含按年分卷）。</summary>
+        private static int DiaryLatest(string agentDir)
+        {
+            var watermark = ReadWatermark(agentDir);
+            if (watermark >= 0) return watermark;
+
+            try
+            {
+                var dir = Path.Combine(agentDir, "decisions");
+                if (!Directory.Exists(dir)) return -1;
                 var max = -1;
-                foreach (var line in lines)
+                foreach (var file in Directory.GetFiles(dir, "diary*.txt"))
                 {
-                    if (TryParseDiaryDate(line, out var k) && k > max) max = k;
+                    if (!File.Exists(file)) continue;
+                    foreach (var line in SafeFileIO.ReadAllLines(file))
+                    {
+                        if (TryParseDiaryDate(line, out var k) && k > max) max = k;
+                    }
                 }
                 return max;
             }
@@ -91,8 +141,7 @@ namespace AIChronicle
         /// <summary>diary 是否落后于某些 chat_logs（存在"比日记更新的往来"）。日记不存在时不视为落后（由正常流程建档）。</summary>
         public static bool IsDiaryStale(string agentDir)
         {
-            var diaryPath = Path.Combine(agentDir, "decisions", "diary.txt");
-            var diaryLatest = DiaryLatest(diaryPath);
+            var diaryLatest = DiaryLatest(agentDir);
             if (diaryLatest < 0) return false;
 
             var chatLogsDir = Path.Combine(agentDir, "chat_logs");
@@ -108,8 +157,7 @@ namespace AIChronicle
         public static List<string> ListNewerChatLogs(string agentDir)
         {
             var result = new List<string>();
-            var diaryPath = Path.Combine(agentDir, "decisions", "diary.txt");
-            var diaryLatest = DiaryLatest(diaryPath);
+            var diaryLatest = DiaryLatest(agentDir);
             if (diaryLatest < 0) return result;
 
             var chatLogsDir = Path.Combine(agentDir, "chat_logs");
@@ -153,6 +201,8 @@ namespace AIChronicle
             try
             {
                 await AIChatClient.SendMessage(charPrompt, agentEntity.HeroRef, includeTools: true, intent: "consolidation");
+                // 巩固已看过全部较新往来——推进水位，避免下一轮对同一批往来重复巩固
+                AdvanceWatermark(agentDir!);
             }
             catch (Exception ex)
             {
