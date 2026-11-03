@@ -26,8 +26,10 @@ namespace AIChronicle
         /// <summary>usage 对象中缓存未命中 token 的字段名；空 = 无缓存统计或由「总输入 - 命中」推算。</summary>
         public string CacheMissField { get; init; } = "";
 
-        /// <summary>usage 对象中输入 token 总数的字段名（支持点分嵌套路径）。仅当端点只报告缓存命中而不报告未命中（如 Qwen）时使用：未命中 = 总数 - 命中。</summary>
-        public string PromptTokensField { get; init; } = "";
+        /// <summary>usage 的输入/输出/思考 token 字段（点分路径）；总量统计不依赖缓存字段。</summary>
+        public string PromptTokensField { get; init; } = "prompt_tokens";
+        public string CompletionTokensField { get; init; } = "completion_tokens";
+        public string ReasoningTokensField { get; init; } = "completion_tokens_details.reasoning_tokens";
 
         /// <summary>是否发送 stream_options.include_usage（OpenAI 标准，绝大多数端点支持）。</summary>
         public bool SupportsStreamOptionsUsage { get; init; } = true;
@@ -39,6 +41,39 @@ namespace AIChronicle
         public JObject? ExtraBodyParams { get; init; }
     }
 
+    /// <summary>一次请求报告的 token 用量；null 表示端点未报告，不能与真实的 0 混淆。
+    /// 思考通常已包含在输出中，只作子集统计，不再次相加计费。</summary>
+    public sealed class LLMUsage
+    {
+        public long? PromptTokens;
+        public long? CompletionTokens;
+        public long? ReasoningTokens;
+        public long? CacheHit;
+        public long? CacheMiss;
+
+        public void Add(LLMUsage usage)
+        {
+            PromptTokens = Sum(PromptTokens, usage.PromptTokens);
+            CompletionTokens = Sum(CompletionTokens, usage.CompletionTokens);
+            ReasoningTokens = Sum(ReasoningTokens, usage.ReasoningTokens);
+            CacheHit = Sum(CacheHit, usage.CacheHit);
+            CacheMiss = Sum(CacheMiss, usage.CacheMiss);
+        }
+
+        private static long? Sum(long? total, long? value)
+            => value.HasValue ? (total ?? 0) + value.Value : total;
+
+        public string Describe()
+        {
+            var cachedInput = CacheHit.GetValueOrDefault() + CacheMiss.GetValueOrDefault();
+            var rate = CacheHit.HasValue && CacheMiss.HasValue && cachedInput > 0
+                ? ((double)CacheHit.Value / cachedInput).ToString("P1") : "N/A";
+            return $"输入={PromptTokens?.ToString() ?? "N/A"} 输出={CompletionTokens?.ToString() ?? "N/A"} "
+                + $"思考={ReasoningTokens?.ToString() ?? "N/A"} 缓存命中={CacheHit?.ToString() ?? "N/A"} "
+                + $"未命中={CacheMiss?.ToString() ?? "N/A"} 命中率={rate}";
+        }
+    }
+
     /// <summary>归一化的流式增量块。provider 负责把厂商差异解析成这个统一结构，业务代码不感知厂商。</summary>
     public sealed class LLMStreamChunk
     {
@@ -46,8 +81,7 @@ namespace AIChronicle
         public string Reasoning = "";
         public List<LLMToolCallDelta> ToolCalls = new();
         public string FinishReason = "";
-        public long CacheHit;
-        public long CacheMiss;
+        public LLMUsage? Usage;
         /// <summary>末尾帧的原始 usage JSON（用于诊断缓存字段是否真的返回，如 Qwen 的 prompt_tokens_details.cached_tokens）。</summary>
         public string RawUsageJson = "";
     }
@@ -82,6 +116,7 @@ namespace AIChronicle
     {
         public string Content = "";
         public JToken? ToolCalls;
+        public LLMUsage? Usage;
     }
 
     /// <summary>

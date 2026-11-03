@@ -22,9 +22,12 @@ namespace AIChronicle
             _lastDeferralLog = DateTime.MinValue;
         }
 
-        public static void Record(long promptTokens)
+        public static bool IsBackgroundIntent(string intent)
+            => intent != "conversation" && intent != "chancery";
+
+        public static void Record(string intent, long promptTokens)
         {
-            if (promptTokens <= 0) return;
+            if (!IsBackgroundIntent(intent) || promptTokens <= 0) return;
             lock (_lock)
             {
                 var now = DateTime.UtcNow;

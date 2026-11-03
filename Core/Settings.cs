@@ -1138,7 +1138,7 @@ namespace AIChronicle
 
         [SettingPropertyButton("修复遭遇状态", Content = "尝试修复", Order = 22,
             RequireRestart = false,
-            HintText = "仅当大地图上部队相遇无反应时使用：结束残留的 PlayerEncounter 状态。\n正在对话时不会修复；详情写入 debug_logs/ui_trace.log。")]
+            HintText = "仅当空闲大地图上部队相遇无反应时使用：结束残留的 PlayerEncounter 状态。\n竞技场等场景、定居点、菜单、对话和战斗中不会修复；详情写入 debug_logs/ui_trace.log。")]
         [SettingPropertyGroup("游戏设置")]
         public Action RepairEncounter { get; set; } = () =>
         {

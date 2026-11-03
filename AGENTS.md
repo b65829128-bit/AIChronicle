@@ -89,20 +89,20 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 1. **单一模型**：整套模组只有一条 LLM 调用链路，角色扮演与工具调用在同一次 SSE 流式请求内完成（`AIChatClient.SendMessage`）。
 2. **主线程分发**：LLM 工具循环跑后台线程，但**所有修改游戏状态的工具**经 `MainThreadExecutor` 排队到主线程 `OnApplicationTick` 执行（Bannerlord 游戏对象主线程独占）。队列动作带 campaign epoch：`OnGameStart`/`OnGameEnd` 递增 epoch 并清空旧队列，切档后旧动作直接丢弃、阻塞等待立即取消；`AIChatClient.SendMessage` 也捕获 epoch，跨档的 LLM 工具循环不再执行工具。
-3. **上下文隔离（AsyncLocal）**：聊天与后台信件/自省/密使/外交多流程并发时上下文互不覆盖；实体缓存用 `ConcurrentDictionary`。
+3. **上下文隔离（AsyncLocal）**：聊天与后台信件/自省/密使/外交多流程并发时上下文互不覆盖；每次激活的 `ToolCatalog` 也按异步流程隔离，主线程工具分发时捕获/恢复。实体缓存用 `ConcurrentDictionary`。
 
 ### 分层速览
 
 | 层 | 目录 | 职责 |
 |----|------|------|
 | 引擎层 | `Core/` | SubModule 入口、MCM 设置、LLM Provider 抽象、TTS、基础设施 |
-| Agent 核心 | `Agents/` | ContextBuilder、AIChatClient、AgentManager、调度器、记忆 |
+| Agent 核心 | `Agents/` | ContextBuilder、AIChatClient、ToolCatalog（每次激活的工具快照）、AgentManager、调度器、记忆 |
 | Entity | `Entities/` | 玩家/NPC 统一抽象 |
 | 工具执行 | `Tools/` | 56 游戏工具 + 18 文件/通信工具（按领域拆 partial；含 `ToolExecutor.Curia.cs`） |
 | 界面 | `UI/` | 原生 Kit（`UI/Kit`）+ CEF 页面宿主/全 Web 史书/朝议参政页（`UI/Web`）+ 聊天/书信 ViewModel |
 | 游戏系统 | `Systems/` | 外交、朝议（`Curia*.cs`）、条约（`Treaty*.cs`）、历史记录、Harmony 补丁 |
 
-完整目录结构见 `docs/architecture.md` 第 17 节。
+完整目录结构见 `docs/architecture.md` 第 17 节。工具快照在 `Agents/ToolCatalog.cs`；实时身份采集与关系渲染在 `Agents/ContextBuilder.Identity.cs`，纯事实文案在 `Entities/IdentityFacts.cs`。`tests/AIChronicle.Pure.Tests/LlmTests.cs` 覆盖 schema 稳定、目录一致、Provider usage、前后台预算与双方身份，`IdentityStubs.cs` 为身份采集提供最小只读桩；`EncounterTests.cs` 直接链接遭遇诊断源码，用最小状态桩覆盖竞技场/定居点保护、计时重置、手动修复与延迟放行。
 
 ## 4. 构建与部署
 
@@ -188,6 +188,7 @@ stat -c '%s' "$BANNERLORD_GAME_DIR/Modules/AIChronicle/SubModule.xml"
 | .NET SDK | 10.0+ |
 | 目标框架 | net472（Steam；Linux/Windows）+ net6（Xbox/Store；仅 Windows） |
 | 构建期参考程序集 | `Microsoft.NETFramework.ReferenceAssemblies` 1.0.3 |
+| 纯逻辑测试 JSON | 复用 .NET SDK 随附的 `Newtonsoft.Json.dll`，仅测试进程；模组仍引用游戏自带 DLL，无新增运行时库 |
 | 模组框架 | Harmony 2.3.3（NuGet 编译）+ 2.4.2.248（本机运行时） |
 | 四前置 | Harmony 2.4.2.248, ButterLib 2.11.1, UIExtenderEx 2.13.3, MCM 5.12.2（本机已装） |
 | 语音合成 | NAudio 2.2.1 + 免费 Edge TTS（手写 WebSocket 客户端） |

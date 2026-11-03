@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -38,7 +39,7 @@ namespace AIChronicle
         // 每个异步流程持有自己的上下文，互不干扰。
         private static readonly AsyncLocal<Hero?> _currentHero = new();
         private static readonly AsyncLocal<string?> _currentIntent = new();
-        private static readonly AsyncLocal<HashSet<string>?> _activatedCategories = new();
+        private static readonly AsyncLocal<ToolCatalog?> _currentToolCatalog = new();
 
         // 历史截断的头部锚点条数：超限时保留"最早 AnchorCount 条 + 最近 (limit-AnchorCount) 条"，
         // 头部锚点固定 → 超限后跨轮次的 system+历史前缀仍字节级稳定，DeepSeek 前缀缓存持续命中。
@@ -57,10 +58,10 @@ namespace AIChronicle
             set => _currentIntent.Value = value;
         }
 
-        internal static HashSet<string> ActivatedCategories
+        internal static ToolCatalog? CurrentToolCatalog
         {
-            get => _activatedCategories.Value ?? new HashSet<string>();
-            set => _activatedCategories.Value = value;
+            get => _currentToolCatalog.Value;
+            set => _currentToolCatalog.Value = value;
         }
 
         internal sealed class PendingInquiry
@@ -90,42 +91,16 @@ namespace AIChronicle
                 _pendingInquiryQueue.Enqueue(inquiry);
         }
 
-        private static string[] GetDefaultCategories(string intent) => intent switch
+        internal static bool ActivateCategory(string category)
         {
-            // 玩家发起的聊天是全功能通道：AI 几乎不主动聊天，绝大多数对话由玩家发起，
-            // 若工具不全，对话里达成的承诺（议和/出兵/换国/写信）就无法兑现。
-            // 能力门控照旧——国王专属工具仍只有国王拿到，部队工具只有带兵者拿到。
-            "conversation" => new[] { "universal", "query", "social", "file", "diplomacy", "movement", "military", "communication" },
-            "letter" => new[] { "universal", "query", "file", "communication", "movement", "military", "diplomacy" },
-            // diplomacy/king_consult 的规则要求先翻阅日记、再读 goals/plan_*.txt——必须带 file 分类，
-            // 否则 read_diary/read_file 根本不在工具表里（规则与工具表不一致的旧 bug）。
-            "diplomacy" => new[] { "universal", "query", "diplomacy", "file" },
-            "king_consult" => new[] { "universal", "query", "diplomacy", "file" },
-            "historian" => new[] { "universal", "query", "file" },
-            "clan_replenishment" => new[] { "universal", "query", "file" },
-            "fief_review" => new[] { "universal", "query", "file", "communication", "diplomacy", "council" },
-            "curia" => new[] { "universal", "query", "council", "file" },
-            "curia_defense" => new[] { "universal", "query", "council", "file", "communication" },
-            "consolidation" => new[] { "universal", "file" },
-            "chat" => new[] { "universal", "query", "file", "social", "communication" },
-            // 自省 = 激活就是激活：处理自身事务（行军/军事/社交/外交/进谏/密使）皆可，工具级排除表收窄
-            //（招兵/买粮/升级等"到点再激活"的链式、写信级联、browse_tools 解锁等在此 intent 中被剔除）。
-            "self_review" => new[] { "universal", "query", "social", "movement", "military", "diplomacy", "communication", "file" },
-            // 密使回应：窄会话，只回应（query + file + 通信），单跳防环（send_envoy 被排除）
-            "envoy_reply" => new[] { "universal", "query", "file", "communication" },
-            // 秘书处只查询：动作/写文件/通信/政治工具由 ContextBuilder._chanceryExcludedTools 统一排除，
-            // 玩家参政走 M 键参政页；秘书处只保留 query 分类与只读文件工具。
-            "chancery" => new[] { "universal", "query", "file" },
-            _ => new[] { "universal", "query", "social", "military", "movement", "diplomacy", "file", "communication" },
-        };
-
-        internal static void ActivateCategory(string category)
-        {
-            ActivatedCategories.Add(category);
+            if (CurrentToolCatalog?.TryUnlock(category) != true) return false;
             var key = UnlockKey();
-            if (key == null) return;
-            var set = _unlockedCategories.GetOrAdd(key, _ => new HashSet<string>());
-            lock (set) set.Add(category);
+            if (key != null)
+            {
+                var set = _unlockedCategories.GetOrAdd(key, _ => new HashSet<string>());
+                lock (set) set.Add(category);
+            }
+            return true;
         }
 
         /// <summary>跨 SendMessage 调用记住本 agent+intent 解锁过的工具分类，避免每次对话回合重新 browse_tools。
@@ -143,17 +118,6 @@ namespace AIChronicle
         {
             _unlockedCategories.Clear();
         }
-
-        private static ToolDef BrowseToolsDef => new()
-        {
-            Name = "browse_tools",
-            Category = "meta",
-            Description = "Browse available tools in a category to unlock them for use.\n\nUsage:\n- Call this to see detailed descriptions and unlock tools in a specific category.\n- The category parameter must be one of: military, movement, diplomacy, council, file, social, query, communication.\n- After calling, the tools in that category become available in your next response.\n- You do NOT need to call this for categories already shown in your current function list.\n- Only call this when the situation requires tools from a category you cannot currently access.",
-            Parameters = new List<ToolParamDef>
-            {
-                new() { Name = "category", Type = "string", Description = "Category to browse and unlock: military, movement, diplomacy, council, file, social, query, communication." }
-            }
-        };
 
         private static readonly Dictionary<string, int> RoundBudgets = new()
         {
@@ -187,94 +151,21 @@ namespace AIChronicle
             ["chancery"] = 4
         };
 
-        private static readonly HashSet<string> CuriaQueryTools = new(StringComparer.Ordinal)
-        {
-            "query_agenda", "query_policies", "query_character", "query_clan_fiefs",
-            "query_war_status", "query_settlement", "query_party_troops", "query_world_state"
-        };
-
         private static int RoundBudget(string intent)
             => RoundBudgets.TryGetValue(intent, out var n) ? n : 6;
 
         private static int QueryBudget(string intent)
             => QueryBudgets.TryGetValue(intent, out var n) ? n : 4;
 
-        private static bool IsQueryTool(string name)
-            => name.StartsWith("query_", StringComparison.Ordinal) || name == "browse_tools";
-
-        private static object BuildTools(bool allowQueries = true)
+        private static ToolCatalog CreateToolCatalog(string intent, IEnumerable<string>? unlocked = null, bool includeTools = true)
         {
-            if (ActivatedCategories.Count == 0)
-                ActivatedCategories = new HashSet<string>(GetDefaultCategories("conversation"));
-
-            var activeAgent = EntityManager.ActiveAgent;
-            var activeTarget = EntityManager.ActiveTarget;
-            List<ToolDef> toolDefs;
-            var excluded = ContextBuilder.GetExcludedToolsForIntent(CurrentIntent);
-            if (activeAgent != null)
-            {
-                var capabilityTools = ContextBuilder.GetFilteredTools(activeAgent);
-                toolDefs = capabilityTools.Where(t => ActivatedCategories.Contains(t.Category)).ToList();
-                if (activeTarget?.HasCapability(EntityCapability.Diplomat) == true)
-                {
-                    var targetTools = ContextBuilder.GetFilteredTools(activeTarget);
-                    foreach (var t in targetTools)
-                    {
-                        if (!toolDefs.Any(existing => existing.Name == t.Name) && ActivatedCategories.Contains(t.Category))
-                            toolDefs.Add(t);
-                    }
-                }
-            }
-            else
-            {
-                toolDefs = PromptManager.LoadAllTools().Where(t => ActivatedCategories.Contains(t.Category)).ToList();
-            }
-            // intent 级工具排除：按场景收窄工具集（如自省剔除链式/级联工具）
-            if (excluded.Count > 0)
-                toolDefs = toolDefs.Where(t => !excluded.Contains(t.Name)).ToList();
-            // Curia 投票者只保留少量补充查询（议程事实已预置在激活内容里）
-            if (CurrentIntent == "curia" || CurrentIntent == "curia_defense")
-                toolDefs.RemoveAll(t => IsQueryTool(t.Name) && !CuriaQueryTools.Contains(t.Name));
-            // 查询预算用尽/最后一轮：从工具数组中移除查询与 browse_tools
-            if (!allowQueries)
-                toolDefs.RemoveAll(t => IsQueryTool(t.Name));
-            // 严格单向防环：被问询方（king_consult 会话）拿不到 consult_king，不能发起新问询，只能 reply_consult 回复
-            if (CurrentIntent == "king_consult")
-                toolDefs.RemoveAll(t => t.Name == "consult_king");
-            // 密使回应（envoy_reply）单跳防环：被回应方拿不到 send_envoy，不能顺手再派新使者
-            if (CurrentIntent == "envoy_reply")
-                toolDefs.RemoveAll(t => t.Name == "send_envoy");
-            // 秘书处排除 create_kingdom：建国是游戏内重大国体变更，玩家走原版正规流程（与总督对话建国），不经秘书处
-            if (CurrentIntent == "chancery")
-                toolDefs.RemoveAll(t => t.Name == "create_kingdom");
-            // 秘书处不提供 browse_tools（防止解锁被限制的分类绕过权限收窄）；
-            // 自省/密使回应/朝议投票也不提供（固定动作菜单，避免注意力分散）
-            // browse_tools 会改变工具数组并破坏前缀缓存；只保留给玩家主动对话。
-            if (allowQueries && (CurrentIntent == "chat" || CurrentIntent == "conversation" || CurrentIntent == "letter"))
-                toolDefs.Add(BrowseToolsDef);
-            return BuildTools(toolDefs);
-        }
-
-        private static object BuildTools(List<ToolDef> toolDefs)
-        {
-            return toolDefs.Select(d => new
-            {
-                type = "function",
-                function = new
-                {
-                    name = d.Name,
-                    description = d.Description,
-                    parameters = new
-                    {
-                        type = "object",
-                        properties = d.Parameters.ToDictionary(
-                            p => p.Name,
-                            p => (object)new { type = p.Type, description = p.Description }
-                        ),
-                        required = d.Parameters.Select(p => p.Name).ToArray()
-                    }
-                }
-            }).ToArray();
+            var definitions = PromptManager.LoadAllTools();
+            var agent = EntityManager.ActiveAgent;
+            var target = EntityManager.ActiveTarget;
+            var available = agent == null ? definitions : ContextBuilder.GetFilteredTools(agent, definitions);
+            if (agent != null && target?.HasCapability(EntityCapability.Diplomat) == true)
+                available = available.Concat(ContextBuilder.GetFilteredTools(target, definitions)).ToList();
+            return new ToolCatalog(available, intent, unlocked, includeTools);
         }
 
         public static void CheckPendingInquiry()
@@ -355,13 +246,15 @@ namespace AIChronicle
 
             CurrentHero = hero;
             CurrentIntent = intent;
-            ActivatedCategories = new HashSet<string>(GetDefaultCategories(intent));
-            // 本 agent+intent 之前浏览解锁过的分类：跨回合保留，避免每次对话回合重新 browse_tools。
+            // 在组装提示词前固定能力与场景工具；热重载和游戏状态变化留到下次激活。
             var persistKey = UnlockKey();
+            var unlockedCategories = new List<string>();
             if (persistKey != null && _unlockedCategories.TryGetValue(persistKey, out var unlocked))
             {
-                lock (unlocked) foreach (var c in unlocked) ActivatedCategories.Add(c);
+                lock (unlocked) unlockedCategories.AddRange(unlocked);
             }
+            var toolCatalog = CreateToolCatalog(intent, unlockedCategories, includeTools);
+            CurrentToolCatalog = toolCatalog;
 
             var settings = MySettings.Instance!;
             // 场景专属连接：本 intent 的 URL/Model/APIKey（留空字段回退到全局兜底）
@@ -514,9 +407,12 @@ namespace AIChronicle
             var lastMeaningfulText = "";
             var lastReasoning = "";
             var lastFinishReason = "";
-            // 缓存命中统计：stream_options.include_usage 让末帧携带 usage，跨轮次累计后落日志
-            long totalCacheHit = 0;
-            long totalCacheMiss = 0;
+            // 每次 HTTP 尝试各记一次 usage（含已返回 usage 的失败尝试），不逐 SSE 帧累加累计值。
+            var totalUsage = new LLMUsage();
+            var activationId = Guid.NewGuid().ToString("N");
+            var requestAttempts = 0;
+            var usageRecords = 0;
+            var cacheRecords = 0;
 
             // 按场景限制轮次与查询次数：后台可以慢，但不能无休止地查。
             var roundBudget = RoundBudget(intent);
@@ -573,100 +469,124 @@ namespace AIChronicle
                     Temperature = settings.Temperature,
                     Stream = true,
                     IncludeTools = includeTools,
-                    Tools = includeTools ? JToken.FromObject(BuildTools(!queriesDisabled)) : null,
+                    Tools = includeTools ? toolCatalog.ApiTools : null,
                     ReasoningEffort = reasoningEffort
                 });
-
-                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
-                var httpResponse = await _client.SendAsync(
-                    request,
-                    HttpCompletionOption.ResponseHeadersRead,
-                    cts.Token);
-                httpResponse.EnsureSuccessStatusCode();
 
                 var roundToolCalls = new List<JObject>();
                 var roundText = "";
                 var roundReasoning = "";
                 var roundFinishReason = "";
-
-                using var stream = await httpResponse.Content.ReadAsStreamAsync();
-                using var reader = new StreamReader(stream, Encoding.UTF8);
-
-                // 修复：流读取加超时——服务端卡流不再永久挂起聊天窗口和事件队列。
-                // 放宽到 TimeoutSeconds×3（至少 60s）：慢的思考模型可能长时间不吐新块，不能被误杀。
-                var readTimeout = TimeSpan.FromSeconds(Math.Max(settings.TimeoutSeconds * 3, 60));
                 var streamTimedOut = false;
                 var streamFailed = false;
-
-                while (!reader.EndOfStream)
+                var readCompleted = false;
+                LLMUsage? roundUsage = null;
+                var roundRawUsage = "";
+                var requestId = Guid.NewGuid().ToString("N");
+                requestAttempts++;
+                var watch = Stopwatch.StartNew();
+                DebugLogger.Log($"LLM 请求 intent={intent} agent={hero?.Name?.ToString() ?? "?"} activation={activationId} request={requestId} round={round} provider={conn.ProviderKind} model={conn.Model} background={TokenBudget.IsBackgroundIntent(intent)} tools={toolCatalog.SchemaHash}");
+                try
                 {
-                    string line = "";
-                    try
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
+                    using var httpResponse = await _client.SendAsync(
+                        request,
+                        HttpCompletionOption.ResponseHeadersRead,
+                        cts.Token);
+                    httpResponse.EnsureSuccessStatusCode();
+
+                    using var stream = await httpResponse.Content.ReadAsStreamAsync();
+                    using var reader = new StreamReader(stream, Encoding.UTF8);
+
+                    // 修复：流读取加超时——服务端卡流不再永久挂起聊天窗口和事件队列。
+                    // 放宽到 TimeoutSeconds×3（至少 60s）：慢的思考模型可能长时间不吐新块，不能被误杀。
+                    var readTimeout = TimeSpan.FromSeconds(Math.Max(settings.TimeoutSeconds * 3, 60));
+
+                    while (!reader.EndOfStream)
                     {
-                        var readTask = reader.ReadLineAsync();
-                        if (await Task.WhenAny(readTask, Task.Delay(readTimeout)) != readTask)
+                        string line = "";
+                        try
                         {
-                            streamTimedOut = true;
+                            var readTask = reader.ReadLineAsync();
+                            if (await Task.WhenAny(readTask, Task.Delay(readTimeout)) != readTask)
+                            {
+                                streamTimedOut = true;
+                                break;
+                            }
+                            line = await readTask;
+                        }
+                        catch (IOException) when (round != lastRetriedRound)
+                        {
+                            streamFailed = true;
                             break;
                         }
-                        line = await readTask;
-                    }
-                    catch (IOException) when (round != lastRetriedRound)
-                    {
-                        streamFailed = true;
-                        break;
-                    }
-                    if (string.IsNullOrEmpty(line)) continue;
-                    if (!line.StartsWith("data: ")) continue;
+                        if (string.IsNullOrEmpty(line)) continue;
+                        if (!line.StartsWith("data: ")) continue;
 
-                    var data = line.Substring(6);
-                    if (data == "[DONE]") break;
+                        var data = line.Substring(6);
+                        if (data == "[DONE]") break;
 
-                    // 单行解析委托给 provider：reasoning/缓存字段名、空 choices 等厂商差异已归一化
-                    var chunk = provider.ParseStreamLine(data);
-                    if (chunk == null) continue;
+                        // 单行解析委托给 provider：reasoning/缓存字段名、空 choices 等厂商差异已归一化
+                        var chunk = provider.ParseStreamLine(data);
+                        if (chunk == null) continue;
 
-                    totalCacheHit += chunk.CacheHit;
-                    totalCacheMiss += chunk.CacheMiss;
-                    TokenBudget.Record(chunk.CacheHit + chunk.CacheMiss);
-                    if (!string.IsNullOrEmpty(chunk.RawUsageJson))
-                        DebugLogger.Log($"LLM usage intent={intent} agent={hero?.Name?.ToString() ?? "?"} round={round} {chunk.RawUsageJson}");
-                    if (!string.IsNullOrEmpty(chunk.FinishReason))
-                        roundFinishReason = chunk.FinishReason;
-                    if (!string.IsNullOrEmpty(chunk.Text))
-                        roundText += chunk.Text;
-                    if (!string.IsNullOrEmpty(chunk.Reasoning))
-                        roundReasoning += chunk.Reasoning;
-
-                    foreach (var dtc in chunk.ToolCalls)
-                    {
-                        var idx = dtc.Index < 0 ? 0 : dtc.Index;
-                        while (roundToolCalls.Count <= idx)
-                            roundToolCalls.Add(new JObject());
-
-                        var existing = roundToolCalls[idx];
-                        if (!string.IsNullOrEmpty(dtc.Name))
+                        if (chunk.Usage != null)
                         {
-                            existing["id"] = dtc.Id;
-                            existing["type"] = "function";
-                            existing["function"] = new JObject
+                            roundUsage = chunk.Usage;
+                            roundRawUsage = chunk.RawUsageJson;
+                        }
+                        if (!string.IsNullOrEmpty(chunk.FinishReason))
+                            roundFinishReason = chunk.FinishReason;
+                        if (!string.IsNullOrEmpty(chunk.Text))
+                            roundText += chunk.Text;
+                        if (!string.IsNullOrEmpty(chunk.Reasoning))
+                            roundReasoning += chunk.Reasoning;
+
+                        foreach (var dtc in chunk.ToolCalls)
+                        {
+                            var idx = dtc.Index < 0 ? 0 : dtc.Index;
+                            while (roundToolCalls.Count <= idx)
+                                roundToolCalls.Add(new JObject());
+
+                            var existing = roundToolCalls[idx];
+                            if (!string.IsNullOrEmpty(dtc.Name))
                             {
-                                ["name"] = dtc.Name,
-                                ["arguments"] = dtc.Arguments
-                            };
-                        }
-                        else if (!string.IsNullOrEmpty(dtc.Arguments))
-                        {
-                            var func = existing["function"] as JObject;
-                            if (func != null)
-                                func["arguments"] = (func["arguments"]?.ToString() ?? "") + dtc.Arguments;
-                        }
-                        if (dtc.Index < 0)
-                        {
-                            existing["id"] = dtc.Id;
-                            existing["type"] = "function";
+                                existing["id"] = dtc.Id;
+                                existing["type"] = "function";
+                                existing["function"] = new JObject
+                                {
+                                    ["name"] = dtc.Name,
+                                    ["arguments"] = dtc.Arguments
+                                };
+                            }
+                            else if (!string.IsNullOrEmpty(dtc.Arguments))
+                            {
+                                var func = existing["function"] as JObject;
+                                if (func != null)
+                                    func["arguments"] = (func["arguments"]?.ToString() ?? "") + dtc.Arguments;
+                            }
+                            if (dtc.Index < 0)
+                            {
+                                existing["id"] = dtc.Id;
+                                existing["type"] = "function";
+                            }
                         }
                     }
+
+                    readCompleted = !streamTimedOut && !streamFailed;
+                }
+                finally
+                {
+                    watch.Stop();
+                    if (roundUsage != null)
+                    {
+                        totalUsage.Add(roundUsage);
+                        usageRecords++;
+                        if (roundUsage.CacheHit.HasValue && roundUsage.CacheMiss.HasValue) cacheRecords++;
+                        TokenBudget.Record(intent, roundUsage.PromptTokens ?? 0);
+                    }
+                    var status = streamTimedOut ? "read_timeout" : streamFailed ? "read_failed" : readCompleted ? "complete" : "failed";
+                    DebugLogger.Log($"LLM usage intent={intent} agent={hero?.Name?.ToString() ?? "?"} round={round} {roundRawUsage} activation={activationId} request={requestId} provider={conn.ProviderKind} model={conn.Model} elapsedMs={watch.ElapsedMilliseconds} status={status} finish={roundFinishReason} {(roundUsage ?? new LLMUsage()).Describe()}");
                 }
 
                 if (streamFailed)
@@ -717,10 +637,7 @@ namespace AIChronicle
                     // 覆盖两类：完全沉默（未调工具）、以及"调工具调查后无结语"（如国王评估后决定不行动）。
                     if (string.IsNullOrEmpty(roundText) && !string.IsNullOrEmpty(roundReasoning))
                         DebugLogger.Log($"LLM 静默结束 intent={intent} agent={hero?.Name?.ToString() ?? "?"} toolsCalled={allToolCalls.Count} reasoning={DebugLogger.Truncate(roundReasoning, 600)}");
-                    var hitRate = (totalCacheHit + totalCacheMiss) > 0
-                        ? ((double)totalCacheHit / (totalCacheHit + totalCacheMiss)).ToString("P1")
-                        : "N/A";
-                    DebugLogger.Log($"LLM 完成 intent={intent} agent={hero?.Name?.ToString() ?? "?"} 轮次={round + 1} 缓存命中={totalCacheHit} 未命中={totalCacheMiss} 命中率={hitRate}");
+                    DebugLogger.Log($"LLM 完成 intent={intent} agent={hero?.Name?.ToString() ?? "?"} activation={activationId} 轮次={round + 1} 请求={requestAttempts} usage={usageRecords}/{requestAttempts} 缓存统计={cacheRecords}/{requestAttempts} {totalUsage.Describe()}");
                     return new ChatResponse
                     {
                         Content = finalContent,
@@ -770,7 +687,7 @@ namespace AIChronicle
                     else
                     {
                         string toolResult;
-                        if (IsQueryTool(funcName))
+                        if (ToolCatalog.IsQueryTool(funcName))
                         {
                             if (queriesDisabled || queryCalls >= queryBudget)
                             {
@@ -799,10 +716,7 @@ namespace AIChronicle
                 }
             }
 
-            var hitRateFinal = (totalCacheHit + totalCacheMiss) > 0
-                ? ((double)totalCacheHit / (totalCacheHit + totalCacheMiss)).ToString("P1")
-                : "N/A";
-            DebugLogger.Log($"LLM 完成(轮次预算) intent={intent} agent={hero?.Name?.ToString() ?? "?"} 缓存命中={totalCacheHit} 未命中={totalCacheMiss} 命中率={hitRateFinal}");
+            DebugLogger.Log($"LLM 完成(轮次预算) intent={intent} agent={hero?.Name?.ToString() ?? "?"} activation={activationId} 请求={requestAttempts} usage={usageRecords}/{requestAttempts} 缓存统计={cacheRecords}/{requestAttempts} {totalUsage.Describe()}");
             return new ChatResponse
             {
                 Content = !string.IsNullOrEmpty(lastMeaningfulText) ? lastMeaningfulText
@@ -830,7 +744,7 @@ namespace AIChronicle
                 Temperature = 0.7f,
                 Stream = false,
                 IncludeTools = true,
-                Tools = JToken.FromObject(BuildTools())
+                Tools = CreateToolCatalog("conversation").ApiTools
             });
 
             var cts = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));

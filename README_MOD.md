@@ -49,7 +49,7 @@
 - Agent 可以调用 `let_go` 在遭遇战中放玩家一马（仅当 NPC 兵力占优时可用，设置冷却期避免立即追击）——玩家被强敌擒获时，投降/应战对话中会出现【AI 聊天】选项，可谈判让 agent 放行；放行后对话自动结束、玩家获释
 - **对话即全功能通道**：AI 聊天时其可用工具由身份与能力决定——国王可当场宣战/议和/结盟/颁诏，氏族领袖可当场换国/出兵/驻防/招募，被擒的敌方家族领袖也可在谈判中履行"加入某国"的承诺（先 `change_kingdom` 离旧国、再 `join_kingdom` 投效）。对话中谈成的协议都能立刻兑现，不会"口头答应却做不到"
 - **已知限制：** `request_gold` 和 `request_items` 向 NPC 索要时直接划转，NPC 不会经过 LLM 决策——未来应改为异步事件，让 NPC Agent 自行判断是否给
-  - Agent 可以调用 `query_character` 查询任意人物的公开信息
+  - Agent 可以调用 `query_character` 查询任意人物的公开信息；所需事实已在【当前状况】提供时不重复查询，仅在信息缺失或需要更新实时数据时查询
   - Agent 可以调用 `query_clan_fiefs` 查询任意家族的封地情况（城镇/城堡列表、族长、所属王国）
   - Agent 可以调用 `query_recent_events` 查询任意人物的近期事件（比武夺冠、被俘、释放、婚嫁、阵亡等百科记录）
   - Agent 可以调用 `query_surroundings` 扫描周围环境：当前位置、附近城镇/城堡、附近部队及其阵营关系和距离（扫描半径按**地图比例**而非绝对 km，0.2 ≈ 1-2 座城池间距）
@@ -243,7 +243,7 @@
 
 ### 工具分类系统
 
-所有工具按 8 个分类组织，Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁：
+所有工具按 9 个分类组织。每次激活先按身份能力和场景生成一份工具快照，API 定义、提示词目录和 `browse_tools` 浏览结果共用同一份筛选结果。查询预算用尽时保留工具定义，由执行端拒绝超额查询，避免预算变化破坏缓存前缀；只有显式解锁新分类才扩展本次工具表。身份能力变化和工具定义热重载在下次激活生效，工具执行仍校验实时游戏前提。`browse_tools` 仅在对话、书信和签到场景提供，固定菜单场景不会提示解锁不存在的工具。
 
 | 分类 | 包含工具 | 默认激活场景 |
 |------|---------|:--|
@@ -253,7 +253,7 @@
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous（conversation 亦激活） |
 | military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops, form_army, release_prisoner, execute_prisoner | autonomous（conversation 亦激活） |
 | diplomacy | declare_war（朝议启用时拒绝）, propose_peace（拒绝）, propose_alliance（拒绝）, propose_trade（拒绝）, end_alliance（拒绝，改用 break_alliance）, respond_to_diplomacy_proposal, gift_fief（仅自己封地）, change_kingdom（AI 可用，玩家拒绝）, create_kingdom（实验性）, consult_king, reply_consult | diplomacy（conversation 亦激活） |
-| council | propose_agenda, respond_to_agenda, defend_agenda | conversation / diplomacy / self_review / fief_review / curia |
+| council | propose_agenda, respond_to_agenda, defend_agenda | conversation / letter / diplomacy / self_review / fief_review / curia / curia_defense |
 | file | read_file, write_file, write_chronicle（仅史官）, append_file, edit_file, delete_file, move_file, list_dir, glob, grep, record_resolve | letter, autonomous, conversation, self_review |
 | communication | send_letter, send_envoy, reply_envoy, submit_secret_advisory | letter（conversation 亦激活）；send_envoy/reply_envoy 在 self_review 激活 |
 
@@ -411,6 +411,7 @@ _Module/Prompts/
 > **史官例外**：史官 intent 不拆易变块，保持单一 system 消息——文笔是模组核心，结构与旧版一致，绝对保真。
 > 旧版模板（无标记）整体按稳定处理，行为与旧版一致；模板改动随 newer-wins 同步到战役副本。
 > `conversation_rules.txt`/`letter_rules.txt` 采用**条件式记忆读取**：基本信息/当前目标/对对方的认知已由【当前状况】提供，不再每回合机械重复 query/read，仅当需要更新的实时信息时才查询。
+> **当前身份事实**：普通 NPC 的【当前状况】通过现有 `{objective_relationship}` 同时提供「你」与「对方」的性别、家族及领袖/成员身份、所属王国、政治身份、各自王国统治者的姓名和性别。每次组装从当前游戏对象读取，身份称谓优先于旧聊天/persona/记忆；继任、加入/离开王国后重新组装即更新，君主未知时明确标注，不按国家名猜性别。没有私人认知记录时采用中性描述，不据此推断初次见面或「旅行者」身份；只有内容恰等于旧默认句的认知才在注入时按新默认处理，个人认知文件与聊天记录不改写。
 > 聊天/书信上下文只携带最近 N 条消息（MCM「聊天历史上限」可调）；agent 被明确告知完整往来记录在 `chat_logs/{对方ID}.txt`——若上下文被裁掉后感到困惑（对方提到记不清的旧事），可主动 `grep`/`read_file` 检索完整记录。**当历史确实被截断时，还会在【当前状况】易变块中注入一句系统提示**（告知截断、引导检索、并明示不得向对方提及），注入在易变块而非稳定前缀，不影响前缀缓存命中。
 
 - **Agent 系统**：每个 NPC 有独立文件系统，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`list_dir`/`glob`/`grep`/`send_letter` 工具管理记忆
@@ -462,7 +463,7 @@ _Module/Prompts/
 | 调试日志 | 将 LLM 调用摘要、思维链摘录写入战役目录 `debug_logs/`，便于排查 agent 行为 | 开启 |
 | Agent 并发数 | 同时运行的 Agent 任务数上限。越大吞吐越高，但工具在主线程串行执行，过大会帧卡顿 | `5` |
 | 聊天历史上限（条） | 保留最近 N 条消息发给 AI | `20` |
-| 后台 token 预算（每5分钟） | 滚动 5 分钟内后台 Agent 的 prompt token 上限；超限推迟自省/国王政务/问询/密使等；玩家聊天、朝议投票、史官不推迟。0=不限制 | `500000` |
+| 后台 token 预算（每5分钟） | 滚动 5 分钟内后台 Agent 的总输入 token 上限，与缓存字段是否提供无关；面对面对话和秘书处查询不占后台额度。超限推迟自省/国王政务/问询/密使等；朝议投票、史官不推迟。0=不限制 | `500000` |
 | 工具结果截断（字符） | 单次工具结果超过此长度截断并提示 AI 用更精确查询，防止后续每轮上下文膨胀 | `4000` |
 | 注入世界背景 | 是否在提示词中加入卡拉迪亚背景 | 开启 |
 | 包含诺德势力 | 是否在世界背景中额外加入「诺德」势力（大陆之外的北境异族）。默认关闭——诺德不是原版可交互势力，仅在装了相关 DLC/模组、希望 LLM 知道诺德存在时打开 | 关闭 |
@@ -491,7 +492,7 @@ _Module/Prompts/
 | 史书使用 Web 阅读页 | 默认开启：H 键打开新版全 Web 史书（古籍式目录 + 书页正文，1100×700 内容区、页面铺满无外框；正史 Markdown 渲染，密陈（及旧档谏言/诏令）纯文本，显示字数与阅读进度）；关闭改用原生史书。CEF 初始化失败自动回退 | 开启 |
 | 强制开始外交 | 立即激活所有国王 Agent 进行外交审视，重置计时器（按钮） | — |
 | 强制封臣自省 | 立即重置所有王国的封臣自省计时器（按钮） | — |
-| 修复遭遇状态 | 仅当大地图上部队相遇无反应时使用：结束残留的 `PlayerEncounter`（正在对话时不会修复），详情写入 `debug_logs/ui_trace.log` | — |
+| 修复遭遇状态 | 仅当空闲大地图上部队相遇无反应时使用：结束残留的 `PlayerEncounter`；竞技场等场景、定居点、菜单、对话和战斗中不会清理。自动恢复也受此保护，仅对同一残留连续观察 8 秒后执行，进出场景重新计时。详情写入 `debug_logs/ui_trace.log` | — |
 | 对话字体大小 | 聊天窗口中对话内容的字号 | `24` |
 | 角色名字体大小 | 聊天窗口中角色名称的字号 | `22` |
 | 时间戳字体大小 | 聊天窗口中时间戳的字号 | `22` |
@@ -540,7 +541,7 @@ _Module/Prompts/
 
 > 每个场景组各有「测试此场景」按钮，用本场景生效配置（留空字段回退到兜底）测试连通性与 function calling 支持。**逐字段兜底**：哪个字段留空就用兜底的哪个字段——例如只给史官配高规格模型，URL 和密钥沿用兜底即可；接口类型同样可逐场景覆盖（默认「跟随兜底」）。
 
-> **成本提示**：新增三层节流——①每次激活的轮次/查询预算（朝议 3 轮/1 查询、自省 5/4、外交 6/4、聊天 10/6、史官 12/5）；②工具结果超过 4000 字符截断，`query_policies` 默认摘要、`query_agenda` 默认简版；③全局后台 5 分钟 token 预算，超限后自省/外交/问询/密使自动后延，朝议投票与史官不推迟。AI 成本主要由两部分构成——**思考输出**（`reasoning_content`，按输出价计费，占比可超 1/3）与**缓存未命中输入**（每次新对话冷启动重编 system+工具数组）。「思考强度」默认 `low`；设为 `high`/`max` 时每次决策会产生大量思维链、显著增加思考 token；DeepSeek v4-flash 支持 `low/high/max` 三档。**史官固定 high**（文笔核心）。部分模型（非思考模式或不支持该参数的端点）此设置不生效。
+> **成本提示**：三层节流——①每次激活的轮次/查询预算（朝议 3 轮/1 查询、自省 5/4、外交 6/4、面对面对话 6/4、签到 10/6、史官 12/5），预算耗尽后执行端拒绝查询，工具定义保持稳定；②工具结果超过 4000 字符截断，`query_policies` 默认摘要、`query_agenda` 默认简版；③全局后台 5 分钟总输入预算，超限后自省/外交/问询/密使自动后延，朝议投票与史官不推迟，面对面对话与秘书处不占后台额度。调试日志记录每次 HTTP 尝试的 Provider/模型、request ID、工具表 hash、耗时、输入/输出/思考/缓存与统计覆盖数；缺失 usage 显示 N/A。思考已包含在输出中，不能重复相加。AI 成本主要由**输出（含思考）**与**缓存未命中输入**构成。「思考强度」默认 `low`；设为 `high`/`max` 会增加思考开销。**史官固定 high**（文笔核心）；部分端点不支持此参数。
 
 ### 双倍声望（可选）
 
@@ -610,7 +611,8 @@ AIChronicle/
 ├── Agents/                  # Agent 核心：上下文、调度、记忆
 │   ├── AgentManager.cs      # Agent 管理器基类（NPC 文件系统、路径权限、persona 生成）
 │   ├── AgentManager.Files.cs / Threads.cs / Proposals.cs / Permissions.cs  # 文件工具/书信水位/外交提案/权限模型
-│   ├── ContextBuilder.cs    # 动态上下文组装（persona + 能力 + 模板）
+│   ├── ContextBuilder.cs / .Identity.cs # 动态上下文组装 + 双方实时身份/君主事实
+│   ├── ToolCatalog.cs       # 每次激活的工具快照（API 定义/提示词索引/按能力浏览共用）
 │   ├── AIChatClient.cs      # HTTP 客户端，SSE 流式请求，多轮工具调度
 │   ├── PromptManager.cs     # 提示词管理器（文件热重载、战役目录、角色 JSON 读写）
 │   ├── MemoryConsolidator.cs # 记忆巩固（diary 权威化保底；自写水位 + 跨年卷）
@@ -618,8 +620,10 @@ AIChronicle/
 │   ├── AgentScheduler.cs    # 事件调度器基类（优先级队列、Tick）
 │   ├── AgentScheduler.Events.cs / Advisory.cs / Historian.cs / Fate.cs  # 事件处理/封臣自省/史官/天意
 │   └── PartyBehaviorManager.cs # 部队行为状态机（PendingAction + Tick）
+├── tests/AIChronicle.Pure.Tests/ # 纯逻辑回归；LlmTests.cs 覆盖工具快照/Provider usage/后台预算/身份，IdentityStubs.cs 提供身份桩，EncounterTests.cs 覆盖遭遇恢复的场景保护/计时/放行
 ├── Entities/                # Entity 统一抽象
 │   ├── Entity.cs            # Entity 数据模型（统一玩家/NPC，附能力标签）
+│   ├── IdentityFacts.cs     # 公开身份事实快照与双方人称渲染（纯逻辑）
 │   └── EntityManager.cs     # Entity 生命周期管理、查找与缓存
 ├── Tools/                   # 工具执行器（56 个游戏工具 + 18 个文件/通信工具，按领域拆 partial）
 │   ├── ToolExecutor.cs      # 基类（工具入口 ExecuteToolCall + 共享助手）
@@ -731,7 +735,7 @@ AIChronicle/
 ### v2.3.0 更新要点
 
 - **封臣自省（激活即自由行动）**：由「封臣谏言」泛化——激活就是激活，激活后可做写信之外的任何事，**谏言只是其中一个选项**。选择改为**公平轮转**（距上次自省最久者优先），选池放宽为**封臣 + 雇佣兵 + 独立氏族领袖**（仍排除国王本人/玩家/俘虏/逃亡）；独立领袖各自以半概率低频自省。封臣不再围着国王转，篡位/自立终于有了激活渠道
-- **一次性行动原则**：自省一次激活 = 一件自包含的事（派密使/进谏/整备/移防/处置战俘/思量立场/记决心），命令立即执行完毕、无续接激活——招兵/买粮/升级等"先到定居点再激活"的链式工具与 `send_letter` 级联已在自省 intent 中剔除（`GetExcludedToolsForIntent`，API 与提示词两处一致）
+- **一次性行动原则**：自省一次激活 = 一件自包含的事（派密使/进谏/整备/移防/处置战俘/思量立场/记决心），命令立即执行完毕、无续接激活——招兵/买粮/升级等"先到定居点再激活"的链式工具与 `send_letter` 级联已由 `ToolCatalog` 的自省策略剔除，API 与提示词目录共用筛选结果
 - **私有密使**（`send_envoy` / `reply_envoy`）：任何家族领袖互通私信，落盘 `World/correspondence/`，**史官与第三方不可读**（不可告人的谋划可放心谈）；立即激活对方一次回应（单跳防环、每对 7 天冷却）；回复不惊动对方、对方下次自省时读到；玩家 O 键面板 📨 标记 + 密使往来窗口回复
 - **日记工具 `record_resolve`**：强制 `[年季节日] 类型：内容` 格式落笔日记（类型白名单：决心/决定/承诺/计策/情报/评价/结果/战略），防止日记格式破坏导致记忆检索失效
 - **自省先读日记**：`self_review_rules.txt` 要求先 `read_file decisions/diary.txt` 回顾进行中的计策/承诺；记忆巩固前置接入自省与密使回应

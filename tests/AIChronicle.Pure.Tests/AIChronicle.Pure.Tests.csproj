@@ -14,6 +14,9 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="MainThreadStubs.cs" />
+    <Compile Include="LlmTests.cs" />
+    <Compile Include="IdentityStubs.cs" />
+    <Compile Include="EncounterTests.cs" />
     <!-- 只链接不依赖 TaleWorlds 的纯逻辑文件（MainThreadExecutor 用最小桩）：无需游戏 DLL 即可在 CI/Linux 跑。 -->
     <Compile Include="../../Core/MainThreadExecutor.cs" Link="MainThreadExecutor.cs" />
     <Compile Include="../../Systems/HistoryArchive.cs" Link="HistoryArchive.cs" />
@@ -24,6 +27,19 @@
     <Compile Include="../../Core/SafeFileIO.cs" Link="SafeFileIO.cs" />
     <Compile Include="../../Agents/DiaryStore.cs" Link="DiaryStore.cs" />
     <Compile Include="../../Systems/SilentDiaryText.cs" Link="SilentDiaryText.cs" />
+    <Compile Include="../../Agents/ToolCatalog.cs" Link="ToolCatalog.cs" />
+    <Compile Include="../../Agents/ContextBuilder.Identity.cs" Link="ContextBuilder.Identity.cs" />
+    <Compile Include="../../Entities/IdentityFacts.cs" Link="IdentityFacts.cs" />
+    <Compile Include="../../Core/LLM/*.cs" Link="LLM/%(Filename)%(Extension)" />
+    <Compile Include="../../Systems/TokenBudget.cs" Link="TokenBudget.cs" />
+    <Compile Include="../../Systems/EncounterDiagnostics.cs" Link="EncounterDiagnostics.cs" />
+    <!-- 复用 .NET SDK 随附的 JSON 程序集，仅给测试进程；无需游戏 DLL 或新增 NuGet 包。 -->
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(MSBuildSDKsPath)/../Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <None Include="../../_Module/Prompts/tools.json" Link="Prompts/tools.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../_Module/Prompts/agent_tools.json" Link="Prompts/agent_tools.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../_Module/Prompts/Templates/context_template.txt" Link="Prompts/context_template.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

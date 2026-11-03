@@ -96,13 +96,13 @@
 
 ## 4. 工具分类系统
 
-所有工具按 8 个分类组织，Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁：
+所有工具按 9 个分类组织。`ToolCatalog` 每次激活按能力和场景固定工具定义，API、提示词目录、浏览结果共用；查询预算耗尽仅限制执行，不移除定义。只有对话/书信/签到允许 `browse_tools` 显式解锁，固定菜单场景不提示不可用的浏览入口。
 
 | 分类 | 包含工具 | 默认激活场景 |
 |------|---------|:--|
 | universal | update_knowledge, cancel_action, create_clan（仅天意） | 全部 |
 | query | query_character, query_settlement, query_settlement_geography, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_clan_fiefs, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills, query_influence, query_agenda, query_policies | 全部 |
-| council | propose_agenda, respond_to_agenda, defend_agenda | conversation / diplomacy / self_review / fief_review / curia |
+| council | propose_agenda, respond_to_agenda, defend_agenda | conversation / letter / diplomacy / self_review / fief_review / curia / curia_defense |
 | social | change_relation, give_gold, request_gold, give_item, request_items, let_go | conversation |
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous（conversation 亦激活） |
 | military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops, form_army, release_prisoner, execute_prisoner | autonomous（conversation 亦激活） |
@@ -112,4 +112,4 @@
 
 **玩家发起的聊天（conversation）是全功能通道**——所有分类默认激活。理由：AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全，对话里达成的承诺（议和/出兵/换国/写信/放人）就无法兑现。能力门控照旧：国王专属工具（朝议提议/结盟/问询）仍只有国王拿到，部队工具仍只有带兵者拿到，`change_kingdom` 仅氏族领袖可用——所以对话里每个 NPC 的可用工具由身份决定。
 
-Agent 任何时候都可以调 `browse_tools("military")` 解锁某类工具，下一轮即可使用。
+对话/书信/签到可调 `browse_tools("military")` 解锁本次能力范围内的分类，下一轮即可使用；返回工具名/参数名，完整定义由下一轮 API tools 提供。重复浏览已解锁分类不重建 schema。

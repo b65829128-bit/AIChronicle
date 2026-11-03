@@ -65,21 +65,6 @@ namespace AIChronicle
         public List<ChatHistoryEntry> ChatHistory { get; set; } = new();
     }
 
-    public class ToolParamDef
-    {
-        public string Name { get; set; } = "";
-        public string Type { get; set; } = "";
-        public string Description { get; set; } = "";
-    }
-
-    public class ToolDef
-    {
-        public string Name { get; set; } = "";
-        public string Description { get; set; } = "";
-        public string Category { get; set; } = "";
-        public List<ToolParamDef> Parameters { get; set; } = new();
-    }
-
     public static class PromptManager
     {
         private static string _promptsBaseDir = "";

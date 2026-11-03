@@ -14,7 +14,7 @@
   {
     "name": "query_character",
     "category": "query",
-    "description": "Query authoritative system-level public information about a character on the Calradia map. This data is canonical and overrides any stale knowledge you may have.\n\nUsage:\n- Call this at the beginning of EVERY conversation to get the other person's current identity, allegiance, and status.\n- The name parameter should match the Chinese or English character name (e.g., \"拉盖娅\" or \"Rhagaea\").\n- If the returned info conflicts with your knowledge files, the system data is ALWAYS correct — update your knowledge with append_file to stay current.\n- Returns: name, gender, culture, status (king/vassal/mercenary), clan, kingdom, encyclopedia description, clan tier & renown, current state (in settlement/on campaign/imprisoned), party info with rough troop count, current location.",
+    "description": "Query authoritative system-level public information about a character on the Calradia map. This data is canonical and overrides stale knowledge.\n\nUsage:\n- Use this for missing information or when you need fresher data than the current situation block. Do not repeat a query when the needed facts are already supplied.\n- The name parameter should match the Chinese or English character name (e.g., \"拉盖娅\" or \"Rhagaea\").\n- If the returned info conflicts with your knowledge files, system data is authoritative — update your knowledge with append_file.\n- Returns: name, gender, culture, status (king/vassal/mercenary), clan, kingdom, encyclopedia description, clan tier & renown, current state (in settlement/on campaign/imprisoned), party info with rough troop count, current location.",
     "parameters": [
       {
         "name": "name",

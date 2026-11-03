@@ -32,14 +32,14 @@ namespace AIChronicle
         {
             // request_gold / request_items 需要主线程每帧显示确认弹窗，必须留在后台线程
             // 等待玩家决定（内部对最终资金/物品划转做主线程分发）。
-            // browse_tools 要修改本流程的 ActivatedCategories，也必须留在本流程上下文执行。
+            // browse_tools 要修改本流程的 CurrentToolCatalog，也必须留在本流程上下文执行。
             if (name == "request_gold" || name == "request_items" || name == "browse_tools")
                 return ExecuteToolCallCore(name, arguments);
 
             // 捕获本后台流程的上下文，带到主线程执行时套用，执行完恢复主线程原值。
             var hero = AIChatClient.CurrentHero;
             var intent = AIChatClient.CurrentIntent;
-            var categories = AIChatClient.ActivatedCategories;
+            var catalog = AIChatClient.CurrentToolCatalog;
             var agentId = AgentManager.ActiveAgentId;
             var targetId = AgentManager.ActiveTargetId;
             var depth = AgentScheduler.CurrentProcessingDepth; // 并发下信件级联深度按任务隔离
@@ -48,14 +48,14 @@ namespace AIChronicle
             {
                 var prevHero = AIChatClient.CurrentHero;
                 var prevIntent = AIChatClient.CurrentIntent;
-                var prevCategories = AIChatClient.ActivatedCategories;
+                var prevCatalog = AIChatClient.CurrentToolCatalog;
                 var prevAgentId = AgentManager.ActiveAgentId;
                 var prevTargetId = AgentManager.ActiveTargetId;
                 var prevDepth = AgentScheduler.CurrentProcessingDepth;
 
                 AIChatClient.CurrentHero = hero;
                 AIChatClient.CurrentIntent = intent;
-                AIChatClient.ActivatedCategories = categories;
+                AIChatClient.CurrentToolCatalog = catalog;
                 AgentManager.SetContextOnly(agentId, targetId);
                 AgentScheduler.CurrentProcessingDepth = depth;
                 try
@@ -66,7 +66,7 @@ namespace AIChronicle
                 {
                     AIChatClient.CurrentHero = prevHero;
                     AIChatClient.CurrentIntent = prevIntent;
-                    AIChatClient.ActivatedCategories = prevCategories;
+                    AIChatClient.CurrentToolCatalog = prevCatalog;
                     AgentManager.SetContextOnly(prevAgentId, prevTargetId);
                     AgentScheduler.CurrentProcessingDepth = prevDepth;
                 }
@@ -431,12 +431,10 @@ namespace AIChronicle
             if (!validCategories.Contains(category))
                 return $"[错误] 未知分类 \"{category}\"。可选：{string.Join(", ", validCategories)}";
 
-            var allTools = PromptManager.LoadAllTools();
-            var categoryTools = allTools.Where(t => t.Category == category).ToList();
-            if (categoryTools.Count == 0)
-                return $"分类 \"{category}\" 下没有可用工具。";
-
-            AIChatClient.ActivateCategory(category);
+            var catalog = AIChatClient.CurrentToolCatalog;
+            if (catalog == null || !AIChatClient.ActivateCategory(category))
+                return $"[错误] 本次行动没有可解锁的「{category}」工具。请使用当前函数列表。";
+            var categoryTools = catalog.GetCategoryTools(category);
 
             var sb = new System.Text.StringBuilder();
             sb.AppendLine($"已解锁【{category}】分类的 {categoryTools.Count} 个工具。你现在可以在回复中使用它们：");
@@ -447,9 +445,9 @@ namespace AIChronicle
                     ? string.Join(", ", tool.Parameters.Select(p => p.Name))
                     : "无参数";
                 sb.AppendLine($"  {tool.Name}({paramList})");
-                sb.AppendLine($"  {tool.Description.Replace("\n", "\n  ")}");
                 sb.AppendLine();
             }
+            sb.AppendLine("完整定义已加入下一轮函数列表，无需重复浏览。");
             return sb.ToString().TrimEnd();
         }
 

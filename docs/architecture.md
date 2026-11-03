@@ -29,11 +29,11 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
 | **工具定义文件化** | 73 个工具定义在 `tools.json`（56 个游戏工具，含 `propose_agenda`/`respond_to_agenda`/`defend_agenda`/`query_agenda`/`query_policies`）和 `agent_tools.json`（17 个文件/通信工具，含 `write_chronicle`/`submit_secret_advisory`/`consult_king`/`send_envoy`/`reply_envoy`/`record_resolve`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
-| **工具分类系统** | 每个工具归属 8 个分类之一（universal/query/social/movement/military/diplomacy/file/communication），Agent 按场景默认激活相关分类，需要其他分类时调用 `browse_tools` 元工具按需解锁。**玩家发起的聊天（conversation）是全功能通道——全部分类默认激活**（AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全则对话里达成的承诺无法兑现；能力门控照旧，国王专属工具仍只有国王拿到） |
+| **工具分类系统** | 每个工具归属 9 个分类之一（universal/query/social/movement/military/diplomacy/council/file/communication）。`ToolCatalog` 每次激活固定能力与场景筛选结果，API schema、提示词索引和浏览结果共用；预算只在执行端限制，不移除 schema。只有对话/书信/签到可用 `browse_tools` 显式扩展快照。**玩家发起的聊天（conversation）是全功能通道——全部分类默认激活**，朝议分类也在书信/政务/自省中默认开放；能力门控照旧 |
 | **提示词全部可编辑** | `context_template.txt`、`persona_generation.txt`、`chancery_rules.txt`、`world_info.txt`、`game_rules.txt` 等均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环，模型调用工具 → 执行 → 追加结果 → 重请求，直到模型自然停止（无轮数限制，仅保留极高安全阀防死循环） |
 | **主线程分发** | LLM 工具循环跑在后台线程，但**所有修改游戏状态的工具**经 `MainThreadExecutor` 排队到主线程 `OnApplicationTick` 执行（后台线程阻塞等待结果）；仅 `request_gold`/`request_items`/`browse_tools` 留在后台线程（前两者需主线程弹窗等待玩家，后者改本流程上下文）。背景：Bannerlord 游戏对象（MobileParty/Hero/Kingdom）是主线程独占的。**战役生命周期隔离**：`OnGameStart`/`OnGameEnd` 递增 campaign epoch 并清空旧队列；旧 epoch 动作直接丢弃，等待中的 `RunOnMainThread` 立即取消；`AIChatClient.SendMessage` 也捕获 epoch，跨档的 LLM 工具循环不再执行工具 |
-| **上下文隔离（AsyncLocal）** | `CurrentHero`/`CurrentIntent`/`ActivatedCategories`（AIChatClient）、`_agentEntityId`/`_targetEntityId`（AgentManager）、`_activeAgentId`/`_activeTargetId`（EntityManager）均为 `AsyncLocal`——聊天与后台信件/自省/密使/外交多个流程并发时上下文互不覆盖；实体缓存用 `ConcurrentDictionary`（线程安全） |
+| **上下文隔离（AsyncLocal）** | `CurrentHero`/`CurrentIntent`/`CurrentToolCatalog`（AIChatClient）、`_agentEntityId`/`_targetEntityId`（AgentManager）、`_activeAgentId`/`_activeTargetId`（EntityManager）均为 `AsyncLocal`——聊天与后台信件/自省/密使/外交多个流程并发时上下文互不覆盖；工具上主线程时捕获/恢复该快照，实体缓存用 `ConcurrentDictionary`（线程安全） |
 | **参政页与秘书处** | **M 键**打开 CEF `CuriaCefScreen`（朝议/外交/封地/密陈/秘书五页签）；玩家政治动作在此完成。**秘书页签只查询**：`query_*` + `query_agenda` + 只读文件工具；`submit_advisory`/`submit_edict`/`change_kingdom`/外交动作全部移除。CEF 失败回退秘书处查询聊天。 |
 | **天意** | 虚拟实体（ID: `__fate__`，HeroRef=null，与史官并列）。家族补充系统：在世贵族/佣兵家族**总数**（封臣世家 + 雇佣兵公司，佣兵不论是否受雇都计入）低于「家族总数补充阈值」时被激活，决定新家族名称/文化/投效势力/以封臣还是佣兵身份入世（`create_clan`，能力门控仅天意可用），成员程序生成、等级 2、族长带兵、旗帜随机，入原始史料但不激活史官。只在玩家位于大地图时检测（捏脸/初始化阶段计数失真），有 MCM 冷却防连补；成员模板用 `RebelliousHeroTemplates`（`GetRandomTemplateByOccupation(Lord)` 查不到 Lord 模板、恒 null 的历史死路径已弃） |
 | **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
@@ -45,6 +45,8 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 > **上下文模板结构（缓存优化）**：`context_template.txt` 以 `<!--VOLATILE-->` 标记分界。标记前为**稳定前缀**（身份/persona/世界背景/游戏规则/工具清单/行为守则）→ system 消息；标记后为**易变块**（当前时间/自身状态/对对方认知/目标/客观关系/内政报告）→ 单独作为【当前状况】**system 消息**插在历史之后、当前 user 消息之前。目的：让 system+历史构成逐字节稳定的前缀，最大化 DeepSeek 前缀缓存命中（命中输入 0.02元/M vs 未命中 1元/M，价差 50 倍）。该优化参考 DeepSeek 官方上下文缓存文档与 [DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)。`ContextBuilder` 相应提供 `BuildStable`/`BuildVolatile`（合并 `Build` 保留兼容）。**史官 intent 例外**：不拆易变块，走合并 `Build()` 保持单一 system 消息——文笔是模组核心，结构与旧版一致。旧版模板（无标记）整体按稳定处理，行为不变。
 >
 > **易变块必须用 system 角色，不得用 user**（v2.0.2 修复的回归）：v1.4.0 曾把【当前状况】作为 `user` 消息插在玩家消息前——模型会把这条系统情境当成"对方说的话"，导致回复引用对话中不存在的"请教/答复"等幻觉。改回 `system` 角色后模型明确这是系统注入的情境，缓存优化保留。易变块**固定为 system 角色**（OpenAI 兼容协议允许中间 system，不再运行时探测回退）。
+>
+> **实时身份事实**：`ContextBuilder.Identity.cs` 在普通 NPC 的 `{objective_relationship}` 前置双方身份摘要，`IdentityFacts` 只渲染从当前 Hero/Clan/Kingdom 读取的公开事实：姓名/性别、家族领袖或成员、所属王国、统治者/封臣/受雇佣兵等政治身份、各自君主姓名与性别。不使用 persona 或缓存 Title 推断，未知君主明确标未知；自省只列自己，史官/天意/秘书处沿用专用语义。沿用现有占位符，不新增模板/存档格式；默认模板中位于易变块，不改稳定前缀。无认知时只说明暂无私人认知记录，不推断初次见面或旅行者身份；旧「旅行者」默认句仅在注入时归一化，不写回个人记忆。
 >
 > **已知边界情况（待解决）**：如果玩家在战役副本自定义了某文件（副本时间戳更新），之后基础目录又修改了（基础更晚）→ newer-wins 会覆盖副本，玩家自定义丢失。当前对开发期是期望行为；未来如需保护战役自定义，需引入"用户修改标记"机制（如哈希比对或 .custom 标记文件）。
 >
@@ -97,7 +99,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 **扩展方式**：新增厂商 = 先判断它是不是 OpenAI 兼容——是则直接配 URL/模型（无需改码）；不是（如 Anthropic 的 Messages API）才新增一个 provider 实现。**绝不在 `AIChatClient`/`AgentManager` 的业务逻辑里加厂商 `if`。**（Qwen/百炼即是 OpenAI 兼容：通用层可直接用，`QwenProvider` 仅为其打开思考开关与缓存统计两项声明式扩展。）
 
-> **缓存统计字段差异**：DeepSeek 用平铺字段 `prompt_cache_hit_tokens`/`prompt_cache_miss_tokens`；Qwen 用嵌套字段 `usage.prompt_tokens_details.cached_tokens`（只报命中不报未命中，未命中 = `prompt_tokens - cached_tokens` 推算）。`LLMCapabilities` 相应支持 `PromptTokensField`（点分嵌套路径），`CacheMissField` 留空时自动走推算分支。调试日志的命中率统计对两类端点统一生效。
+> **usage 与缓存统计**：`LLMUsage` 分别保存输入、输出、思考、缓存命中/未命中；缺失字段为 null，日志显示 N/A，与已报告的 0 区分。输入/输出/思考按 Provider 声明的字段独立解析，不依赖缓存字段。通用 OpenAI 兼容与 Qwen 使用 `prompt_tokens_details.cached_tokens`，DeepSeek 使用平铺缓存字段；只报命中时由总输入推算未命中。GLM/MiMo 即使未声明缓存字段，也会统计总输入/输出。思考是输出的子集，不重复累计成本。后台预算只记录后台 intent 的总输入，面对面对话与秘书处查询不占后台额度。
 
 ### 屎山教训（为什么禁止运行时探测）
 
@@ -403,6 +405,8 @@ Usage:
 
 ## 17. 完整目录结构
 
+`tests/AIChronicle.Pure.Tests/LlmTests.cs` 直接链接工具快照、Provider、预算与身份采集/文案源码做离线回归；`IdentityStubs.cs` 仅提供被读取的 Hero/Clan/Kingdom 属性。`EncounterTests.cs` 直接链接遭遇诊断源码，提供最小场景状态桩，覆盖竞技场/定居点/界面保护、8 秒连续观察、手动恢复与延迟放行的遭遇绑定。JSON 测试复用 .NET SDK 随附的程序集，不引入新的模组运行时依赖。
+
 ```
 ~/项目/AIChronicle/
 ├── AIChronicle.csproj          ← 项目配置（引用、框架、部署；Linux 只编 net472）
@@ -432,6 +436,8 @@ Usage:
 │   ├── AgentManager.Proposals.cs ← 外交提案存储与解析
 │   ├── AgentManager.Permissions.cs ← 路径权限模型（信息隔离硬约束）
 │   ├── ContextBuilder.cs       ← Context 动态组装器
+│   ├── ContextBuilder.Identity.cs ← 从当前游戏对象采集双方身份/君主，组装客观关系
+│   ├── ToolCatalog.cs          ← 每次激活的工具快照（API schema/提示词目录/浏览结果共用筛选）
 │   ├── AIChatClient.cs         ← LLM API 客户端（HTTP 流式请求、SSE 解析、多轮循环），工具调用委托给 ToolExecutor
 │   ├── PromptManager.cs        ← 提示词管理器（文件热重载、战役目录、角色 JSON）
 │   ├── MemoryConsolidator.cs   ← 记忆巩固（diary 权威化保底：自写水位 + 跨年卷扫描）
@@ -445,6 +451,7 @@ Usage:
 │   └── PartyBehaviorManager.cs ← 部队行为管理器（PendingAction 状态机、Tick()、定时签到）
 ├── Entities/                   ← Entity 统一抽象
 │   ├── Entity.cs               ← Entity 抽象（玩家/NPC 统一模型、EntityCapability）
+│   ├── IdentityFacts.cs        ← 公开身份事实快照与双方人称渲染（纯逻辑）
 │   └── EntityManager.cs        ← Entity 生命周期管理
 ├── Tools/                      ← 工具执行器（50+ 游戏工具，按领域拆 partial）
 │   ├── ToolExecutor.cs         ← 基类（工具入口 ExecuteToolCall + 共享助手）

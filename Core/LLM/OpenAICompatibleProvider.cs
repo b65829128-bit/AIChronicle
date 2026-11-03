@@ -19,7 +19,7 @@ namespace AIChronicle
             SupportsReasoningEffort = false,
             ReasoningContentField = "reasoning_content",
             ReturnReasoningInAssistant = false,
-            CacheHitField = "",
+            CacheHitField = "prompt_tokens_details.cached_tokens",
             CacheMissField = "",
             SupportsStreamOptionsUsage = true
         };
@@ -74,21 +74,11 @@ namespace AIChronicle
 
             var result = new LLMStreamChunk();
 
-            // 缓存统计：usage 可能为 null（普通帧）或对象（末尾帧）；字段名由能力声明决定。
-            if (root["usage"] is JObject usageObj && !string.IsNullOrEmpty(cap.CacheHitField))
+            // usage 独立解析：未声明/未返回缓存字段的端点仍有输入与输出用量。
+            if (root["usage"] is JObject usageObj)
             {
                 result.RawUsageJson = usageObj.ToString(Formatting.None);
-                result.CacheHit = GetUsageLong(usageObj, cap.CacheHitField);
-                if (!string.IsNullOrEmpty(cap.CacheMissField))
-                {
-                    result.CacheMiss = GetUsageLong(usageObj, cap.CacheMissField);
-                }
-                else if (!string.IsNullOrEmpty(cap.PromptTokensField))
-                {
-                    // 端点只报告总输入与缓存命中（如 Qwen 的 prompt_tokens + cached_tokens）→ 未命中 = 总输入 - 命中。
-                    var total = GetUsageLong(usageObj, cap.PromptTokensField);
-                    result.CacheMiss = total > result.CacheHit ? total - result.CacheHit : 0;
-                }
+                result.Usage = ParseUsage(usageObj);
             }
 
             // 宽容：末尾 usage 帧可能返回 "choices":[]（空数组），直接跳过。
@@ -137,16 +127,38 @@ namespace AIChronicle
         /// </summary>
         protected virtual void ApplyDynamicBodyParams(JObject payload, LLMRequest request) { }
 
-        /// <summary>按点分路径读取 usage 嵌套字段（如 "prompt_tokens_details.cached_tokens"），缺失返回 0。</summary>
-        private static long GetUsageLong(JObject usage, string dottedPath)        {
+        private LLMUsage ParseUsage(JObject usage)
+        {
+            var cap = Capabilities;
+            var result = new LLMUsage
+            {
+                PromptTokens = GetUsageLong(usage, cap.PromptTokensField),
+                CompletionTokens = GetUsageLong(usage, cap.CompletionTokensField),
+                ReasoningTokens = GetUsageLong(usage, cap.ReasoningTokensField),
+                CacheHit = GetUsageLong(usage, cap.CacheHitField),
+                CacheMiss = GetUsageLong(usage, cap.CacheMissField)
+            };
+            if (!result.PromptTokens.HasValue && result.CacheHit.HasValue && result.CacheMiss.HasValue)
+                result.PromptTokens = result.CacheHit.Value + result.CacheMiss.Value;
+            if (!result.CacheMiss.HasValue && result.PromptTokens.HasValue && result.CacheHit.HasValue)
+                result.CacheMiss = System.Math.Max(0, result.PromptTokens.Value - result.CacheHit.Value);
+            if (!result.CacheHit.HasValue && result.PromptTokens.HasValue && result.CacheMiss.HasValue)
+                result.CacheHit = System.Math.Max(0, result.PromptTokens.Value - result.CacheMiss.Value);
+            return result;
+        }
+
+        /// <summary>缺失/空字段保持未知；显式返回 0 才记为 0。</summary>
+        private static long? GetUsageLong(JObject usage, string dottedPath)
+        {
+            if (string.IsNullOrEmpty(dottedPath)) return null;
             JToken? cur = usage;
             foreach (var part in dottedPath.Split('.'))
             {
-                if (cur is not JObject obj) return 0;
+                if (cur is not JObject obj) return null;
                 cur = obj[part];
-                if (cur == null) return 0;
+                if (cur == null) return null;
             }
-            return cur.ToObject<long>();
+            return cur.Type == JTokenType.Integer ? System.Math.Max(0, cur.Value<long>()) : null;
         }
 
         public virtual LLMNonStreamResult ParseNonStreamResponse(string body)
@@ -155,6 +167,8 @@ namespace AIChronicle
             JObject root;
             try { root = JObject.Parse(body); }
             catch { return result; }
+
+            if (root["usage"] is JObject usage) result.Usage = ParseUsage(usage);
 
             var message = root["choices"]?[0]?["message"];
             if (message == null) return result;

@@ -10,11 +10,11 @@ using TaleWorlds.CampaignSystem.Settlements;
 
 namespace AIChronicle
 {
-    public static class ContextBuilder
+    public static partial class ContextBuilder
     {
         private static readonly Dictionary<EntityCapability, string[]> CapabilityToolMap = new()
         {
-            [EntityCapability.FileSystem] = new[] { "read_file", "append_file", "write_file", "edit_file", "delete_file", "list_dir", "glob", "grep", "move_file", "record_resolve" },
+            [EntityCapability.FileSystem] = new[] { "read_file", "read_diary", "append_file", "write_file", "edit_file", "delete_file", "list_dir", "glob", "grep", "move_file", "record_resolve" },
             [EntityCapability.MoveParty] = new[] { "move_to_settlement", "raid_settlement", "besiege_settlement", "engage_party", "defend_settlement", "patrol_settlement", "escort_party", "go_around_party" },
             [EntityCapability.WaitAtSettlement] = new[] { "wait_at_settlement" },
             [EntityCapability.GiveGold] = new[] { "give_gold" },
@@ -25,19 +25,6 @@ namespace AIChronicle
             [EntityCapability.CreateClan] = new[] { "create_clan" },
             [EntityCapability.Chronicler] = new[] { "write_chronicle" },
             [EntityCapability.Curia] = new[] { "propose_agenda", "respond_to_agenda", "defend_agenda", "query_agenda" },
-        };
-
-        private static readonly Dictionary<string, string> CategoryNames = new()
-        {
-            ["universal"] = "通用",
-            ["query"] = "查询",
-            ["social"] = "社交",
-            ["movement"] = "行军",
-            ["military"] = "军事",
-            ["diplomacy"] = "外交",
-            ["council"] = "朝议",
-            ["file"] = "文件",
-            ["communication"] = "通信",
         };
 
         /// <summary>
@@ -72,7 +59,7 @@ namespace AIChronicle
         }
 
         /// <summary>易变块：当前时间/自身状态/对对方认知/目标/客观关系/内政报告。每轮可能不同，
-        /// 单独作为【当前状况】user 消息放在历史之后——这样 system + 历史构成稳定前缀，易变内容只在尾部。</summary>
+        /// 单独作为【当前状况】system 消息放在历史之后——这样 system + 历史构成稳定前缀，易变内容只在尾部。</summary>
         public static string BuildVolatile(string agentId, string targetId, string intent)
         {
             return BuildParts(agentId, targetId, intent).volatilePart;
@@ -120,12 +107,12 @@ namespace AIChronicle
             else
             {
                 targetKnowledge = AgentManager.ReadKnowledgeFor(agentId, targetId);
-                if (string.IsNullOrEmpty(targetKnowledge))
+                if (string.IsNullOrEmpty(targetKnowledge) || targetKnowledge == "你第一次见到这位旅行者，对对方还不太了解。")
                     targetKnowledge = intent == "chancery"
                         ? "对方是" + agent.Name + "，你的主人。你的职责是执行对方的命令。"
                         : agentId == targetId
                             ? "你正在审视自身与王国的处境。"
-                            : "你第一次见到这位旅行者，对对方还不太了解。";
+                            : IdentityFacts.UnfamiliarKnowledge;
                 else if (targetKnowledge.Length > MaxKnowledgeInjectChars)
                     targetKnowledge = targetKnowledge.Substring(0, MaxKnowledgeInjectChars)
                         + "\n…（记忆较长已截断，完整内容可用 read_file 读取）";
@@ -183,7 +170,7 @@ namespace AIChronicle
                             ? BuildSelfReviewDigest(agent.HeroRef!)
                             : BuildSelfStatus(agent.HeroRef!);
             var currentTime = PromptManager.GetCurrentTimeString();
-            var functionList = BuildFunctionList(agent, intent);
+            var functionList = (AIChatClient.CurrentToolCatalog ?? new ToolCatalog(GetFilteredTools(agent), intent)).BuildFunctionList();
             var objectiveRel = intent == "historian"
                 ? "你作为史官，不隶属于任何势力，也不与任何势力为敌。"
                 : intent == "clan_replenishment"
@@ -257,9 +244,9 @@ namespace AIChronicle
             return (stable, volatilePart);
         }
 
-        public static List<ToolDef> GetFilteredTools(Entity agent)
+        public static List<ToolDef> GetFilteredTools(Entity agent, IEnumerable<ToolDef>? definitions = null)
         {
-            var allTools = PromptManager.LoadAllTools();
+            var allTools = definitions ?? PromptManager.LoadAllTools();
             var filtered = new List<ToolDef>();
             foreach (var tool in allTools)
             {
@@ -269,42 +256,6 @@ namespace AIChronicle
             }
             return filtered;
         }
-
-        // 自省 intent 的意图级工具排除：一次激活 = 一次自包含行动。
-        // 排除"需要未来激活的链式"（招兵/升级/买粮需先到定居点再激活）、级联（写信）、无意义项、以及按场景不适用的工具。
-        private static readonly HashSet<string> _selfReviewExcludedTools = new()
-        {
-            "recruit_troops", "upgrade_troops", "buy_food",        // 链式：需"先到定居点→到达→再激活"
-            "send_letter",                                         // 级联激活，token 爆炸
-            "wait_at_settlement",                                  // 无后续动作的等待无意义
-            "query_available_troops", "query_settlement_villages", // 招兵专属服务，招兵已排除
-            "update_knowledge",                                    // 无对话对象
-            "let_go",                                              // 仅遭遇战场景
-            "query_pending_proposals",                             // 国王专用，封臣恒空
-            "give_item", "request_items",                          // 社交只保留好感/馈赠，避免过载
-            "escort_party"                                         // 保持一次性军事集精简
-        };
-
-        // 秘书处只查询：把所有"动作/写文件/通信/政治"工具排除，只留 query 分类 + 只读文件工具。
-        private static readonly HashSet<string> _chanceryExcludedTools = new()
-        {
-            "update_knowledge", "cancel_action", "create_clan", "create_kingdom",
-            "write_file", "append_file", "edit_file", "delete_file", "move_file", "write_chronicle", "record_resolve",
-            "send_letter", "send_envoy", "reply_envoy", "submit_secret_advisory",
-            "consult_king", "reply_consult", "change_kingdom",
-            "declare_war", "propose_peace", "propose_alliance", "propose_trade", "end_alliance", "end_trade_agreement",
-            "respond_to_diplomacy_proposal", "gift_fief", "propose_agenda", "respond_to_agenda", "defend_agenda"
-        };
-
-        /// <summary>intent 级工具排除（API tools 与提示词索引共用，保证两处一致）。非目标 intent 返回空集。</summary>
-        public static HashSet<string> GetExcludedToolsForIntent(string intent)
-        {
-            if (intent == "self_review") return _selfReviewExcludedTools;
-            if (intent == "chancery") return _chanceryExcludedTools;
-            return EmptyTools;
-        }
-
-        private static readonly HashSet<string> EmptyTools = new();
 
         private static string ParsePersonaSection(string persona, string sectionName)
         {
@@ -322,64 +273,6 @@ namespace AIChronicle
             }
             var contentEnd = nextMarker < int.MaxValue ? nextMarker : persona.Length;
             return persona.Substring(contentStart, contentEnd - contentStart).Trim();
-        }
-
-        private static string BuildFunctionList(Entity agent, string intent)
-        {
-            var allTools = PromptManager.LoadAllTools();
-            var capabilityTools = allTools.Where(t =>
-                GetRequiredCapability(t.Name) == null || agent.HasCapability(GetRequiredCapability(t.Name)!.Value)
-            ).ToList();
-
-            // 秘书处排除 create_kingdom（玩家建国走原版正规流程），与 AIChatClient.BuildTools 的排除保持一致——
-            // 否则提示词文本列出该工具、API tools 却不含，模型会尝试调用一个不存在的工具。
-            if (intent == "chancery")
-                capabilityTools = capabilityTools.Where(t => t.Name != "create_kingdom").ToList();
-
-            // intent 级工具排除（自省剔除链式/级联等），与 AIChatClient.BuildTools 保持一致
-            var excluded = GetExcludedToolsForIntent(intent);
-            if (excluded.Count > 0)
-                capabilityTools = capabilityTools.Where(t => !excluded.Contains(t.Name)).ToList();
-
-            var activatedSet = AIChatClient.ActivatedCategories;
-            var activeCategories = capabilityTools
-                .Where(t => activatedSet.Contains(t.Category))
-                .Select(t => t.Category)
-                .Distinct()
-                .OrderBy(c => c)
-                .ToList();
-            var inactiveCategories = capabilityTools
-                .Where(t => !activatedSet.Contains(t.Category))
-                .Select(t => t.Category)
-                .Distinct()
-                .OrderBy(c => c)
-                .ToList();
-
-            // 精简：工具全量定义已随 API 的 tools 参数发送（JSON 是工具调用的主通道），
-            // 这里只留一份极简的中文索引（分类 + 工具名），不再重复参数列表——省 token 且不丢信息。
-            var sb = new StringBuilder();
-            foreach (var group in activeCategories)
-            {
-                var catName = CategoryNames.TryGetValue(group, out var cn) ? cn : group;
-                var names = capabilityTools
-                    .Where(t => t.Category == group)
-                    .Select(t => t.Name);
-                sb.AppendLine($"【{catName}】{string.Join(", ", names)}");
-            }
-
-            if (intent != "chancery" && intent != "curia" && intent != "curia_defense" && inactiveCategories.Count > 0)
-            {
-                sb.AppendLine();
-                sb.AppendLine("【其他可用工具分类 — 需要时先调 browse_tools 查看并解锁】");
-                foreach (var cat in inactiveCategories)
-                {
-                    var catName = CategoryNames.TryGetValue(cat, out var cn) ? cn : cat;
-                    var count = capabilityTools.Count(t => t.Category == cat);
-                    sb.AppendLine($"  {catName}（{count}个工具）— browse_tools(\"{cat}\")");
-                }
-            }
-
-            return sb.ToString().TrimEnd();
         }
 
         private static EntityCapability? GetRequiredCapability(string toolName)
@@ -897,101 +790,6 @@ namespace AIChronicle
             sb.Append(party.IsMoving ? "，正行军。" : "，已停留。");
             return sb.ToString();
         }
-
-        private static string BuildObjectiveRelationship(Hero agentHero, Hero targetHero)
-        {
-            var sb = new StringBuilder();
-            var agentFaction = agentHero.MapFaction;
-            var targetFaction = targetHero.MapFaction;
-
-            if (agentHero == targetHero)
-            {
-                sb.AppendLine("对方就是你自己（自省）。");
-                return sb.ToString().TrimEnd();
-            }
-
-            if (agentFaction != null && targetFaction != null)
-            {
-                if (agentFaction == targetFaction)
-                {
-                    if (agentFaction.IsKingdomFaction)
-                    {
-                        var kingdom = agentFaction as Kingdom;
-                        var agentIsMerc = agentHero.Clan?.IsUnderMercenaryService == true;
-                        var targetIsMerc = targetHero.Clan?.IsUnderMercenaryService == true;
-
-                        if (kingdom != null && agentHero == kingdom.Leader)
-                        {
-                            var desc = targetIsMerc ? "雇佣兵首领" : "封臣";
-                            sb.AppendLine($"对方与你同属{agentFaction.Name}。你是该王国的君主，对方是你的{desc}。");
-                        }
-                        else if (kingdom != null && targetHero == kingdom.Leader)
-                        {
-                            var desc = agentIsMerc ? "雇佣兵首领" : "封臣";
-                            sb.AppendLine($"对方与你同属{targetFaction.Name}。对方是你的君主，你是对方的{desc}。");
-                        }
-                        else if (agentHero.Clan == targetHero.Clan)
-                            sb.AppendLine($"对方与你同属{agentHero.Clan?.Name?.ToString() ?? "同一家族"}。你们是同一家族的成员。");
-                        else if (agentIsMerc && targetIsMerc)
-                            sb.AppendLine($"对方与你同属{agentFaction.Name}。你们都是该王国麾下的雇佣兵。");
-                        else if (agentIsMerc)
-                            sb.AppendLine($"对方与你同属{agentFaction.Name}。对方是该王国的封臣，你是雇佣兵。");
-                        else if (targetIsMerc)
-                            sb.AppendLine($"对方与你同属{agentFaction.Name}。对方是雇佣兵，你是该王国的封臣。");
-                        else
-                            sb.AppendLine($"对方与你同属{agentFaction.Name}。你们同为该王国的封臣。");
-                    }
-                    else if (agentFaction.IsMinorFaction)
-                    {
-                        sb.AppendLine($"对方与你同属{agentFaction.Name}（佣兵势力）。");
-                    }
-                    else
-                    {
-                        sb.AppendLine($"对方与你同属{agentFaction.Name}。");
-                    }
-                }
-                else
-                {
-                    if (agentFaction.IsAtWarWith(targetFaction))
-                        sb.AppendLine($"对方属于{targetFaction.Name}，与你的势力{agentFaction.Name}【处于交战状态】。你们是敌对关系。");
-                    else
-                        sb.AppendLine($"对方属于{targetFaction.Name}，与你的势力{agentFaction.Name}【当前和平】。你们是中立关系。");
-                }
-            }
-            else if (agentFaction != null && targetFaction == null)
-            {
-                sb.AppendLine("对方不属于任何势力（可能是流浪者或平民）。");
-            }
-            else if (agentFaction == null && targetFaction != null)
-            {
-                sb.AppendLine($"你目前不属于任何势力，对方属于{targetFaction.Name}。");
-            }
-
-            if (agentHero.Spouse == targetHero)
-                sb.AppendLine("对方是你的配偶。");
-            else if (agentHero.Mother == targetHero)
-                sb.AppendLine("对方是你的母亲。");
-            else if (agentHero.Father == targetHero)
-                sb.AppendLine("对方是你的父亲。");
-            else if (agentHero.Clan != null && targetHero.Clan != null
-                && agentHero.Clan == targetHero.Clan
-                && agentHero != targetHero)
-            {
-                var relation = "";
-                if (agentHero.Mother == targetHero.Mother) relation = "（同母）";
-                else if (agentHero.Father == targetHero.Father) relation = "（同父）";
-                sb.AppendLine($"对方与你是同族亲属{relation}。");
-            }
-
-            if (targetHero.IsPrisoner)
-                sb.AppendLine("注意：对方当前是俘虏。");
-
-            return sb.ToString().TrimEnd();
-        }
-        
-        
-        
-        
 
         private static string LoadContextTemplate()
         {

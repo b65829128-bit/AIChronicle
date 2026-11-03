@@ -18,7 +18,7 @@
 
 3. **ILSpy / dnSpy 反编译**：Linux 用 `dotnet tool install -g ilspycmd` 反编译游戏 DLL 或对照 `BLSource/`；Windows 上仍可用 dnSpy 附加调试
 
-4. **DebugLogger 调试日志**（推荐优先）：战役目录 `debug_logs/debug_*.log` 记录每次 LLM 调用的轮次/推理长度/工具名；**最终轮无文本时记录思维链摘录**（600 字）；请求结束时记录**缓存命中统计**（`LLM 完成 ... 缓存命中=X 未命中=Y 命中率=Z%`，来自 provider 按能力声明的缓存字段解析，DeepSeek 为 `usage.prompt_cache_hit_tokens`/`prompt_cache_miss_tokens`）。排查"Agent 为什么这么干/没干"首选此日志，排查"缓存是否生效"也看它。受 MCM「调试日志」开关控制（默认开）。注意：`SendMessage` 返回的 `Content` 若回退到"（已通过工具处理完毕）"表示 Agent 调了工具但没输出结语（如国王评估后决定不行动）。
+4. **DebugLogger 调试日志**（推荐优先）：战役目录 `debug_logs/debug_*.log` 记录每次 LLM 调用的轮次/推理长度/工具名；**最终轮无文本时记录思维链摘录**（600 字）。`LLM 请求` 带 activation/request ID、Provider、模型、round、是否后台和工具 schema 的 SHA-256；同次激活中只有显式浏览解锁才应改变该 hash。`SendMessage` 每次 HTTP 尝试结束写一条 `LLM usage`（含重试/失败），记录原始 usage、耗时、状态及归一化输入/输出/思考/缓存命中与未命中；同一流的累计 usage 仅取最后一帧记账一次。缺失字段显示 `N/A`，思考包含在输出内，勿再相加。`LLM 完成` 汇总并标明 `usage=已报告请求数/总尝试数` 和缓存统计覆盖数；不完整统计不能当成完整账单。DeepSeek 缓存字段为 `prompt_cache_hit_tokens`/`prompt_cache_miss_tokens`，通用兼容/Qwen 为嵌套 `prompt_tokens_details.cached_tokens`。排查"Agent 为什么这么干/没干"与缓存失效首选此日志。受 MCM「调试日志」开关控制（默认开）。注意：`SendMessage` 返回的 `Content` 若回退到"（已通过工具处理完毕）"表示 Agent 调了工具但没输出结语（如国王评估后决定不行动）。
 
 ## 2. 日志文件位置
 
@@ -123,17 +123,19 @@ node scripts/ci-health.mjs
 
 **排查**：看战役 `debug_logs/ui_trace.log` 的 `[Encounter]` 行：
 
-    [Encounter] session launched current=... state=... leave=... atMenu=... mapConversation=... conversation=... mapEvent=... modUi=... encountered=... settlement=... time=...
+    [Encounter] session launched current=... state=... leave=... atMenu=... mapConversation=... conversation=... mapEvent=... modUi=... activeState=... mission=... insideSettlement=... locationEncounter=... encountered=... settlement=... time=...
 
-- `current=True` 且 `atMenu/conversation/mapEvent` 全为 False → 残留状态；
-- `current=True` 且有 menu/conversation/mapEvent → 正常遭遇，不要清；
+- 仅 `activeState=MapState`、`mission=False`、主队伍有效且不在定居点，并且没有菜单/地图对话/对话/MapEvent/模组界面/LocationEncounter/EncounterSettlement 时，`current=True` 才可能是残留；
+- `current=True` 且仍在 Mission、竞技场/竞技大赛、城镇/村庄、菜单、对话或地图事件中 → 正常流程仍可能依赖遭遇，不要清；
 - `time=Stop` 且部队不移动 → 先按空格恢复时间，不是遭遇残留。
 
 **恢复**：
 
-- 自动：`EncounterDiagnostics.Tick` 检测到"有 Current、无菜单/对话/MapEvent"持续 8 秒，自动 `PlayerEncounter.Finish()` 并写日志/黄字；若 `modUi=True`（AI 聊天/史书/书信面板仍打开）则等待，不误伤；
-- 手动：MCM「游戏设置 → 修复遭遇状态」（正在对话/战斗时不会修复）；
-- 代码侧：`let_go` 结束对话后下一帧显式 `Finish`；H/O/M/F8 入口现在要求 `MapState.AtMenu == false`、无对话、无 `PlayerEncounter`、无 MapEvent，避免在遭遇菜单上叠 UI。
+- 自动：`EncounterDiagnostics.Tick` 仅在上述空闲大地图条件下，对**同一个** `Current` 连续观察 8 秒后自动 `PlayerEncounter.Finish()` 并写日志/黄字。进入场景/界面或更换遭遇都会重新计时，不累计场景里的时间；
+- 手动：MCM「游戏设置 → 修复遭遇状态」复用相同场景保护，只在空闲大地图执行；
+- 代码侧：`let_go` 结束对话后排队收尾，只操作投递时的同一个遭遇，允许结束其遭遇菜单，但仍受 Mission/定居点/对话/地图事件/模组界面保护；H/O/M/F8 入口要求 `MapState.AtMenu == false`、无对话、无 `PlayerEncounter`、无 MapEvent，避免在遭遇菜单上叠 UI。
+
+**竞技场误清理回归**：2026-11-03 的日志显示，15:28:40 进入厄庇克洛忒亚的竞技场，15:28:48 被旧版自动恢复误判为残留并 `Finish()`。竞技场没有大地图菜单或 MapEvent；`Finish()` 却会清空 `LocationEncounter`，默认还会使玩家离开定居点。比赛控制器仍会读取 `PlayerEncounter.EncounterSettlement.Culture`，因此这类清理会破坏比赛/返回城镇的状态。当前日志没有崩溃堆栈，不能据此确定最后抛异常的具体位置。回归测试直接链接 `EncounterDiagnostics.cs`，覆盖自动、手动和 `let_go` 三个入口的场景保护及倒计时重置。
 
 ## 9. 切档后旧动作/主线程队列残留
 

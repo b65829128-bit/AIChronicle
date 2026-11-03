@@ -8,7 +8,7 @@ using AIChronicle;
 
 namespace AIChronicle.Tests
 {
-    internal static class Program
+    internal static partial class Program
     {
         private static int _passed;
         private static int _failed;
@@ -32,6 +32,8 @@ namespace AIChronicle.Tests
             Run("diary: rotation plan", TestDiaryRotationPlan);
             Run("diary: rotation files + dedupe", TestDiaryRotationFiles);
             Run("silent diary: hero naming", TestSilentDiaryText);
+            RunLlmTests();
+            RunEncounterTests();
 
             Console.WriteLine();
             Console.WriteLine($"passed: {_passed}, failed: {_failed}");

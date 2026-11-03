@@ -56,7 +56,7 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 ```
 
 要点：
-- **一次性行动原则**：命令一经发出立即执行完毕，无续接激活。工具级排除（`ContextBuilder.GetExcludedToolsForIntent("self_review")`，API tools 与提示词索引共用）：招兵/买粮/升级（链式"先到定居点再激活"）、`send_letter`（级联）、`wait_at_settlement`、`query_available_troops`/`query_settlement_villages`、`update_knowledge`/`let_go`/`query_pending_proposals`、`give_item`/`request_items`、`escort_party`、`browse_tools`（固定菜单，不按需解锁分类）
+- **一次性行动原则**：命令一经发出立即执行完毕，无续接激活。工具级排除（`ToolCatalog` 的 self_review 策略，API tools 与提示词索引共用）：招兵/买粮/升级（链式"先到定居点再激活"）、`send_letter`（级联）、`wait_at_settlement`、`query_available_troops`/`query_settlement_villages`、`update_knowledge`/`let_go`/`query_pending_proposals`、`give_item`/`request_items`、`escort_party`、`browse_tools`（固定菜单，不按需解锁分类）
 - **自省先读日记**：`self_review_rules.txt` 要求先 `read_file decisions/diary.txt` 回顾没有「结果」标记的计策/承诺/计划（仍视为进行中），`chat_logs/` 比日记新则以聊天为准；`MemoryConsolidator.EnsureDiaryCurrentAsync` 在自省前静默补记（SelfReview 已列入自我审视类）
 - **自省摘要**：`BuildSelfReviewDigest`（零 token 代码组装，注入【当前状况】易变块）——封地/部队规模/君主关系/王国战和/未读密使线程。**只提供事实摘要，不注入日记内容**（克制原则：能提醒就别注入，日记由 agent 自己 `read_file`）
 - `propose_agenda` 是朝议提议工具（公开理由+入档/入史）；`submit_secret_advisory` 是密陈工具（只呈国王、不入史册）
@@ -134,7 +134,7 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 - **专题合并（防杀人潮）**：`QueueSpecialChronicle` 会先写入合并缓冲——若已有一个待处理专题史事件，后续事件只追加不新开；处理时一次史官激活合并全部（如玩家连杀十几人 → 只生成一次传记专题，而非连环激活）
 - **传记质量**：`query_character` 现可查已故人物（枚举所有氏族成员含已故 + 在世英雄）并返回出生/卒年；传记提示词要求开头点明身份（统治者/族长/成员）与生卒年。**立传身份在死亡前一刻捕获**（`BeforeHeroKilledEvent` 存 `_pendingHeroDeathTitle`，先于原版继任改选），关闭「所有贵族立传」后国王/族长仍立传。成功判定改为"chronicles 目录出现新文件"（传记/世家/纪事是自命名体例文件，原只查 `chronicle_*.txt` 会误报"未生成"）
 - **Entity**：史官是虚拟 Entity（ID: `__historian__`，`HeroRef = null`），不映射任何游戏 NPC
-- **工具**：`query` + `file` 分类的工具（`ActivatedCategories = {"universal", "query", "file"}`），含专属落盘工具 `write_chronicle`（`Chronicler` 能力门控，仅史官可用）
+- **工具**：`ToolCatalog` 默认 `universal` + `query` + `file`，含专属落盘工具 `write_chronicle`（`Chronicler` 能力门控，仅史官可用）
 - **正文格式**：史文正文用 Markdown 落盘——`##` 分节、`**` 强调、`>` 写「史官曰」，不重复篇名，不用 HTML/表格/图片/链接/代码块。阅读页按 Markdown 渲染；CEF 不可用时原生 fallback 由 `HistoryMarkdown` 去标记显示
 - **权限**：可读 `World/history/` 目录，可写 `World/history/chronicles/` 目录
 - **提示词**：使用 `intent = "historian"` 的 `ContextBuilder.Build()`，规则来自 `historian_rules.txt`
@@ -168,10 +168,10 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 
 ## 5.1 成本预算与后台节流
 
-- **每次激活**：`AIChatClient` 按 intent 限制 LLM 轮次和查询调用——朝议 3 轮/1 查询、自省 5/4、外交 6/4、国王问询 4/3、密使回应 4/3、聊天 10/6、史官 12/5；最后一轮移除 `query_*`/`browse_tools`，注入“停止查询、立即行动”的系统提示。
+- **每次激活**：`AIChatClient` 按 intent 限制 LLM 轮次和查询调用——朝议 3 轮/1 查询、自省 5/4、外交 6/4、国王问询 4/3、密使回应 4/3、签到（`chat`）10/6、面对面对话（`conversation`）6/4、史官 12/5。`ToolCatalog` 固定本次能力/场景工具与排列；预算耗尽或最后一轮只追加“停止查询、立即行动”提示，执行端拒绝超额 `query_*`/`browse_tools`，不删工具定义。显式浏览解锁是本轮工具表更新的唯一入口，浏览仅返回经过同一权限筛选的工具名/参数名，完整定义由下一轮 API tools 提供。
 - **结果压缩**：单次工具结果超过 `MaxToolResultChars`（默认 4000）截断；`query_policies` 默认一行式摘要，指定 `policy_name` 才返回完整说明；`query_agenda` 默认简版，`detail=true` 才列全部票数与缺席。
 - **Curia 预置事实**：投票提示词直接带目标战和/同盟/贸易、封地守军、家族影响力/封地、关系、当前票数/权重/门槛；最多允许 1 次补充查询。
-- **全局预算**：`TokenBudget` 统计滚动 5 分钟 prompt token；超过 MCM「后台 token 预算」时，调度器推迟可延迟的后台事件（自省/国王政务/问询/密使等），事件留在队列；朝议投票/史官因有截止或年度节点不推迟。玩家聊天不经过调度器，不受影响。
+- **全局预算**：`TokenBudget` 统计滚动 5 分钟后台总输入 token（独立于缓存统计）；`conversation` 与 `chancery` 不计入后台窗口。超过 MCM「后台 token 预算」时，调度器推迟可延迟的后台事件（自省/国王政务/问询/密使等），事件留在队列；朝议投票/史官因有截止或年度节点不推迟。端点未报告 usage 时记录未知，不伪造为 0 消耗。
 
 ## 6. 朝议（Curia）
 

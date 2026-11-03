@@ -5,6 +5,7 @@ using TaleWorlds.CampaignSystem.GameState;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
+using TaleWorlds.MountAndBlade;
 
 namespace AIChronicle
 {
@@ -17,18 +18,20 @@ namespace AIChronicle
     ///
     /// 本类只做两件事：
     /// 1. 把 PlayerEncounter 的关键状态写入 ui_trace.log，便于定位；
-    /// 2. 当"有残留遭遇、但既没有菜单/对话、也没有 MapEvent"持续 8 秒时，调用 Finish 清理。
+    /// 2. 仅在确认空闲的大地图上，同一残留遭遇持续 8 秒时，调用 Finish 清理。
+    /// Mission/定居点流程仍依赖 PlayerEncounter，不能因没有地图菜单就判为残留。
     /// 这是恢复闸门，不替代正常的遭遇流程。
     /// </summary>
     internal static class EncounterDiagnostics
     {
         private static DateTime? _noUiSince;
+        private static PlayerEncounter? _recoveryEncounter;
         private static bool _hadEncounter;
         private static string _lastSignature = "";
 
         public static void OnSessionLaunched()
         {
-            _noUiSince = null;
+            ResetRecovery();
             _hadEncounter = false;
             _lastSignature = "";
             LogState("session launched");
@@ -39,18 +42,22 @@ namespace AIChronicle
         {
             try
             {
-                TickCore();
+                TickCore(DateTime.UtcNow);
             }
             catch (Exception ex)
             {
+                ResetRecovery();
                 UiTrace.Log("[Encounter] Tick failed: " + ex);
             }
         }
 
-        private static void TickCore()
+        internal static void TickCore(DateTime now)
         {
             if (Campaign.Current == null)
+            {
+                ResetRecovery();
                 return;
+            }
 
             var encounter = PlayerEncounter.Current;
             if (encounter == null)
@@ -60,7 +67,7 @@ namespace AIChronicle
                     UiTrace.Log("[Encounter] current=null (encounter ended)");
                     _hadEncounter = false;
                 }
-                _noUiSince = null;
+                ResetRecovery();
                 _lastSignature = "";
                 return;
             }
@@ -71,32 +78,28 @@ namespace AIChronicle
                 LogState("encounter active");
             }
 
-            bool atMenu = IsAtMenu();
-            bool mapConversation = IsMapConversationActive();
-            bool conversation = IsConversationActive();
-            bool mapEvent = HasMapEvent();
-            bool modUi = HasModUi();
-            string signature = BuildSignature(encounter, atMenu, mapConversation, conversation, mapEvent, modUi);
+            string signature = BuildSignature(encounter);
             if (signature != _lastSignature)
             {
                 _lastSignature = signature;
                 LogState("state changed");
             }
 
-            if (atMenu || conversation || mapEvent || modUi)
+            if (GetRecoveryBlockReason() != null)
             {
-                _noUiSince = null;
+                ResetRecovery();
                 return;
             }
 
-            if (_noUiSince == null)
+            if (_noUiSince == null || !ReferenceEquals(_recoveryEncounter, encounter))
             {
-                _noUiSince = DateTime.UtcNow;
-                UiTrace.Log("[Encounter] no menu/conversation/map event; waiting 8s before recovery");
+                _noUiSince = now;
+                _recoveryEncounter = encounter;
+                UiTrace.Log("[Encounter] idle world map; waiting 8s before recovery of this encounter");
                 return;
             }
 
-            if ((DateTime.UtcNow - _noUiSince.Value).TotalSeconds < 8.0)
+            if ((now - _noUiSince.Value).TotalSeconds < 8.0)
                 return;
 
             UiTrace.Log("[Encounter] stale for 8s -> PlayerEncounter.Finish()");
@@ -112,7 +115,7 @@ namespace AIChronicle
             }
             finally
             {
-                _noUiSince = null;
+                ResetRecovery();
                 _lastSignature = "";
             }
         }
@@ -120,13 +123,25 @@ namespace AIChronicle
         /// <summary>let_go 结束对话后，下一帧显式收尾遭遇，避免只置 LeaveEncounter 而留下 Current。</summary>
         public static void FinishAfterLetGo()
         {
+            var expectedEncounter = Campaign.Current == null ? null : PlayerEncounter.Current;
+            if (expectedEncounter == null || !PlayerEncounter.LeaveEncounter)
+                return;
+
             MainThreadExecutor.Post(() =>
             {
                 try
                 {
-                    var encounter = PlayerEncounter.Current;
-                    if (encounter == null || !PlayerEncounter.LeaveEncounter)
+                    if (Campaign.Current == null || !ReferenceEquals(PlayerEncounter.Current, expectedEncounter)
+                        || !PlayerEncounter.LeaveEncounter)
                         return;
+
+                    // let_go 可以主动收尾其遭遇菜单，但不能跨到新遭遇、Mission 或定居点流程。
+                    string? blocked = GetRecoveryBlockReason(allowEncounterMenu: true);
+                    if (blocked != null)
+                    {
+                        LogState("let_go Finish deferred: " + blocked);
+                        return;
+                    }
 
                     LogState("let_go -> Finish");
                     PlayerEncounter.Finish();
@@ -155,15 +170,10 @@ namespace AIChronicle
                 return;
             }
 
-            if (IsConversationActive())
+            string? blocked = GetRecoveryBlockReason();
+            if (blocked != null)
             {
-                Show("当前正在对话中，未修复。请先结束对话。");
-                return;
-            }
-
-            if (HasMapEvent())
-            {
-                Show("当前正在战斗/地图事件中，未修复。");
+                Show(blocked);
                 return;
             }
 
@@ -185,6 +195,38 @@ namespace AIChronicle
             MainThreadExecutor.DisplayMessage(new InformationMessage("[AI编年史] " + text, Colors.Yellow));
         }
 
+        private static void ResetRecovery()
+        {
+            _noUiSince = null;
+            _recoveryEncounter = null;
+        }
+
+        /// <summary>所有恢复入口共用的安全闸门；未知状态一律不调用 Finish。</summary>
+        private static string? GetRecoveryBlockReason(bool allowEncounterMenu = false)
+        {
+            if (Mission.Current != null || !(Game.Current?.GameStateManager?.ActiveState is MapState mapState))
+                return "当前不在大地图或正在场景中，未修复。请退出场景后再试。";
+
+            var party = MobileParty.MainParty;
+            if (party == null || !party.IsActive)
+                return "当前主队伍不可用，未修复。";
+
+            if (party.CurrentSettlement != null || PlayerEncounter.EncounterSettlement != null
+                || PlayerEncounter.LocationEncounter != null)
+                return "当前仍在城镇/村庄等定居点流程中，未修复。请先返回大地图。";
+
+            if (mapState.MapConversationActive || IsConversationActive())
+                return "当前正在对话中，未修复。请先结束对话。";
+
+            if (HasMapEvent())
+                return "当前正在战斗/地图事件中，未修复。";
+
+            if ((!allowEncounterMenu && mapState.AtMenu) || HasModUi())
+                return "当前仍有菜单/模组界面打开，未修复。请先关闭界面。";
+
+            return null;
+        }
+
         private static bool IsAtMenu()
         {
             return Game.Current?.GameStateManager?.ActiveState is MapState mapState && mapState.AtMenu;
@@ -202,7 +244,8 @@ namespace AIChronicle
 
         private static bool HasMapEvent()
         {
-            return MobileParty.MainParty?.MapEvent != null;
+            return MobileParty.MainParty?.MapEvent != null || PlayerEncounter.Battle != null
+                || (Game.Current?.GameStateManager?.ActiveState is MapState mapState && mapState.IsSimulationActive);
         }
 
         /// <summary>模组自己的全屏 UI 打开时不要自动收尾（尤其 AI 聊天/史书/秘书处）。</summary>
@@ -217,11 +260,13 @@ namespace AIChronicle
             return false;
         }
 
-        private static string BuildSignature(PlayerEncounter encounter, bool atMenu, bool mapConversation,
-            bool conversation, bool mapEvent, bool modUi)
+        private static string BuildSignature(PlayerEncounter encounter)
         {
-            return $"{encounter.EncounterState}|{PlayerEncounter.LeaveEncounter}|{atMenu}|{mapConversation}|" +
-                   $"{conversation}|{mapEvent}|{modUi}|" +
+            return $"{encounter.EncounterState}|{PlayerEncounter.LeaveEncounter}|{IsAtMenu()}|{IsMapConversationActive()}|" +
+                   $"{IsConversationActive()}|{HasMapEvent()}|{HasModUi()}|" +
+                   $"{Game.Current?.GameStateManager?.ActiveState?.GetType().Name}|{Mission.Current != null}|" +
+                   $"{MobileParty.MainParty?.IsActive}|{MobileParty.MainParty?.CurrentSettlement?.StringId}|" +
+                   $"{PlayerEncounter.LocationEncounter != null}|" +
                    $"{PlayerEncounter.EncounteredMobileParty?.StringId ?? "-"}|{PlayerEncounter.EncounterSettlement?.StringId ?? "-"}";
         }
 
@@ -229,19 +274,24 @@ namespace AIChronicle
         {
             try
             {
-                var encounter = PlayerEncounter.Current;
+                var encounter = Campaign.Current == null ? null : PlayerEncounter.Current;
                 bool atMenu = IsAtMenu();
                 bool mapConversation = IsMapConversationActive();
                 bool conversation = IsConversationActive();
                 bool mapEvent = HasMapEvent();
                 bool modUi = HasModUi();
+                string activeState = Game.Current?.GameStateManager?.ActiveState?.GetType().Name ?? "-";
+                bool mission = Mission.Current != null;
+                bool insideSettlement = MobileParty.MainParty?.CurrentSettlement != null;
+                bool locationEncounter = Campaign.Current != null && PlayerEncounter.LocationEncounter != null;
                 string encountered = PlayerEncounter.EncounteredMobileParty?.Name?.ToString() ?? "-";
                 string settlement = PlayerEncounter.EncounterSettlement?.Name?.ToString() ?? "-";
                 string state = encounter?.EncounterState.ToString() ?? "-";
                 bool leave = encounter != null && PlayerEncounter.LeaveEncounter;
                 UiTrace.Log($"[Encounter] {reason} current={encounter != null} state={state} leave={leave} " +
                             $"atMenu={atMenu} mapConversation={mapConversation} conversation={conversation} " +
-                            $"mapEvent={mapEvent} modUi={modUi} " +
+                            $"mapEvent={mapEvent} modUi={modUi} activeState={activeState} mission={mission} " +
+                            $"insideSettlement={insideSettlement} locationEncounter={locationEncounter} " +
                             $"encountered={encountered} settlement={settlement} time={Campaign.Current?.TimeControlMode}");
             }
             catch (Exception ex)

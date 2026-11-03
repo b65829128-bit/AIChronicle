@@ -18,6 +18,7 @@ namespace TaleWorlds.Library
     public static class Colors
     {
         public static Color Red { get; } = new Color();
+        public static Color Yellow { get; } = new Color();
     }
 
     public static class InformationManager
