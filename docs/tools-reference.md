@@ -14,7 +14,7 @@
 
 > Linux 上 dnSpy 不可用；用 `ilspycmd` 生成/更新 `BLSource/`，或用 Rider 内置反编译。游戏运行经 Steam/Proton，见 `docs/linux-dev.md`。
 
-## 2. 游戏工具（tools.json，56 个）
+## 2. 游戏工具（tools.json，59 个）
 
 | 工具 | 类别 | 说明 |
 |------|------|------|
@@ -27,6 +27,9 @@
 | `query_surroundings` | 查询 | 扫描周围环境（当前位置、附近城镇城堡、附近部队及阵营关系；半径按地图比例） |
 | `update_knowledge` | 认知 | 记录关于对方的新认知 |
 | `change_relation` | 关系 | 修改对任意人物的好感度（支持 target_entity_id） |
+| `query_meeting` | 查询 | 仅当前会晤：查看同一份交涉单、版本、事项字段和双方可用财物，编号和版本置于结果前部 |
+| `propose_meeting` | 社交 | 提出/还价：完整结构化 `terms`（`typeId`、`parameters`、`otherOffer/yourOffer`，每方含 gold/items/actions；actions 使用该方可用的注册条款与参数），新提议空编号/版本 0，还价使用当前编号/版本；可由 AI 主动发起 |
+| `respond_meeting` | 社交 | 接受/拒绝/撤回当前编号和版本的提议；双方接受同一版后统一执行；关闭/切档/旧版本拒绝 |
 | `give_gold` | 经济 | 赠予任意人物金币（支持 target_entity_id） |
 | `request_gold` | 经济 | 向任意人物索要金币（玩家需确认，弹窗 60 秒倒计时超时视为拒绝，NPC 自动划转） |
 | `move_to_settlement` | 行军 | 部队行军到城镇/城堡/村庄（支持 activate:true 参数自动唤醒） |
@@ -103,7 +106,7 @@
 | universal | update_knowledge, cancel_action, create_clan（仅天意） | 全部 |
 | query | query_character, query_settlement, query_settlement_geography, query_world_state, query_recent_events, query_surroundings, query_party_troops, query_available_troops, query_settlement_villages, query_kingdom_settlements, query_clan_members, query_clan_fiefs, query_kingdom_clans, query_war_status, query_pending_proposals, query_hero_skills, query_influence, query_agenda, query_policies | 全部 |
 | council | propose_agenda, respond_to_agenda, defend_agenda | conversation / letter / diplomacy / self_review / fief_review / curia / curia_defense |
-| social | change_relation, give_gold, request_gold, give_item, request_items, let_go | conversation |
+| social | change_relation, give_gold, request_gold, give_item, request_items, let_go, propose_meeting, respond_meeting | conversation（会晤中转钱/交物四工具及直接释放俘虏由结构化交涉替代） |
 | movement | move_to_settlement, wait_at_settlement, go_around_party | autonomous（conversation 亦激活） |
 | military | raid_settlement, besiege_settlement, engage_party, defend_settlement, patrol_settlement, escort_party, recruit_troops, upgrade_troops, form_army, release_prisoner, execute_prisoner | autonomous（conversation 亦激活） |
 | diplomacy | declare_war（朝议启用时拒绝）, propose_peace（拒绝）, propose_alliance（拒绝）, propose_trade（拒绝）, end_alliance（拒绝，改用 break_alliance）, respond_to_diplomacy_proposal, gift_fief（仅自己封地）, change_kingdom（AI 可用，玩家拒绝）, create_kingdom（实验性）, consult_king, reply_consult | diplomacy（conversation 亦激活） |
@@ -113,3 +116,5 @@
 **玩家发起的聊天（conversation）是全功能通道**——所有分类默认激活。理由：AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全，对话里达成的承诺（议和/出兵/换国/写信/放人）就无法兑现。能力门控照旧：国王专属工具（朝议提议/结盟/问询）仍只有国王拿到，部队工具仍只有带兵者拿到，`change_kingdom` 仅氏族领袖可用——所以对话里每个 NPC 的可用工具由身份决定。
 
 对话/书信/签到可调 `browse_tools("military")` 解锁本次能力范围内的分类，下一轮即可使用；返回工具名/参数名，完整定义由下一轮 API tools 提供。重复浏览已解锁分类不重建 schema。
+
+会晤工具额外受当前会话约束：后台、书信、秘书处及 CEF 回退的原生聊天均不开放。`ToolExecutor` 同样检查会话、对象和 epoch，并拦截会晤中的旧直接转钱/交物/释放俘虏工具。旧 `change_kingdom` 的 join_kingdom/defect_to_kingdom 模式在会晤中须用 change_allegiance 条款，其他模式保持原规则。行动条款注册而非任意工具名执行；新增会受主线程、权限、资源冲突和批执行结果约束。`ToolParamDef.Schema` 可声明嵌套 object/array/enum，现有简单参数沿用 type/description；创建目录时深复制 schema，保持一次激活内稳定。详见 `plan-meeting.md`。

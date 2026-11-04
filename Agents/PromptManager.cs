@@ -176,6 +176,7 @@ namespace AIChronicle
             CopyPromptToCampaign("diplomacy_rules.txt");
             CopyPromptToCampaign("chancery_rules.txt");
             CopyPromptToCampaign("conversation_rules.txt");
+            CopyPromptToCampaign("meeting_rules.txt");
             CopyPromptToCampaign("letter_rules.txt");
             CopyPromptToCampaign("historian_rules.txt");
             CopyPromptToCampaign("yearly_chronicle_prompt.txt");

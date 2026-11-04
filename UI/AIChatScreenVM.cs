@@ -129,6 +129,9 @@ namespace AIChronicle
         private readonly Hero _hero;
         private readonly CharacterPrompt _charPrompt;
         private readonly string _intent;
+        private readonly string? _meetingSessionId;
+        private volatile bool _closed;
+        public event Action? Changed;
         private readonly string _agentId = "";
         private readonly string _targetId = "";
         private List<ChatHistoryEntry> _sessionMessages = new();
@@ -167,7 +170,7 @@ namespace AIChronicle
         public bool IsLoading
         {
             get => _isLoading;
-            set => SetField(ref _isLoading, value, "IsLoading");
+            set { SetField(ref _isLoading, value, "IsLoading"); Changed?.Invoke(); }
         }
 
         [DataSourceProperty]
@@ -180,11 +183,12 @@ namespace AIChronicle
         [DataSourceProperty]
         public MBBindingList<ChatMessageVM> Messages { get; } = new();
 
-        public AIChatScreenVM(Hero hero, string intent = "conversation")
+        public AIChatScreenVM(Hero hero, string intent = "conversation", string? meetingSessionId = null)
         {
             _hero = hero;
             _charPrompt = PromptManager.LoadCharacterPrompt(hero);
             _intent = intent;
+            _meetingSessionId = meetingSessionId;
             _titleText = intent switch
             {
                 "letter" => $"给 {_charPrompt.HeroName} 写信",
@@ -222,7 +226,7 @@ namespace AIChronicle
                 foreach (var entry in _sessionMessages)
                 {
                 if (entry.Role == "tool") continue;
-                var sender = entry.Role == "user" ? "你" : _charPrompt.HeroName;
+                var sender = entry.Role == "user" ? "你" : entry.Role == "system" ? "会晤记录" : _charPrompt.HeroName;
                 string color;
                 if (entry.IsLetter)
                 {
@@ -260,6 +264,23 @@ namespace AIChronicle
             OnClose?.Invoke();
         }
 
+        public override void OnFinalize()
+        {
+            _closed = true;
+            base.OnFinalize();
+        }
+
+        /// <summary>会晤中的系统事实进入同一往来线程；复制发给 LLM 的历史，避免工具执行时改动其枚举。</summary>
+        public void AddMeetingRecord(string text)
+        {
+            if (_closed) return;
+            _sessionMessages.Add(new ChatHistoryEntry { Role = "system", Content = text });
+            PromptManager.AppendChatLogFor(_agentId, _targetId, "system", text);
+            Messages.Add(new ChatMessageVM("会晤记录", text, "system", "#C5AA72FF", PromptManager.GetCurrentTimeString(),
+                _chatFontSize, _chatSenderFontSize, _chatTimeFontSize, _messageSpacing, _contentIndent, _senderTopGap, _contentTopGap));
+            Changed?.Invoke();
+        }
+
         /// <summary>
         /// 若当前线程是玩家与某 NPC 的往来线程，推进该线程的已读水位（玩家打开/发送/看到新回复时调用）。
         /// 秘书处（双侧都是玩家）或虚拟实体线程不做处理。只在主线程调用。
@@ -279,7 +300,7 @@ namespace AIChronicle
 
         public void ExecuteSend()
         {
-            if (_isLoading || string.IsNullOrWhiteSpace(_inputText))
+            if (_closed || _isLoading || string.IsNullOrWhiteSpace(_inputText))
                 return;
 
             TtsService.Stop(); // 玩家发言即打断旧语音
@@ -377,10 +398,13 @@ namespace AIChronicle
 
             Task.Run(async () =>
             {
+                var previousMeeting = MeetingContext.SessionId;
+                MeetingContext.SessionId = _meetingSessionId;
                 try
                 {
-                    _charPrompt.ChatHistory = _sessionMessages;
+                    _charPrompt.ChatHistory = new List<ChatHistoryEntry>(_sessionMessages);
                     var chatResponse = await AIChatClient.SendMessage(_charPrompt, _hero, true, _intent);
+                    if (_closed || chatResponse.FinishReason == "meeting_ended" || chatResponse.FinishReason == "campaign_ended") return;
                     var displayText = chatResponse.Content;
 
                     _sessionMessages.Add(new ChatHistoryEntry
@@ -444,6 +468,9 @@ namespace AIChronicle
                                     "change_relation" => $"调整了对{tname}的好感度",
                                     "give_gold" => $"赠予了{tname}金币",
                                     "request_gold" => $"向{tname}索要了金币",
+                                    "query_meeting" => "查看了当前会晤",
+                                    "propose_meeting" => "提出了交涉条件",
+                                    "respond_meeting" => "回应了交涉请求",
                                     "query_character" => "查询了人物信息",
                                     "query_settlement" => "查询了定居点信息",
                                     "query_settlement_geography" => "查询了地理情报",
@@ -504,6 +531,7 @@ namespace AIChronicle
                     // 修复：UI 绑定集合/属性只在主线程修改——原实现从后台线程直接改 MBBindingList，跨线程竞态
                     MainThreadExecutor.RunOnMainThread(() =>
                     {
+                        if (_closed) return;
                         // 修复：assistant 消息时间戳用"回复时刻"而非发送时捕获的 now（信件/慢回复时曾显示错误时间）
                         Messages.Add(new ChatMessageVM(_charPrompt.HeroName, displayText,
                             "assistant", "#F4D03FFF", PromptManager.GetCurrentTimeString(),
@@ -525,7 +553,8 @@ namespace AIChronicle
                         // 避免玩家回到"投降/应战"的死角选项（对话中遭遇不会自动 tick 结束）。
                         if (PlayerEncounter.Current != null && PlayerEncounter.LeaveEncounter)
                         {
-                            AIChatScreen.Close();
+                            if (_meetingSessionId != null) OnClose?.Invoke();
+                            else AIChatScreen.Close();
                             try
                             {
                                 if (Campaign.Current?.ConversationManager != null
@@ -542,8 +571,10 @@ namespace AIChronicle
                 }
                 catch (Exception ex)
                 {
+                    if (_closed) return;
                     MainThreadExecutor.RunOnMainThread(() =>
                     {
+                        if (_closed) return;
                         Messages.Add(new ChatMessageVM("系统", $"错误：{ex.Message}",
                             "system", "#E74C3CFF", PromptManager.GetCurrentTimeString(),
                             24, 22, 22, 60, 15, 6, 6));
@@ -551,8 +582,10 @@ namespace AIChronicle
                 }
                 finally
                 {
-                    MainThreadExecutor.RunOnMainThread(() =>
+                    MeetingContext.SessionId = previousMeeting;
+                    if (!_closed) MainThreadExecutor.RunOnMainThread(() =>
                     {
+                        if (_closed) return;
                         IsLoading = false;
                         SendButtonText = "发送";
                     });

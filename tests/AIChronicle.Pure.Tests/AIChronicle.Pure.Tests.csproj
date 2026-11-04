@@ -17,6 +17,10 @@
     <Compile Include="LlmTests.cs" />
     <Compile Include="IdentityStubs.cs" />
     <Compile Include="EncounterTests.cs" />
+    <Compile Include="MeetingTests.cs" />
+    <Compile Include="../../Systems/MeetingModels.cs" Link="MeetingModels.cs" />
+    <Compile Include="../../Systems/MeetingNegotiation.cs" Link="MeetingNegotiation.cs" />
+    <Compile Include="../../Systems/MeetingBatch.cs" Link="MeetingBatch.cs" />
     <!-- 只链接不依赖 TaleWorlds 的纯逻辑文件（MainThreadExecutor 用最小桩）：无需游戏 DLL 即可在 CI/Linux 跑。 -->
     <Compile Include="../../Core/MainThreadExecutor.cs" Link="MainThreadExecutor.cs" />
     <Compile Include="../../Systems/HistoryArchive.cs" Link="HistoryArchive.cs" />
@@ -39,6 +43,7 @@
     </Reference>
     <None Include="../../_Module/Prompts/tools.json" Link="Prompts/tools.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../_Module/Prompts/agent_tools.json" Link="Prompts/agent_tools.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../_Module/Prompts/meeting_rules.txt" Link="Prompts/meeting_rules.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../_Module/Prompts/Templates/context_template.txt" Link="Prompts/context_template.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

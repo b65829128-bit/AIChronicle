@@ -98,11 +98,19 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | 引擎层 | `Core/` | SubModule 入口、MCM 设置、LLM Provider 抽象、TTS、基础设施 |
 | Agent 核心 | `Agents/` | ContextBuilder、AIChatClient、ToolCatalog（每次激活的工具快照）、AgentManager、调度器、记忆 |
 | Entity | `Entities/` | 玩家/NPC 统一抽象 |
-| 工具执行 | `Tools/` | 56 游戏工具 + 18 文件/通信工具（按领域拆 partial；含 `ToolExecutor.Curia.cs`） |
+| 工具执行 | `Tools/` | 59 游戏工具 + 18 文件/通信工具（按领域拆 partial；含 `ToolExecutor.Curia.cs`） |
 | 界面 | `UI/` | 原生 Kit（`UI/Kit`）+ CEF 页面宿主/全 Web 史书/朝议参政页（`UI/Web`）+ 聊天/书信 ViewModel |
 | 游戏系统 | `Systems/` | 外交、朝议（`Curia*.cs`）、条约（`Treaty*.cs`）、历史记录、Harmony 补丁 |
 
 完整目录结构见 `docs/architecture.md` 第 17 节。工具快照在 `Agents/ToolCatalog.cs`；实时身份采集与关系渲染在 `Agents/ContextBuilder.Identity.cs`，纯事实文案在 `Entities/IdentityFacts.cs`。`tests/AIChronicle.Pure.Tests/LlmTests.cs` 覆盖 schema 稳定、目录一致、Provider usage、前后台预算与双方身份，`IdentityStubs.cs` 为身份采集提供最小只读桩；`EncounterTests.cs` 直接链接遭遇诊断源码，用最小状态桩覆盖竞技场/定居点保护、计时重置、手动修复与延迟放行。
+
+### 会晤扩展入口
+
+领主【会晤】以 `MeetingRegistry.Register(IMeetingAction)` 注册事项、`MeetingClauses.Register(IMeetingClauseHandler)` 注册双方报价中可组合的行动条款，玩家表单和 AI 共用版本化交涉单；保留原版交易/婚配入口。会晤工具只在当前会话开放，主线程分发必须捕获/恢复会话上下文，关闭/切档取消旧请求，不引入新存档字段。详细契约见 `docs/plan-meeting.md`。
+
+新增目录项：`Systems/MeetingModels.cs`、`MeetingNegotiation.cs`、`MeetingRegistry.cs`、`MeetingActions.cs`、`MeetingAssets.cs`、`MeetingService.cs`、`MeetingPageBuilder.cs`、`MeetingBatch.cs`、`MeetingClauses.cs`、`MeetingClauses.Prisoners.cs`、`MeetingClauses.Allegiance.cs`；`Tools/ToolExecutor.Meeting.cs`；`UI/Web/MeetingCefScreen.cs`；`_Module/WebUI/meeting.html/css/js`、`_Module/Prompts/meeting_rules.txt`；`tests/AIChronicle.Pure.Tests/MeetingTests.cs`、`tests/web/meeting-render.test.mjs`。完整树同步到 `docs/architecture.md`；菜单/参数/AI 工具/执行权限必须保持一致。
+
+会晤专属 AI 上下文只使用“你/对方”；`otherOffer/yourOffer` 分别为对方/当前 Agent 提供，不引入“玩家”身份。嵌套工具参数由 `ToolParamDef.Schema` 声明并深复制。新增动作的专属史料写入 `RecordApplied`，核心服务不按事项 ID 分支。行动 handler.Prepare 绑定实际执行对象、资源冲突键和生效/部分变化检查；批执行器先全量预检，任何不可撤销变化已发生后不假称完整回滚，标明部分履行且不自动重试。
 
 ## 4. 构建与部署
 
@@ -123,6 +131,7 @@ python3 scripts/package.py
 # 纯逻辑测试（无需游戏 DLL；CI 同款）
 dotnet run --project tests/AIChronicle.Pure.Tests/AIChronicle.Pure.Tests.csproj -c Release
 node tests/web/history-render.test.mjs
+node tests/web/meeting-render.test.mjs
 node scripts/ci-health.mjs
 ```
 
@@ -156,13 +165,14 @@ stat -c '%s' "$BANNERLORD_GAME_DIR/Modules/AIChronicle/SubModule.xml"
 |------|------|
 | `docs/architecture.md` | 架构详解（单一模型/场景连接/Provider 抽象/信息隔离完整表/扩展方式/提示词克制原则/记忆系统/流式架构/完整目录结构） |
 | `docs/subsystems.md` | 子系统机制（信件激活/封臣自省/朝议/条约/内政/盟约到期/历史系统/静默见闻） |
-| `docs/tools-reference.md` | 74 工具完整清单 + 工具分类系统 |
+| `docs/tools-reference.md` | 77 工具完整清单 + 工具分类系统 |
 | `docs/debugging.md` | 调试方法/日志位置/生命周期陷阱/故障排查 |
 | `docs/harmony.md` | Harmony 补丁模式/BLSource 搜索指南/创建新模组 |
 | `docs/linux-dev.md` | Linux 开发工作流（环境/构建/部署/打包/Proton 运行/日志/调试边界） |
 | `docs/ui-framework.md` | 原生 Kit UI 框架（主题/组件/屏幕基类/Gallery/迁移规则） |
 | `docs/ui-web.md` | CEF live 页面（CefSharp/CefBridge/输入/BGRA 转换/性能与限制） |
 | `docs/plan-history-cef.md` | 全 Web 史书 MVP 状态与收尾计划（HistoryArchive/边界/清晰度） |
+| `docs/plan-meeting.md` | 会晤契约（可注册事项/同一交涉单/AI 议价/婚配/原版共存/扩展与测试） |
 | `docs/plan-curia.md` | 朝议（Curia）设计契约（议程/应召/权重/门槛/执行器/UI/提示词/测试） |
 | `docs/plan-treaty.md` | 条约（战前通牒/附条件议和）设计契约（条款/校验/休战/史料/日记/测试） |
 | `docs/plan-silent-memory.md` | 静默见闻设计契约（事件清单/三环分派/渲染/缓冲/幂等/read_diary/分卷/水位/测试） |

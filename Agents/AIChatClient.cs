@@ -165,7 +165,8 @@ namespace AIChronicle
             var available = agent == null ? definitions : ContextBuilder.GetFilteredTools(agent, definitions);
             if (agent != null && target?.HasCapability(EntityCapability.Diplomat) == true)
                 available = available.Concat(ContextBuilder.GetFilteredTools(target, definitions)).ToList();
-            return new ToolCatalog(available, intent, unlocked, includeTools);
+            return new ToolCatalog(available, intent, unlocked, includeTools,
+                meeting: intent == "conversation" && MeetingContext.SessionId != null);
         }
 
         public static void CheckPendingInquiry()
@@ -329,6 +330,13 @@ namespace AIChronicle
 
             const string volatileRole = "system";
 
+            if (MeetingContext.SessionId != null)
+            {
+                var meetingId = MeetingContext.SessionId;
+                volatileBlock += "\n\n" + MainThreadExecutor.RunOnMainThread(() =>
+                    MeetingService.IsActive(meetingId, hero) ? MeetingPageBuilder.BuildContext() : "会晤已经结束，不得执行行动。");
+            }
+
             // 构建消息序列：system(稳定前缀) + 历史 + volatile(易变块) + 当前 user 消息。
             // volatile 固定为 system 角色（明确"系统情境"而非对方话语）。
             List<JToken> BuildMessageList()
@@ -445,6 +453,12 @@ namespace AIChronicle
             {
                 if (MainThreadExecutor.CampaignEpoch != campaignEpoch)
                     return CampaignEnded();
+                if (MeetingContext.SessionId != null)
+                {
+                    var meetingId = MeetingContext.SessionId;
+                    if (!MainThreadExecutor.RunOnMainThread(() => MeetingService.IsActive(meetingId, hero)))
+                        return new ChatResponse { Content = "会晤已结束。", FinishReason = "meeting_ended" };
+                }
 
                 var isLastRound = round == roundBudget - 1;
                 var queriesDisabled = isLastRound || queryCalls >= queryBudget;

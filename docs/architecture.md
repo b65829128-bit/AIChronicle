@@ -28,7 +28,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **书信模式** | 支持书信 intent，O 键唤起书信往来面板（统一线程列表 + 未读角标） |
 | **文件即知识库** | NPC 的记忆、目标、对目标的认知都是文件，Agent 通过 `read_file`/`write_file`/`append_file`/`edit_file`/`delete_file`/`move_file` 精确读写 |
 | **信息隔离** | 每个 NPC 只能操作自己目录下的文件 + `World/`，不知道其他 NPC 和玩家的对话 |
-| **工具定义文件化** | 73 个工具定义在 `tools.json`（56 个游戏工具，含 `propose_agenda`/`respond_to_agenda`/`defend_agenda`/`query_agenda`/`query_policies`）和 `agent_tools.json`（17 个文件/通信工具，含 `write_chronicle`/`submit_secret_advisory`/`consult_king`/`send_envoy`/`reply_envoy`/`record_resolve`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
+| **工具定义文件化** | 77 个工具定义在 `tools.json`（59 个游戏工具，含 `propose_agenda`/`respond_to_agenda`/`defend_agenda`/`query_agenda`/`query_policies`）和 `agent_tools.json`（18 个文件/通信工具，含 `write_chronicle`/`submit_secret_advisory`/`consult_king`/`send_envoy`/`reply_envoy`/`record_resolve`）中，热重载，不硬编码；两文件缺失时回退内嵌最小工具集 |
 | **工具分类系统** | 每个工具归属 9 个分类之一（universal/query/social/movement/military/diplomacy/council/file/communication）。`ToolCatalog` 每次激活固定能力与场景筛选结果，API schema、提示词索引和浏览结果共用；预算只在执行端限制，不移除 schema。只有对话/书信/签到可用 `browse_tools` 显式扩展快照。**玩家发起的聊天（conversation）是全功能通道——全部分类默认激活**，朝议分类也在书信/政务/自省中默认开放；能力门控照旧 |
 | **提示词全部可编辑** | `context_template.txt`、`persona_generation.txt`、`chancery_rules.txt`、`world_info.txt`、`game_rules.txt` 等均为文件，战役创建时自动复制到战役目录，热重载优先读战役目录 |
 | **多轮工具调用** | `SendMessage` 内建 SSE 流式循环，模型调用工具 → 执行 → 追加结果 → 重请求，直到模型自然停止（无轮数限制，仅保留极高安全阀防死循环） |
@@ -38,7 +38,9 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 | **天意** | 虚拟实体（ID: `__fate__`，HeroRef=null，与史官并列）。家族补充系统：在世贵族/佣兵家族**总数**（封臣世家 + 雇佣兵公司，佣兵不论是否受雇都计入）低于「家族总数补充阈值」时被激活，决定新家族名称/文化/投效势力/以封臣还是佣兵身份入世（`create_clan`，能力门控仅天意可用），成员程序生成、等级 2、族长带兵、旗帜随机，入原始史料但不激活史官。只在玩家位于大地图时检测（捏脸/初始化阶段计数失真），有 MCM 冷却防连补；成员模板用 `RebelliousHeroTemplates`（`GetRandomTemplateByOccupation(Lord)` 查不到 Lord 模板、恒 null 的历史死路径已弃） |
 | **提示词人称统一** | 上下文只出现「你」(Agent 自己) 和「对方」(交互对象) 两角色，"TA"等模糊指代全部禁用 |
 
-> **AI 聊天对话入口**：`LordChatBehavior` 在 `hero_main_options`（普通领主对话）与 `player_responds_to_surrender_demand`（被强敌擒获的投降/应战对话）两个节点注册【AI 聊天】选项。后者让被擒玩家可谈判，agent 可用 `let_go` 放行；`AIChatScreenVM` 在回复完成后检测 `PlayerEncounter.LeaveEncounter` 为真时自动关闭聊天并 `EndConversation()` 结束对话（对话中遭遇不会自动 tick 结束），玩家获释。
+> **AI 聊天对话入口**：`LordChatBehavior` 在 `hero_main_options`（普通领主对话）与 `player_responds_to_surrender_demand`（被强敌擒获的投降/应战对话）两个节点注册【会晤】选项（CEF 不可用/非领主/net6 回退原生聊天）。后者让被擒玩家可谈判，agent 可用 `let_go` 放行；`AIChatScreenVM` 在回复完成后检测 `PlayerEncounter.LeaveEncounter` 为真时自动关闭聊天并 `EndConversation()` 结束对话（对话中遭遇不会自动 tick 结束），玩家获释。
+
+> **会晤的结构化行动**：`MeetingRegistry.Register(IMeetingAction)` 为事项注册入口；`MeetingNegotiation` 维护双方同版接受与幂等，`MeetingAssets` 在主线程预检/提交并对尚未生效的失败补偿资产。三工具 `query_meeting/propose_meeting/respond_meeting` 只在会晤会话开放，旧直接转钱/交物与释放俘虏在该会话禁用，旧换国工具的加入/叛逃模式要求通过条款执行。`MeetingClauses.Register(IMeetingClauseHandler)` 注册报价中的 actions，`MeetingBatch` 预检/排序/校验资源冲突，无法撤销的动作部分生效时如实记录而不假称回滚。AsyncLocal `MeetingContext.SessionId` 随主线程工具分发捕获/恢复，关闭/切档/换对象使旧行动失效。动作专有的成功记录交给 handler.RecordApplied。无新存档字段，详见 `plan-meeting.md`。
 
 > **提示词同步规则（newer-wins）**：基础目录 `_Module/Prompts/` 是模板源，战役创建时复制到 `Campaigns/{战役}/`。每次进档（`OnSessionLaunched` → `PromptManager.StartCampaign`）会做同步——**只要基础目录文件比战役副本新，就覆盖战役副本**。玩家在战役副本上的手动编辑（时间戳更新）会被保留。
 >
@@ -353,7 +355,7 @@ Usage:
 
 ### 当前实现
 
-所有 73 个工具（56 个游戏工具 + 17 个文件/通信工具）定义在 `tools.json`/`agent_tools.json`（热重载，不硬编码）。每次 API 请求都附带能力过滤后的工具定义。模型自行判断是否需要调用。返回的 `ChatResponse` 包含：
+所有 77 个工具（59 个游戏工具 + 18 个文件/通信工具）定义在 `tools.json`/`agent_tools.json`（热重载，不硬编码）。每次 API 请求都附带能力过滤后的工具定义。模型自行判断是否需要调用。返回的 `ChatResponse` 包含：
 - `Content`：角色扮演文本回复
 - `LearnedKnowledge`：如果模型调用了 `update_knowledge`，这里包含新认知
 - `ToolCalls`：原始工具调用数据（用于构建反馈闭环）
@@ -460,6 +462,7 @@ Usage:
 │   ├── ToolExecutor.Military.cs ← 行军/军事（move/raid/besiege/form_army/驻防/招募/俘虏）
 │   ├── ToolExecutor.Social.cs  ← 社交/通信（金钱物品/好感/放行/书信/密陈/问询/密使）
 │   ├── ToolExecutor.Curia.cs   ← 朝议（propose/respond/defend/query_agenda）
+│   ├── ToolExecutor.Meeting.cs ← 会晤（查询/提议/回应），只限当前会话
 │   ├── ToolExecutor.Diplomacy.cs ← 阵营变更（change_kingdom 全模式 + 家族等级限制）
 │   └── ToolExecutor.Fate.cs    ← 天意建族（create_clan + 预算成功才占用 + 随机旗帜/定居点）
 ├── UI/                         ← 界面层
@@ -468,8 +471,13 @@ Usage:
 │   ├── LetterListScreen.cs     ← 书信收信人列表屏幕
 │   ├── HistoryScreenVM.cs      ← 史书原生 ViewModel（只做绑定/选中态；数据经 HistoryArchive）
 │   ├── Kit/                    ← 原生 Kit UI 框架（KitScreen/KitTheme/组件/动态纹理/Gallery）
-│   └── Web/                    ← CEF 页面宿主（CefWebHost/CefWebScreen/HistoryCefScreen/CuriaCefScreen/Bridge；WebPage 脚手架）
+│   └── Web/                    ← CEF 页面宿主（CefWebHost/CefWebScreen/HistoryCefScreen/CuriaCefScreen/MeetingCefScreen/Bridge；WebPage 脚手架）
 ├── Systems/                    ← 游戏系统与 Harmony 补丁
+│   ├── MeetingModels.cs / MeetingNegotiation.cs ← 会晤 DTO/资产约束/状态机/补偿（纯逻辑）
+│   ├── MeetingRegistry.cs / MeetingActions.cs ← 事项注册接口、交易/婚配处理器与专属记录
+│   ├── MeetingClauses.cs / MeetingClauses.Prisoners.cs / MeetingClauses.Allegiance.cs ← 可组合行动注册、释放俘虏/家族换国
+│   ├── MeetingBatch.cs ← 多效果全量预检/资源冲突/执行次序/部分履行（纯逻辑）
+│   ├── MeetingAssets.cs / MeetingService.cs / MeetingPageBuilder.cs ← 精确物资/会话/网页与角色上下文
 │   ├── CuriaService.cs / .Attendance.cs / .Effects.cs / .Treaty.cs / .Threshold.cs ← 朝议（提议/应召/投票/结算/执行/条约/门槛）
 │   ├── CuriaModels.cs          ← 朝议数据模型
 │   ├── CuriaStore.cs           ← 朝议持久化/公开档案/日记/史料/通知
@@ -492,7 +500,7 @@ Usage:
 │   ├── FiefAssignmentPatch.cs  ← 攻城/条约受地后的国王分封（共享 QueueKingFiefDecision）
 │   ├── ExecutionNoPenaltyPatch.cs ← 处决无惩罚
 │   └── ClanDiscontinuationPatch.cs ← 独立家族永续（禁用原版 28 天灭族，MCM 可开关）
-├── docs/                       ← AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发/UI 框架与 CEF/i18n/朝议/条约/静默见闻）
+├── docs/                       ← AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux/UI/i18n/朝议/会晤/条约/静默见闻）
 ├── AGENTS.md                  ← 常驻开发指令（本文件）
 ├── README.md                  ← 开源主入口（英文简介，指向 README_MOD.md / AGENTS.md）
 ├── CONTRIBUTING.md            ← 贡献指南（构建方法、文档维护规则、PR 流程）
@@ -501,8 +509,8 @@ Usage:
 │   ├── package.py             ← Linux/跨平台打包（编译+部署+zip；含 NAudio 运行时依赖）
 │   └── package.ps1            ← Windows 兼容打包（同上）
 ├── tests/                      ← 纯逻辑测试（不依赖游戏 DLL）
-│   ├── AIChronicle.Pure.Tests/ ← 史册解析/权限/读取 + 主线程 epoch 测试（dotnet run）
-│   └── web/                    ← 史书页 Markdown 渲染测试（Node DOM 桩）
+│   ├── AIChronicle.Pure.Tests/ ← 史册/主线程/LLM/身份/遭遇/MeetingTests 会晤状态与补偿（dotnet run）
+│   └── web/                    ← 史书 Markdown + meeting-render.test.mjs 会晤动态字段/版本/原生回调（Node DOM 桩）
 ├── .github/workflows/
 │   ├── health.yml             ← 轻量 CI（无需游戏 DLL，push/PR 自动跑 health + 纯逻辑测试）
 │   └── build.yml              ← 手动编译工作流（Ubuntu runner，需 BANNERLORD_GAME_DIR 或 GAME_DLLS_URL 密钥）
@@ -515,7 +523,7 @@ Usage:
 │   │   │   ├── HistoryScreen.xml ← 原生史书（1100×700 双栏 fallback）
 │   │   │   └── KitHost.xml       ← 原生 Kit 宿主 prefab
 │   │   └── Brushes/Kit.xml       ← Kit 文本笔刷（Galahad）
-│   ├── WebUI/                ← CEF 页面资产（history/live/chronicle/theme/cef/preview）
+│   ├── WebUI/                ← CEF 页面资产（history/curia/meeting/live/chronicle/theme/cef/preview）
 │   └── Prompts/
 │       ├── world_info.txt     ← 默认世界背景（六大王国 + 天命）
 │       ├── world_info_nords.txt ← 可选诺德势力段（MCM「包含诺德势力」开启时由 ContextBuilder 拼入主世界观）

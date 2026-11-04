@@ -61,7 +61,7 @@ namespace AIChronicle
                 "aichronicle_ai_chat_dialog",
                 "hero_main_options",
                 "aichronicle_ai_chat_dialog_output",
-                "{=MFM_chat_option}【AI 聊天】",
+                "{=AIC_meeting_option}【会晤】",
                 new ConversationSentence.OnConditionDelegate(ChatDialogCondition),
                 new ConversationSentence.OnConsequenceDelegate(ChatDialogConsequence),
                 100,
@@ -82,7 +82,7 @@ namespace AIChronicle
                 "aichronicle_ai_chat_dialog_surrender",
                 "player_responds_to_surrender_demand",
                 "aichronicle_ai_chat_dialog_surrender_output",
-                "{=MFM_chat_option_surrender}【AI 聊天】",
+                "{=AIC_meeting_option_surrender}【会晤】",
                 new ConversationSentence.OnConditionDelegate(ChatDialogCondition),
                 new ConversationSentence.OnConsequenceDelegate(ChatDialogConsequence),
                 100,
@@ -114,7 +114,7 @@ namespace AIChronicle
             var entity = EntityManager.GetOrCreateEntity(hero);
             AddKnownNpc(entity.Id);
 
-            AIChatScreen.RequestOpen(hero);
+            AIChatScreen.RequestMeeting(hero);
         }
     }
 }

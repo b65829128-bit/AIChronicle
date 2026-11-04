@@ -14,9 +14,9 @@
 
 ### AI 领主聊天
 
-- 与任意领主对话时，对话选项中均出现 **「【AI 聊天】」** 选项
-- 点击后打开 **专用聊天窗口**（模态屏幕），窗口中显示完整的对话历史
-- 输入任意消息发给 LLM，AI 会获取**完整对话上下文**（之前的聊天记录都会传给 AI）
+- 与任意领主对话时，对话选项中均出现 **「【会晤】」** 选项
+- 领主点击后打开 **会晤窗口**（事项列表 / 往来聊天 / 交涉卡）；CEF 不可用时回退原生聊天，沿用同一份对话历史
+- 在会晤中点“开口交谈”（或原生聊天输入框）输入消息发给 LLM，AI 会获取**完整对话上下文**（之前的聊天记录都会传给 AI）
 - LLM 会以领主的身份角色扮演回复（中文）。**对话风格为自然口语、有来有回**（中世纪背景，措辞不过分现代）：短句、顺着对方的话接、对方问什么答什么；性格体现在语气态度上，而非堆砌文言修辞
 - 关掉聊天窗口后**回到对话界面**，可以继续正常交谈
 - AI 可以在对话中了解玩家，通过 **function calling** 机制自动更新对玩家的认知
@@ -46,7 +46,7 @@
   - Agent 可以调用 `request_gold` 向任意人物索要金币（向玩家索要时弹出确认框，60 秒倒计时，超时视为拒绝）
 - Agent 可以调用 `give_item` 将自己物品/装备交给任意人物（直接转账）
 - Agent 可以调用 `request_items` 向任意人物索要物品（向玩家索要时弹出确认框，60 秒倒计时，超时视为拒绝）
-- Agent 可以调用 `let_go` 在遭遇战中放玩家一马（仅当 NPC 兵力占优时可用，设置冷却期避免立即追击）——玩家被强敌擒获时，投降/应战对话中会出现【AI 聊天】选项，可谈判让 agent 放行；放行后对话自动结束、玩家获释
+- Agent 可以调用 `let_go` 在遭遇战中放玩家一马（仅当 NPC 兵力占优时可用，设置冷却期避免立即追击）——玩家被强敌擒获时，投降/应战对话中会出现【会晤】选项，可谈判让 agent 放行；放行后对话自动结束、玩家获释
 - **对话即全功能通道**：AI 聊天时其可用工具由身份与能力决定——国王可当场宣战/议和/结盟/颁诏，氏族领袖可当场换国/出兵/驻防/招募，被擒的敌方家族领袖也可在谈判中履行"加入某国"的承诺（先 `change_kingdom` 离旧国、再 `join_kingdom` 投效）。对话中谈成的协议都能立刻兑现，不会"口头答应却做不到"
 - **已知限制：** `request_gold` 和 `request_items` 向 NPC 索要时直接划转，NPC 不会经过 LLM 决策——未来应改为异步事件，让 NPC Agent 自行判断是否给
   - Agent 可以调用 `query_character` 查询任意人物的公开信息；所需事实已在【当前状况】提供时不重复查询，仅在信息缺失或需要更新实时数据时查询
@@ -70,9 +70,21 @@
   - **盟约"号召盟友宣战"的原版国内投票同样被拦截**，玩家对话里的原版"号召盟友"选项也被隐藏——军事同盟只保留名义作用，是否号召盟友/宣战由国王 Agent 激活时自行决定（或玩家经 M 键参政页）
   - Agent 可以调用 `grep` 在个人文件系统中按关键词搜索，定位到具体文件和行号后再用 `read_file` 精读
 
+### 会晤与 AI 交涉
+
+- 领主对话中的模组入口升级为【会晤】：事项列表、往来聊天、当前交涉卡；原版交易和婚配对话继续保留。
+- 玩家和 AI 可提出或还价同一份结构化请求，双向报价可组合金币、部队物资（保留品质，不含穿戴装备）和行动条款：释放指定贵族/指定数量士兵俘虏、整个家族加入/叛逃至指定王国；双方接受同一版本后才执行。
+- 家族婚配可指定双方成员（含玩家本人），附双向财物或无条件提出；族长 AI 判断，游戏校验资格并显示婚后家族归属。
+- 不可用事项显示原因；决斗显示尚未开放。关闭会晤结束未成交请求，不新增旧存档字段；CEF 不可用时回退原生聊天。
+- 操作：左侧选事项 → 右侧填双方条件/婚配人选，可在“我方提供/对方提供”中添加行动并选择目标，可附一句话 → 提出条件；对方还价后可接受、修改或拒绝。婚配先显示婚后家族归属。金币/文字使用原生输入框。
+- 例如我方给对方 10,000 第纳尔，对方承诺让整个家族加入我方所在王国；也可附带释放指定俘虏，或单独无偿提出行动。家族换国须执行者是家族领袖、达到封臣等级且不是在位王室，不能代替第三方作出承诺。
+- 组合条件先完整校验、再按次序执行；未发生不可撤销行动时失败会恢复财物，若原版动作异常导致部分生效，会如实显示已完成/未完成事项，不重复执行。
+- 会晤滚动修正为每格固定距离、短时间平滑累加；聊天/条件/下拉分别滚动，刷新保留阅读位置。
+- 会晤期间的转钱/交物、释放俘虏、加入/叛逃通过交涉单统一处理；关闭未成交会晤会撤销当前请求。双方人物称呼与 AI 上下文只用“你/对方”。扩展方式与边界见 `docs/plan-meeting.md`。
+
 ### AI 语音朗读（TTS）
 
-- **免费 Edge TTS**：AI 聊天（【AI 聊天】入口）收到回复时，用微软免费神经语音朗读（无需 API Key、无额度限制，需联网）。女角色用女声（晓晓）、男角色用男声（云希），性别音色映射集中一处便于日后扩展
+- **免费 Edge TTS**：AI 聊天（【会晤】入口）收到回复时，用微软免费神经语音朗读（无需 API Key、无额度限制，需联网）。女角色用女声（晓晓）、男角色用男声（云希），性别音色映射集中一处便于日后扩展
 - **仅聊天窗口**：现场对话朗读；**书信与参政页不朗读**（书信与现场对话同源存储于 chat_logs 线程，按 intent 区分，避免书信内容被误读）
 - **打断与停止**：玩家发消息自动打断旧语音；关闭聊天窗口、切档/退出游戏停止播放
 - **失败静默降级**：合成/播放失败不影响其他功能，失败原因写入调试日志
@@ -358,6 +370,7 @@ _Module/Prompts/
 ├── persona_generation.txt       # NPC性格生成提示词（玩家可编辑，热重载）
 ├── chancery_rules.txt           # 秘书处行为规则（热重载）
 ├── conversation_rules.txt       # 对话规则
+├── meeting_rules.txt            # 会晤交涉规则（你/对方、版本化双向报价）
 ├── letter_rules.txt             # 书信规则
 ├── diplomacy_rules.txt          # 外交决策规则（玩家可编辑，热重载）
 ├── historian_rules.txt          # 史官编年史规则（玩家可编辑，热重载）
@@ -501,7 +514,7 @@ _Module/Prompts/
 | 角色名上间距 | 角色名与时间戳之间的间距 | `6` |
 | 对话上间距 | 对话内容与角色名之间的间距 | `6` |
 | 重置聊天界面 | 一键恢复聊天界面所有默认值（按钮） | — |
-| 启用语音朗读（TTS） | AI 聊天（【AI 聊天】入口）收到回复时用语音朗读。免费 Edge TTS，需联网，无需 API Key。书信与参政页不朗读；女角色女声、男角色男声 | 关闭 |
+| 启用语音朗读（TTS） | AI 聊天（【会晤】入口）收到回复时用语音朗读。免费 Edge TTS，需联网，无需 API Key。书信与参政页不朗读；女角色女声、男角色男声 | 关闭 |
 | 语速（%） | 朗读语速偏移。-50 慢一半，+50 快一半，0 为正常 | `0` |
 | 音量（%） | 朗读音量，0 静音，100 最大 | `80` |
 | 测试语音 | 用当前设置合成并播放一句测试语音，验证网络与设备可用。主菜单也可测试（默认男声） | — |
@@ -527,7 +540,7 @@ _Module/Prompts/
 
 | 场景组 | 设置项 | 说明 |
 |--------|--------|------|
-| 对话与书信场景 | URL / 模型 / API 密钥 / 接口类型 | 玩家对话（【AI 聊天】）与写信共用（同一线程）；留空回退兜底 |
+| 对话与书信场景 | URL / 模型 / API 密钥 / 接口类型 | 玩家对话（【会晤】）与写信共用（同一线程）；留空回退兜底 |
 | 政务外交场景 | URL / 模型 / API 密钥 / 接口类型 | 国王内外政务审视（KingDiplomacy）；留空回退兜底 |
 | 外交问询场景 | URL / 模型 / API 密钥 / 接口类型 | 国王遣使问询他国（KingConsult）；留空回退兜底 |
 | 封地审视场景 | URL / 模型 / API 密钥 / 接口类型 | 被夺封方审视处境（FiefReview）；留空回退兜底 |
@@ -575,7 +588,7 @@ _Module/Prompts/
 2. 进入主菜单后，在 **Mod Options → AI编年史·言出法随** 中填入 API Key
 3. 开新档或读档 → 模组自动在 `Prompts/Campaigns/` 下创建本战役的提示词目录
 4. （可选）编辑 `context_template.txt`、`world_info.txt`、`game_rules.txt` 或角色 JSON 文件来定制 AI 行为
-5. 与任意领主对话 → 点击 **「【AI 聊天】」**
+5. 与任意领主对话 → 点击 **「【会晤】」**
 6. 在聊天窗口中输入消息，按「发送」按钮
 7. AI 回复会显示在聊天窗口中，支持多轮对话
 8. 点击聊天窗口右上角的 X 关闭，回到对话界面
@@ -620,22 +633,27 @@ AIChronicle/
 │   ├── AgentScheduler.cs    # 事件调度器基类（优先级队列、Tick）
 │   ├── AgentScheduler.Events.cs / Advisory.cs / Historian.cs / Fate.cs  # 事件处理/封臣自省/史官/天意
 │   └── PartyBehaviorManager.cs # 部队行为状态机（PendingAction + Tick）
-├── tests/AIChronicle.Pure.Tests/ # 纯逻辑回归；LlmTests.cs 覆盖工具快照/Provider usage/后台预算/身份，IdentityStubs.cs 提供身份桩，EncounterTests.cs 覆盖遭遇恢复的场景保护/计时/放行
+├── tests/AIChronicle.Pure.Tests/ # 纯逻辑回归；LlmTests.cs 覆盖工具快照/Provider usage/后台预算/身份，IdentityStubs.cs 提供身份桩，EncounterTests.cs 覆盖遭遇恢复的场景保护/计时/放行，MeetingTests.cs 覆盖双向提议/版本/幂等/资产补偿/工具隔离；tests/web/meeting-render.test.mjs 覆盖动态事项与过期 UI 事件
 ├── Entities/                # Entity 统一抽象
 │   ├── Entity.cs            # Entity 数据模型（统一玩家/NPC，附能力标签）
 │   ├── IdentityFacts.cs     # 公开身份事实快照与双方人称渲染（纯逻辑）
 │   └── EntityManager.cs     # Entity 生命周期管理、查找与缓存
-├── Tools/                   # 工具执行器（56 个游戏工具 + 18 个文件/通信工具，按领域拆 partial）
+├── Tools/                   # 工具执行器（59 个游戏工具 + 18 个文件/通信工具，按领域拆 partial）
 │   ├── ToolExecutor.cs      # 基类（工具入口 ExecuteToolCall + 共享助手）
-│   ├── ToolExecutor.Query.cs / Intel.cs / Military.cs / Social.cs / Diplomacy.cs / Fate.cs / Curia.cs
+│   ├── ToolExecutor.Query.cs / Intel.cs / Military.cs / Social.cs / Diplomacy.cs / Fate.cs / Curia.cs / Meeting.cs
 ├── UI/                      # 界面层
 │   ├── AIChatScreen.cs      # 聊天屏幕管理器（GauntletLayer 挂载）
 │   ├── AIChatScreenVM.cs    # 聊天 ViewModel（消息列表、输入绑定、function calling 处理）
 │   ├── LetterListScreen.cs  # 书信系统屏幕管理器（战役地图 O 键入口）
 │   ├── HistoryScreenVM.cs   # 史书原生 ViewModel（绑定/选中态；数据经 HistoryArchive）
 │   ├── Kit/                 # 原生 Kit UI 框架（KitScreen/KitTheme/组件/动态纹理/Gallery）
-│   └── Web/                 # CEF 页面宿主（CefWebScreen/CefWebHost/CefBridge/HistoryCefScreen/CuriaCefScreen/WebPage 脚手架）
+│   └── Web/                 # CEF 页面宿主（CefWebScreen/CefWebHost/CefBridge/HistoryCefScreen/CuriaCefScreen/MeetingCefScreen/WebPage 脚手架）
 ├── Systems/                 # 游戏系统与 Harmony 补丁
+│   ├── MeetingModels.cs / MeetingNegotiation.cs # 会晤条款/精确资产约束/版本化状态机与提交补偿（纯逻辑）
+│   ├── MeetingRegistry.cs / MeetingActions.cs # 可注册事项接口、交易/家族婚配处理器
+│   ├── MeetingClauses.cs / MeetingClauses.Prisoners.cs / MeetingClauses.Allegiance.cs # 可组合行动注册、释放俘虏/家族换国
+│   ├── MeetingBatch.cs      # 多行动预检/排序/资源冲突/补偿/部分履行（纯逻辑）
+│   ├── MeetingAssets.cs / MeetingService.cs / MeetingPageBuilder.cs # 会晤资产提交/生命周期/网页与角色上下文
 │   ├── CuriaService.cs / .Attendance.cs / .Effects.cs / .Treaty.cs / .Threshold.cs # 朝议核心（提议/应召/投票/结算/执行/条约校验/门槛）
 │   ├── CuriaPolicyEffects.cs # 政策→朝议修正（门槛/国王票权）
 │   ├── TreatyModels.cs / TreatyText.cs # 条约条款/三方视角文案（纯逻辑可单测）
@@ -677,7 +695,7 @@ AIChronicle/
 │   │   ├── HistoryScreen.xml     # 史书 UI 布局（1100×700 双栏）
 │   │   └── KitHost.xml           # 原生 Kit 宿主 prefab（5 行挂载点）
 │   ├── GUI/Brushes/Kit.xml       # Kit 文本笔刷（Galahad 字体）
-│   ├── WebUI/                    # CEF 页面资产
+│   ├── WebUI/                    # CEF 页面资产（含 meeting.html/css/js 会晤三栏）
 │   │   ├── curia.html / curia.css / curia.js # M 键参政页（朝议/外交/封地/密陈/秘书）
 │   │   ├── live.html             # CEF 演示页（CSS 动画/JS 时钟/桥接测试）
 │   │   ├── chronicle.html        # CEF 史书页（等 C# 注入数据）
@@ -809,7 +827,7 @@ AIChronicle/
 - **已读/未读追踪**：新增每线程已读水位（`thread_read_state.json`，存玩家实体目录），打开线程/发信/收新回复时自动推进
 - **NPC 主动来信自动进联系人**：NPC 用 `send_letter` 给玩家写信即登记联系人并显示未读
 - **拦截盟约"号召盟友宣战"投票**：原版军事同盟触发的"是否号召盟友向敌国宣战"国内投票被取消（玩家对话里的原版"号召盟友"选项一并隐藏），同盟只保留名义作用，是否号召盟友/宣战由国王 Agent 激活时自行决定
-- **被擒场景可谈判**：玩家被强敌追上（投降/应战对话）时新增【AI 聊天】选项，可说服 agent 用 `let_go` 放行；放行后自动结束对话与遭遇，玩家获释
+- **被擒场景可谈判**：玩家被强敌追上（投降/应战对话）时新增【会晤】选项，可说服 agent 用 `let_go` 放行；放行后自动结束对话与遭遇，玩家获释
 
 ### v1.4.0 更新要点
 

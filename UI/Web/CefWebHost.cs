@@ -277,7 +277,7 @@ namespace AIChronicle
             catch (Exception ex) { UiTrace.Log("CefWebSession.SendMouseUp failed: " + ex.Message); }
         }
 
-        public void SendMouseWheel(int x, int y, int delta)
+        public void SendMouseWheel(int x, int y, int delta, int pixelsPerNotch = 0)
         {
             if (delta == 0 || _viewportHeight <= 0)
                 return;
@@ -288,6 +288,16 @@ namespace AIChronicle
                 if (host == null)
                     return;
                 host.SetFocus(true);
+
+                // 可选的逐格像素映射：不把输入事件间隔误作帧间隔，触控板小 delta 保持比例。
+                if (pixelsPerNotch > 0)
+                {
+                    double wheelSteps = Math.Max(-5.0, Math.Min(5.0, delta / 120.0));
+                    int directPixels = (int)Math.Round(-wheelSteps * pixelsPerNotch);
+                    if (directPixels == 0) directPixels = -Math.Sign(delta);
+                    ScrollPixels(directPixels, x, y);
+                    return;
+                }
 
                 var now = DateTime.UtcNow;
                 int direction = -Math.Sign(delta); // 页面滚动方向与 Gauntlet 原始 delta 相反
@@ -320,12 +330,17 @@ namespace AIChronicle
                 if (pixels == 0)
                     pixels = direction;
 
-                _browser?.EvaluateScriptAsync(
-                    "if(window.__scrollBySmooth){window.__scrollBySmooth(" + pixels + "," + x + "," + y + ");}" +
-                    "else{window.scrollBy({top:" + pixels + ",behavior:'smooth'});}");
+                ScrollPixels(pixels, x, y);
                 UiTrace.Log($"CefWebSession wheel delta={delta} notches={notches:F2} step={pixels} velocity={_wheelVelocity:F0}");
             }
             catch (Exception ex) { UiTrace.Log("CefWebSession.SendMouseWheel failed: " + ex.Message); }
+        }
+
+        private void ScrollPixels(int pixels, int x, int y)
+        {
+            _browser?.EvaluateScriptAsync(
+                "if(window.__scrollBySmooth){window.__scrollBySmooth(" + pixels + "," + x + "," + y + ");}" +
+                "else{window.scrollBy({top:" + pixels + ",behavior:'smooth'});}");
         }
 
         private IBrowserHost? GetHost()

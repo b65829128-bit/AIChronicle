@@ -27,6 +27,12 @@ namespace AIChronicle
             SubModule.RequestChatOpen(hero);
         }
 
+        public static void RequestMeeting(Hero hero)
+        {
+            if (_layer != null || KitScreen.AnyOpen) return;
+            SubModule.RequestMeetingOpen(hero);
+        }
+
         public static void RequestOpenLetter(Hero hero)
         {
             if (_layer != null)

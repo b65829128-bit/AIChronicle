@@ -144,6 +144,9 @@ const requiredWebAssets = [
   "_Module/WebUI/history.js",
   "_Module/WebUI/theme.css",
   "_Module/WebUI/app.js",
+  "_Module/WebUI/meeting.html",
+  "_Module/WebUI/meeting.css",
+  "_Module/WebUI/meeting.js",
 ];
 for (const rel of requiredWebAssets) {
   if (!fs.existsSync(path.join(root, rel)))
@@ -154,6 +157,7 @@ const requiredPrompts = [
   "world_info.txt",
   "game_rules.txt",
   "conversation_rules.txt",
+  "meeting_rules.txt",
   "letter_rules.txt",
   "historian_rules.txt",
   "yearly_chronicle_prompt.txt",

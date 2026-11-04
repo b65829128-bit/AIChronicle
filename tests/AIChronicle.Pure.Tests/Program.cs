@@ -34,6 +34,7 @@ namespace AIChronicle.Tests
             Run("silent diary: hero naming", TestSilentDiaryText);
             RunLlmTests();
             RunEncounterTests();
+            RunMeetingTests();
 
             Console.WriteLine();
             Console.WriteLine($"passed: {_passed}, failed: {_failed}");

@@ -18,6 +18,7 @@ namespace AIChronicle
     public class SubModule : MBSubModuleBase
     {
         private static Hero? _pendingChatHero;
+        private static Hero? _pendingMeetingHero;
         private static Hero? _pendingLetterHero;
         private static Hero? _pendingEnvoyHero;
         private static LordChatBehavior? _chatBehavior;
@@ -92,6 +93,11 @@ namespace AIChronicle
             // 新战役开始：递增主线程队列 epoch，丢弃上一局未消费的动作。
             // 放在 base 之前，确保 base/行为初始化期间投递的动作也属于新 epoch。
             MainThreadExecutor.BeginCampaign();
+            _pendingMeetingHero = null;
+            MeetingService.Close();
+#if NET472
+            MeetingCefScreen.Close();
+#endif
             CuriaService.ResetForNewCampaign();
             SilentDiary.ResetForNewCampaign();
 
@@ -253,6 +259,11 @@ namespace AIChronicle
         {
             // 先让主线程队列失效，再清理 UI/实体；否则旧战役排队动作可能在新战役执行。
             MainThreadExecutor.EndCampaign();
+            _pendingMeetingHero = null;
+#if NET472
+            MeetingCefScreen.Close();
+#endif
+            MeetingService.Close();
 
             base.OnGameEnd(game);
 
@@ -273,6 +284,9 @@ namespace AIChronicle
             base.OnApplicationTick(dt);
 
             MainThreadExecutor.Tick();
+#if NET472
+            MeetingCefScreen.Tick();
+#endif
             EncounterDiagnostics.Tick();
             PartyBehaviorManager.Tick();
             AIChatClient.CheckPendingInquiry();
@@ -377,6 +391,16 @@ namespace AIChronicle
             }
             _prevGalleryKit = f8Down;
 
+            if (_pendingMeetingHero != null)
+            {
+                var hero = _pendingMeetingHero;
+                _pendingMeetingHero = null;
+#if NET472
+                if (!MeetingCefScreen.Open(hero))
+#endif
+                    AIChatScreen.DoOpen(hero);
+            }
+
             if (_pendingChatHero != null)
             {
                 var hero = _pendingChatHero;
@@ -430,6 +454,8 @@ namespace AIChronicle
         {
             _pendingChatHero = hero;
         }
+
+        public static void RequestMeetingOpen(Hero hero) => _pendingMeetingHero = hero;
 
         public static void RequestLetterOpen(Hero hero)
         {

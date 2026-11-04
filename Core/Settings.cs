@@ -1150,7 +1150,7 @@ namespace AIChronicle
         private bool _ttsEnabled = false;
 
         [SettingPropertyBool("启用语音朗读（TTS）", Order = 0, RequireRestart = false,
-            HintText = "AI 聊天（【AI 聊天】入口）收到回复时用语音朗读。默认关闭。\n使用免费 Edge TTS（微软神经语音，需联网，无需 API Key）。\n书信与秘书处不朗读；女角色用女声、男角色用男声。")]
+            HintText = "面对面会晤收到回复时用语音朗读。默认关闭。\n使用免费 Edge TTS（微软神经语音，需联网，无需 API Key）。\n书信与秘书处不朗读；女角色用女声、男角色用男声。")]
         [SettingPropertyGroup("语音（TTS）")]
         public bool TtsEnabled
         {

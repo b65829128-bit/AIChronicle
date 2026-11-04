@@ -22,6 +22,7 @@ namespace AIChronicle
         private readonly bool _windowed;
         private readonly float _contentPadding;
         private readonly bool _showStatus;
+        private readonly int _wheelPixelsPerNotch;
 
         private readonly string _pageFile;
         private readonly string _title;
@@ -48,7 +49,8 @@ namespace AIChronicle
             int viewHeight = 720,
             bool windowed = false,
             float contentPadding = KitTheme.S5,
-            bool showStatus = true)
+            bool showStatus = true,
+            int wheelPixelsPerNotch = 0)
         {
             _pageFile = pageFile;
             _title = title;
@@ -60,6 +62,7 @@ namespace AIChronicle
             _windowed = windowed;
             _contentPadding = contentPadding;
             _showStatus = showStatus;
+            _wheelPixelsPerNotch = Math.Max(0, wheelPixelsPerNotch);
         }
 
         /// <summary>打开真实史书页面：内容由 C# 数据注入，页面本身只负责渲染。</summary>
@@ -265,7 +268,7 @@ namespace AIChronicle
             if (delta == 0)
                 return;
             UiTrace.Log($"CefWebScreen wheel x={x} y={y} delta={delta}");
-            _session?.SendMouseWheel(x, y, delta);
+            _session?.SendMouseWheel(x, y, delta, _wheelPixelsPerNotch);
         }
 
         private void SetStatus(string text)

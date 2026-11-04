@@ -910,5 +910,222 @@
         "description": "Optional policy name or StringId for full details; leave empty for a compact list of all policies."
       }
     ]
+  },
+  {
+    "name": "query_meeting",
+    "category": "query",
+    "description": "Inspect the CURRENT face-to-face negotiation: current request id/version, exact inventories, available action clauses for each side, prisoner ids and kingdom ids. otherOffer is what the other person provides or performs; yourOffer is what you provide or perform.",
+    "parameters": []
+  },
+  {
+    "name": "propose_meeting",
+    "category": "social",
+    "description": "Create or counter a shared structured offer containing gold, items and composable promised actions. otherOffer.actions are performed by the OTHER person; yourOffer.actions by YOU. Use current request_id/version to counter, empty id and version 0 for a new request. Supply COMPLETE terms. Both parties accept the same version before anything executes.",
+    "parameters": [
+      {
+        "name": "request_id",
+        "type": "string",
+        "description": "Current request id for a counter; empty for a new proposal."
+      },
+      {
+        "name": "version",
+        "type": "integer",
+        "description": "Current version for a counter; 0 for a new proposal."
+      },
+      {
+        "name": "terms",
+        "type": "object",
+        "description": "Complete shared terms. otherOffer is OTHER gives; yourOffer is YOU give.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "typeId": {
+              "type": "string",
+              "description": "Registered available action id from query_meeting."
+            },
+            "parameters": {
+              "type": "object",
+              "description": "Action field key -> exact selected id; trade uses {}.",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "otherOffer": {
+              "type": "object",
+              "properties": {
+                "gold": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Exact inventory id including quality."
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "count"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 32
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "typeId": {
+                        "type": "string",
+                        "description": "An available registered clause id for this offer side."
+                      },
+                      "parameters": {
+                        "type": "object",
+                        "description": "Exact field keys from that side clause metadata. Values are strings, including count.",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "typeId",
+                      "parameters"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 8,
+                  "description": "Actions promised by the person providing this offer. Empty [] if none."
+                }
+              },
+              "required": [
+                "gold",
+                "items",
+                "actions"
+              ],
+              "additionalProperties": false
+            },
+            "yourOffer": {
+              "type": "object",
+              "properties": {
+                "gold": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Exact inventory id including quality."
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "count"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 32
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "typeId": {
+                        "type": "string",
+                        "description": "An available registered clause id for this offer side."
+                      },
+                      "parameters": {
+                        "type": "object",
+                        "description": "Exact field keys from that side clause metadata. Values are strings, including count.",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "typeId",
+                      "parameters"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 8,
+                  "description": "Actions promised by the person providing this offer. Empty [] if none."
+                }
+              },
+              "required": [
+                "gold",
+                "items",
+                "actions"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "typeId",
+            "parameters",
+            "otherOffer",
+            "yourOffer"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "reason",
+        "type": "string",
+        "description": "Brief in-character reason for your proposal."
+      }
+    ]
+  },
+  {
+    "name": "respond_meeting",
+    "category": "social",
+    "description": "Accept, reject or withdraw the CURRENT meeting proposal using its exact id/version. Accept executes only when the other person already accepted that version. To change terms use propose_meeting. Check returned result before claiming success.",
+    "parameters": [
+      {
+        "name": "request_id",
+        "type": "string",
+        "description": "Current request id."
+      },
+      {
+        "name": "version",
+        "type": "integer",
+        "description": "Exact current version."
+      },
+      {
+        "name": "decision",
+        "type": "string",
+        "description": "accept, reject, or withdraw (only withdraw your own proposal).",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "accept",
+            "reject",
+            "withdraw"
+          ]
+        }
+      },
+      {
+        "name": "reason",
+        "type": "string",
+        "description": "Brief in-character reason."
+      }
+    ]
   }
 ]

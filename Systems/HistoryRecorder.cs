@@ -235,6 +235,9 @@ namespace AIChronicle
             RecordExternalEvent(eventType, summary);
         }
 
+        /// <summary>仅在结构化会晤实际成婚后记录；普通报价和私人交易不入公开史料。</summary>
+        public static void RecordMeetingMarriage(string summary) => RecordExternalEvent("marriage", summary);
+
         private static void RecordExternalEvent(string eventType, string summary)
         {
             if (Campaign.Current == null) return;

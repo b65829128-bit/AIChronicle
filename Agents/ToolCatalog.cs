@@ -13,6 +13,8 @@ namespace AIChronicle
         public string Name { get; set; } = "";
         public string Type { get; set; } = "";
         public string Description { get; set; } = "";
+        /// <summary>可选完整 JSON Schema；兼容原有仅 type/description 的简单参数。</summary>
+        public JObject? Schema { get; set; }
     }
 
     public class ToolDef
@@ -65,13 +67,13 @@ namespace AIChronicle
             "query_war_status", "query_settlement", "query_party_troops", "query_world_state"
         };
 
-        public ToolCatalog(IEnumerable<ToolDef> capabilityTools, string intent, IEnumerable<string>? unlocked = null, bool includeTools = true)
+        public ToolCatalog(IEnumerable<ToolDef> capabilityTools, string intent, IEnumerable<string>? unlocked = null, bool includeTools = true, bool meeting = false)
         {
             _categories = new HashSet<string>(DefaultCategories(intent), StringComparer.Ordinal);
             _canBrowse = includeTools && (intent == "conversation" || intent == "chat" || intent == "letter");
             // 固定菜单场景不接受其他会话遗留的解锁记录。
             if (_canBrowse && unlocked != null) _categories.UnionWith(unlocked);
-            _available = (includeTools ? capabilityTools : Array.Empty<ToolDef>()).Where(t => IsAllowed(t.Name, intent))
+            _available = (includeTools ? capabilityTools : Array.Empty<ToolDef>()).Where(t => IsAllowed(t.Name, intent, meeting))
                 .GroupBy(t => t.Name, StringComparer.Ordinal).Select(g => Clone(g.First())).ToList();
             Refresh();
         }
@@ -93,8 +95,14 @@ namespace AIChronicle
             _ => new[] { "universal", "query", "social", "military", "movement", "diplomacy", "file", "communication" }
         };
 
-        private static bool IsAllowed(string name, string intent)
+        public static bool IsMeetingTool(string name) => name == "query_meeting" || name == "propose_meeting" || name == "respond_meeting";
+        public static bool IsDirectTransfer(string name) => name == "give_gold" || name == "request_gold" || name == "give_item" || name == "request_items";
+        public static bool IsMeetingBypass(string name) => IsDirectTransfer(name) || name == "release_prisoner";
+
+        private static bool IsAllowed(string name, string intent, bool meeting)
         {
+            if (IsMeetingTool(name) && (!meeting || intent != "conversation")) return false;
+            if (meeting && IsMeetingBypass(name)) return false;
             if (intent == "self_review" && SelfReviewExcluded.Contains(name)) return false;
             if (intent == "chancery" && ChanceryExcluded.Contains(name)) return false;
             if ((intent == "curia" || intent == "curia_defense") && IsQueryTool(name) && !CuriaQueries.Contains(name)) return false;
@@ -154,7 +162,7 @@ namespace AIChronicle
                     {
                         ["type"] = "object",
                         ["properties"] = new JObject(d.Parameters.Select(p => new JProperty(p.Name,
-                            new JObject { ["type"] = p.Type, ["description"] = p.Description }))),
+                            ParameterSchema(p)))),
                         ["required"] = new JArray(d.Parameters.Select(p => p.Name))
                     }
                 }
@@ -168,8 +176,15 @@ namespace AIChronicle
         {
             Name = tool.Name, Category = tool.Category, Description = tool.Description,
             Parameters = tool.Parameters.Select(p => new ToolParamDef
-                { Name = p.Name, Type = p.Type, Description = p.Description }).ToList()
+                { Name = p.Name, Type = p.Type, Description = p.Description, Schema = (JObject?)p.Schema?.DeepClone() }).ToList()
         };
+
+        private static JObject ParameterSchema(ToolParamDef parameter)
+        {
+            var schema = parameter.Schema == null ? new JObject { ["type"] = parameter.Type } : (JObject)parameter.Schema.DeepClone();
+            schema["description"] = parameter.Description;
+            return schema;
+        }
 
         private static ToolDef BrowseToolsDef() => new()
         {

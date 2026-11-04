@@ -30,6 +30,8 @@ namespace AIChronicle
         /// </summary>
         public static string ExecuteToolCall(string name, string arguments)
         {
+            if (MeetingContext.SessionId != null && ToolCatalog.IsMeetingBypass(name))
+                return "[错误] 当前在会晤中，请将财物或行动列入 propose_meeting 的双方报价，双方接受同一版条款后统一执行。";
             // request_gold / request_items 需要主线程每帧显示确认弹窗，必须留在后台线程
             // 等待玩家决定（内部对最终资金/物品划转做主线程分发）。
             // browse_tools 要修改本流程的 CurrentToolCatalog，也必须留在本流程上下文执行。
@@ -43,6 +45,7 @@ namespace AIChronicle
             var agentId = AgentManager.ActiveAgentId;
             var targetId = AgentManager.ActiveTargetId;
             var depth = AgentScheduler.CurrentProcessingDepth; // 并发下信件级联深度按任务隔离
+            var meetingId = MeetingContext.SessionId;
 
             return MainThreadExecutor.RunOnMainThread(() =>
             {
@@ -52,14 +55,18 @@ namespace AIChronicle
                 var prevAgentId = AgentManager.ActiveAgentId;
                 var prevTargetId = AgentManager.ActiveTargetId;
                 var prevDepth = AgentScheduler.CurrentProcessingDepth;
+                var prevMeetingId = MeetingContext.SessionId;
 
                 AIChatClient.CurrentHero = hero;
                 AIChatClient.CurrentIntent = intent;
                 AIChatClient.CurrentToolCatalog = catalog;
                 AgentManager.SetContextOnly(agentId, targetId);
                 AgentScheduler.CurrentProcessingDepth = depth;
+                MeetingContext.SessionId = meetingId;
                 try
                 {
+                    if (meetingId != null && !MeetingService.IsActive(meetingId, hero))
+                        return "[错误] 会晤已结束，本次工具调用已取消。";
                     return ExecuteToolCallCore(name, arguments);
                 }
                 finally
@@ -69,6 +76,7 @@ namespace AIChronicle
                     AIChatClient.CurrentToolCatalog = prevCatalog;
                     AgentManager.SetContextOnly(prevAgentId, prevTargetId);
                     AgentScheduler.CurrentProcessingDepth = prevDepth;
+                    MeetingContext.SessionId = prevMeetingId;
                 }
             });
         }
@@ -80,6 +88,12 @@ namespace AIChronicle
                 var args = JObject.Parse(arguments);
                 switch (name)
                 {
+                    case "query_meeting":
+                        return ExecuteQueryMeeting();
+                    case "propose_meeting":
+                        return ExecuteProposeMeeting(args);
+                    case "respond_meeting":
+                        return ExecuteRespondMeeting(args);
                     case "browse_tools":
                         return ExecuteBrowseTools(args["category"]?.ToString() ?? "");
 
@@ -355,6 +369,8 @@ namespace AIChronicle
                         return ExecuteQueryHeroSkills(args["target_entity_id"]?.ToString());
 
                     case "change_kingdom":
+                        if (MeetingContext.SessionId != null && (args["action"]?.ToString() == "join_kingdom" || args["action"]?.ToString() == "defect_to_kingdom"))
+                            return "[错误] 加入或叛逃请使用 propose_meeting 的 change_allegiance 行动条款，按同一份约定统一执行。";
                         return ExecuteChangeKingdom(
                             args["action"]?.ToString() ?? "",
                             args["kingdom_name"]?.ToString() ?? "",

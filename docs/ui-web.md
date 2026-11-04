@@ -54,6 +54,8 @@ CefBridge.ActionReceived
 | `Systems/HistoryMarkdown.cs` | Markdown → 原生纯文本（CEF 失败时的 fallback） |
 | `_Module/WebUI/history.html/css/js` | 全 Web 史书：1100×700 古籍式目录 + 书页正文、阅读进度/字数，页面铺满无外框 |
 | `UI/Web/CuriaCefScreen.cs` | M 键参政页宿主：五页签、投票/提议/陈情/外交/密陈动作回主线程、原生文本输入、刷新 |
+| `UI/Web/MeetingCefScreen.cs` | 领主会晤：复用现有聊天 VM，三栏事项/聊天/交涉卡，原生输入、请求版本与会话校验 |
+| `_Module/WebUI/meeting.html/css/js` | 1360×800 会晤页；事项及参数字段由注册表生成，双向报价、婚配预览、接受/还价/拒绝和状态 |
 | `_Module/WebUI/curia.html/css/js` | 朝议参政页：朝议/外交/封地/密陈/秘书；1280×760；页面只 dispatch，不碰游戏对象 |
 | `_Module/WebUI/history.js` | 目录渲染、Markdown/纯文本正文渲染、dispatch、逐元素平滑滚动 |
 | `UI/Kit/KitTexture.cs` | `KitTextureWidget`：动态纹理、BGRA/raw 帧、指针/滚轮事件、旧纹理延迟释放 |
@@ -139,6 +141,16 @@ CefBridge.ActionReceived
 - **政策效果**：提出/废除政策时，页面用 `PolicyObject.SecondaryEffects` 显示实际效果；没有有效政策时类型不出现在下拉里。
 - **议程前提过滤**：`BuildKingdoms` 的 `canWar/canPeace/canTrade/canAlliance/canBreakAlliance` 供页面过滤类型与目标；`renderProposeForm` 没有有效类型时直接显示空态，不渲染提交按钮。
 - **下拉图层**：仅给 `.dropdown-menu` 设 `z-index` 不够——`.card > *` 的 `z-index:1` 会形成层叠上下文，菜单会被后面的按钮/卡片压住。展开时给所在 `.card` 加 `.dropdown-open`（`z-index:30`），并把 `.form-grid`/`.actions`/`.send-row` 提到 `z-index:3`、`.form-actions` 保持 2。
+
+### 7.3 会晤
+
+- 领主对话【会晤】使用 `MeetingCefScreen`；原版交易/婚配入口保留。CEF 不可用或非领主时回退原生聊天，net6 继续使用原生聊天。
+- 事项来自 `MeetingRegistry`；普通 choice/text/number 字段由页面生成。金币与数量输入、文字与附言通过原生 inquiry；双方报价可按对应 clauseTypes 添加多个行动，目标字段由同一套元数据表单生成。页面不使用文本输入或原生 select。
+- `AIChatScreenVM` 复用原对话连接、往来线程、TTS 与工具链。`Changed` 通知刷新；动作和结果以 system 事实进入原线程，关闭时停止语音并取消未成交请求。
+- `dispatch` 每次带 sessionId；宿主捕获创建时的 sessionId，排队处理及原生输入回调再次校验。提交/回应携带 requestId/version，客户端按钮也捕获渲染时版本；旧点击不能接受新条件。
+- 原生数字/文字输入还带 editorToken，婚配/条件预览另带 revision，避免迟到回调覆盖新草稿。接受按钮固定在交涉区底部。
+- 会晤单独采用 `wheelPixelsPerNotch=96`（小 delta 按比例）；页面只做一次 38ms 时间常数插值，完整累加、及时反向，停止使用浏览器 smooth 重启动画。聊天/交涉/下拉独立滚动，重建 DOM 保留原阅读位置。其他页面映射保持原状。
+- 回归：`node tests/web/meeting-render.test.mjs`，覆盖双向报价、无条件婚配、动态新事项、安全文本、过期点击/输入、组合条款的执行方、条款移除后输入隔离、忙碌状态和滚动累加/反向/边界/阅读位置保持。
 
 ## 8. 构建 / 打包
 

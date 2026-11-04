@@ -35,3 +35,6 @@ jobs:
 
       - name: Run history renderer test (DOM stub)
         run: node tests/web/history-render.test.mjs
+
+      - name: Run meeting renderer test (DOM stub)
+        run: node tests/web/meeting-render.test.mjs

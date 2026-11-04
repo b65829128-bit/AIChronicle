@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>会晤</title>
+  <link rel="stylesheet" href="meeting.css">
+  <script src="meeting.js" defer></script>
+</head>
+<body>
+  <div class="meeting-shell">
+    <header class="masthead">
+      <div><div class="eyebrow">言 出 法 随 · 当 面 会 晤</div><h1 id="meetingTitle">会晤</h1><p id="meetingMeta">等候对方入席……</p></div>
+      <div class="mast-seal">言<br>契</div>
+    </header>
+    <div class="workspace">
+      <aside class="actions-column"><div class="section-kicker">商议何事</div><nav id="actionList"></nav><div class="aside-note">言语留下印记，约定付诸行动。<br>选择一项事务，或随意交谈。</div></aside>
+      <section class="conversation"><div class="conversation-head"><div><span class="section-kicker">席间言谈</span><p>往来的话语与约定，都记在这里。</p></div><span id="thinking" class="thinking"></span></div><div id="messages" class="messages scrollable"></div><div class="speak-row"><span>先说说你的来意，也可以直接提出条件。</span><button id="speak" class="button primary">开口交谈</button></div></section>
+      <section class="deal-column scrollable"><div id="deal"></div></section>
+    </div>
+    <footer><span id="error" role="status"></span><span>原版交易与婚配对话继续保留</span></footer>
+  </div>
+</body>
+</html>
