@@ -28,8 +28,8 @@
 | `update_knowledge` | 认知 | 记录关于对方的新认知 |
 | `change_relation` | 关系 | 修改对任意人物的好感度（支持 target_entity_id） |
 | `query_meeting` | 查询 | 仅当前会晤：查看同一份交涉单、版本、事项字段和双方可用财物，编号和版本置于结果前部 |
-| `propose_meeting` | 社交 | 提出/还价：完整结构化 `terms`（`typeId`、`parameters`、`otherOffer/yourOffer`，每方含 gold/items/actions；actions 使用该方可用的注册条款与参数），新提议空编号/版本 0，还价使用当前编号/版本；可由 AI 主动发起 |
-| `respond_meeting` | 社交 | 接受/拒绝/撤回当前编号和版本的提议；双方接受同一版后统一执行；关闭/切档/旧版本拒绝 |
+| `propose_meeting` | 社交 | 提出/还价：完整结构化 `terms`（`typeId`、`parameters`、`otherOffer/yourOffer`，每方含 gold/items/actions；actions 使用该方可用的注册条款与参数，受 actionTypes 限制），另有 outcomes 结果列表：即时事项为空，延后事项按 outcomeSlots 提供各分支双向报价、顶层报价为空，新提议空编号/版本 0，还价使用当前编号/版本；可由 AI 主动发起 |
+| `respond_meeting` | 社交 | 接受/拒绝/撤回当前编号和版本的提议；双方接受同一版：即时事项执行，决斗仅进入待开始，胜负条件等待真实结果；关闭未开始请求/切档/旧版本拒绝 |
 | `give_gold` | 经济 | 赠予任意人物金币（支持 target_entity_id） |
 | `request_gold` | 经济 | 向任意人物索要金币（玩家需确认，弹窗 60 秒倒计时超时视为拒绝，NPC 自动划转） |
 | `move_to_settlement` | 行军 | 部队行军到城镇/城堡/村庄（支持 activate:true 参数自动唤醒） |
@@ -117,4 +117,4 @@
 
 对话/书信/签到可调 `browse_tools("military")` 解锁本次能力范围内的分类，下一轮即可使用；返回工具名/参数名，完整定义由下一轮 API tools 提供。重复浏览已解锁分类不重建 schema。
 
-会晤工具额外受当前会话约束：后台、书信、秘书处及 CEF 回退的原生聊天均不开放。`ToolExecutor` 同样检查会话、对象和 epoch，并拦截会晤中的旧直接转钱/交物/释放俘虏工具。旧 `change_kingdom` 的 join_kingdom/defect_to_kingdom 模式在会晤中须用 change_allegiance 条款，其他模式保持原规则。行动条款注册而非任意工具名执行；新增会受主线程、权限、资源冲突和批执行结果约束。`ToolParamDef.Schema` 可声明嵌套 object/array/enum，现有简单参数沿用 type/description；创建目录时深复制 schema，保持一次激活内稳定。详见 `plan-meeting.md`。
+会晤工具额外受当前会话约束：后台、书信、秘书处及 CEF 回退的原生聊天均不开放。`ToolExecutor` 同样检查会话、对象和 epoch，并拦截会晤中的旧直接转钱/交物/释放俘虏工具。旧 `change_kingdom` 的 join_kingdom/defect_to_kingdom 模式在会晤中须用 change_allegiance 条款，其他模式保持原规则。行动条款注册而非任意工具名执行；新增会受主线程、权限、资源冲突和批执行结果约束。`ToolParamDef.Schema` 可声明嵌套 object/array/enum，现有简单参数沿用 type/description；创建目录时深复制 schema，保持一次激活内稳定。延后事项与即时事项共用三工具；`duel` 的 otherVictory 表示对方获胜、yourVictory 表示当前 Agent 获胜，每个分支仍按 otherOffer/yourOffer 的固定方向履行。接受后不得声称战斗或交割已完成，开始操作只由本地 UI 触发。详见 `plan-meeting.md`、`plan-duel.md`。

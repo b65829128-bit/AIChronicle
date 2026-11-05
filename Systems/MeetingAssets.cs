@@ -14,10 +14,10 @@ namespace AIChronicle
         public static ItemRoster? Roster(Hero hero)
             => hero.PartyBelongedTo?.LeaderHero == hero ? hero.PartyBelongedTo.ItemRoster : null;
 
-        private static string Key(EquipmentElement element)
+        internal static string Key(EquipmentElement element)
             => element.Item.StringId + "|" + (element.ItemModifier?.StringId ?? "") + "|" + (element.CosmeticItem?.StringId ?? "");
 
-        private static bool Tradable(EquipmentElement element) => element.Item != null && !element.IsQuestItem;
+        internal static bool Tradable(EquipmentElement element) => element.Item != null && !element.IsQuestItem;
 
         public static List<MeetingInventoryEntry> Inventory(Hero hero)
         {
@@ -76,11 +76,11 @@ namespace AIChronicle
             return description;
         }
 
-        private static List<(EquipmentElement element, int count)> Capture(ItemRoster? roster, HashSet<string> keys)
+        internal static List<(EquipmentElement element, int count)> Capture(ItemRoster? roster, HashSet<string> keys)
             => roster == null ? new() : roster.Where(e => Tradable(e.EquipmentElement) && keys.Contains(Key(e.EquipmentElement)))
                 .Select(e => (e.EquipmentElement, e.Amount)).ToList();
 
-        private static void Restore(ItemRoster? roster, List<(EquipmentElement element, int count)> before, HashSet<string> keys)
+        internal static void Restore(ItemRoster? roster, List<(EquipmentElement element, int count)> before, HashSet<string> keys)
         {
             if (roster == null) return;
             foreach (var current in Capture(roster, keys)) roster.AddToCounts(current.element, -current.count);

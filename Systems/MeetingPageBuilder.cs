@@ -28,11 +28,13 @@ namespace AIChronicle
                 {
                     id = a.Id, title = a.Title, description = a.Description,
                     unavailable = a.Unavailable(s) ?? (a.Fields(s).Any(f => f.Kind == "choice" && f.Choices.Count == 0) ? "当前没有符合条件的人选。" : ""),
-                    fields = a.Fields(s)
+                    fields = a.Fields(s),
+                    outcomeSlots = (a as IMeetingDeferredAction)?.OutcomeSlots(s) ?? Array.Empty<MeetingOutcomeSlot>(),
+                    startLabel = (a as IMeetingDeferredAction)?.StartLabel ?? ""
                 }).ToArray(),
                 request = s.Negotiation.Request,
                 description = s.Summary,
-                statuses = new { negotiating = "协商中", executing = "执行中", applied = "已成交", rejected = "已拒绝", cancelled = "已撤回", failed = "执行失败", partiallyApplied = "部分履行" }
+                statuses = new { negotiating = "协商中", executing = "执行中", applied = "已成交", rejected = "已拒绝", cancelled = "已撤回", failed = "执行失败", partiallyApplied = "部分履行", ready = "已约定，待开始", running = "进行中" }
             }, Camel);
         }
 
@@ -42,6 +44,7 @@ namespace AIChronicle
             return MeetingClauses.All.Select(h => (object)new
             {
                 id = h.Id, title = h.Title, description = h.Description,
+                actionTypes = (h as IMeetingScopedClause)?.ActionTypes ?? Array.Empty<string>(),
                 unavailable = h.Unavailable(context) ?? (h.Fields(context).Any(f => f.Kind == "choice" && f.Choices.Count == 0) ? "当前没有有效目标。" : ""),
                 fields = h.Fields(context)
             }).ToArray();

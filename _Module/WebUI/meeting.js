@@ -7,7 +7,7 @@
   const $ = id => document.getElementById(id);
   const copy = value => JSON.parse(JSON.stringify(value));
   const number = value => Number(value || 0).toLocaleString("zh-CN");
-  const statuses = ["协商中", "执行中", "已成交", "已拒绝", "已撤回", "执行失败", "部分履行"];
+  const statuses = ["协商中", "执行中", "已成交", "已拒绝", "已撤回", "执行失败", "部分履行", "已约定，待开始", "进行中"];
   function node(tag, cls, text) {
     const el = document.createElement(tag);
     if (cls) el.className = cls;
@@ -25,14 +25,20 @@
     window.aiChronicle.dispatch(id, JSON.stringify({ ...payload, sessionId: data.sessionId }));
   }
   function showError(value) { $("error").textContent = value.message || ""; }
-  function active() { return data.request && data.request.status === 0; }
-  function blank(typeId) { return { typeId, parameters: {}, otherOffer: { gold: 0, items: [], actions: [] }, yourOffer: { gold: 0, items: [], actions: [] } }; }
+  function active() { return data.request && (data.request.status === 0 || data.request.status === 7); }
+  function emptyOffer() { return { gold: 0, items: [], actions: [] }; }
+  function blank(typeId) {
+    const action = (data.types || []).find(a => a.id === typeId);
+    return { typeId, parameters: {}, otherOffer: emptyOffer(), yourOffer: emptyOffer(),
+      outcomes: (action?.outcomeSlots || []).map(slot => ({ id: slot.id, otherOffer: emptyOffer(), yourOffer: emptyOffer() })) };
+  }
   function start(typeId) {
     if (data.busy || (active() && typeId !== data.request.terms.typeId)) return;
     selected = typeId;
     draft = active() ? copy(data.request.terms) : blank(typeId);
     editing = true; note = ""; previewText = ""; editorToken++;
     renderActions(); renderDeal();
+    if (draft.outcomes?.length) requestPreview();
   }
   function requestPreview() {
     if (!draft || !editing) return;
@@ -59,7 +65,7 @@
     talk.appendChild(node("span", "action-title", "随意交谈"));
     talk.appendChild(node("span", "action-detail", "叙旧、问候，谈一谈近来的事。")); list.appendChild(talk);
     for (const action of data.types || []) {
-      const locked = active() && data.request.terms.typeId !== action.id;
+      const locked = data.request?.status === 8 || active() && data.request.terms.typeId !== action.id;
       const el = button("", () => start(action.id), "action" + (selected === action.id ? " active" : ""), !!action.unavailable || locked || data.busy);
       el.appendChild(node("span", "action-title", action.title));
       el.appendChild(node("span", "action-detail", action.unavailable || (locked ? "请先结束当前交涉" : action.description)));
@@ -91,8 +97,8 @@
   function numberButton(value, path, maximum) {
     return button(number(value), () => dispatch("number", { editorToken: String(editorToken), path, maximum }), "small quiet", data.busy);
   }
-  function renderOffer(parent, side, title, editable) {
-    const terms = editable ? draft : data.request.terms;
+  function renderOffer(parent, side, title, editable, branch = null, prefix = "") {
+    const terms = branch || (editable ? draft : data.request.terms);
     const offer = terms[side];
     const inventory = side === "otherOffer" ? data.otherInventory || [] : data.yourInventory || [];
     const gold = side === "otherOffer" ? data.otherGold : data.yourGold;
@@ -100,7 +106,7 @@
     const heading = node("div", "offer-title", title);
     heading.appendChild(node("span", "balance", "持有 " + number(gold) + " 金币")); card.appendChild(heading);
     const line = node("div", "gold-line"); line.appendChild(node("span", "coin", "金币"));
-    line.appendChild(editable ? numberButton(offer.gold, side + ".gold", gold) : node("span", "gold-value", number(offer.gold)));
+    line.appendChild(editable ? numberButton(offer.gold, prefix + side + ".gold", gold) : node("span", "gold-value", number(offer.gold)));
     card.appendChild(line);
     for (const item of offer.items) {
       const row = node("div", "item-row"); row.appendChild(node("span", "item-name", names.get(item.id) || item.id));
@@ -109,7 +115,7 @@
       if (editable) quantity.appendChild(button("−", () => {
         item.count--; if (item.count <= 0) offer.items = offer.items.filter(i => i !== item); renderDeal();
       }, "small quiet", data.busy));
-      quantity.appendChild(editable ? numberButton(item.count, side + ".item:" + item.id, maximum) : node("span", "", "× " + item.count));
+      quantity.appendChild(editable ? numberButton(item.count, prefix + side + ".item:" + item.id, maximum) : node("span", "", "× " + item.count));
       if (editable) quantity.appendChild(button("＋", () => { item.count++; renderDeal(); }, "small quiet", data.busy || item.count >= maximum));
       row.appendChild(quantity); card.appendChild(row);
     }
@@ -120,11 +126,15 @@
       }));
       card.appendChild(dropdown("＋ 添加物品", choices, id => { offer.items.push({ id, count: 1 }); renderDeal(); }, data.busy || offer.items.length >= 32));
     }
-    renderClauses(card, side, offer, editable);
+    renderClauses(card, side, offer, editable, prefix);
     parent.appendChild(card);
   }
-  function clauseTypes(side) { return side === "otherOffer" ? data.otherClauseTypes || [] : data.yourClauseTypes || []; }
-  function renderClauses(parent, side, offer, editable) {
+  function clauseTypes(side) {
+    const types = side === "otherOffer" ? data.otherClauseTypes || [] : data.yourClauseTypes || [];
+    const typeId = editing ? draft?.typeId : data.request?.terms.typeId;
+    return types.filter(c => !c.actionTypes?.length || c.actionTypes.includes(typeId));
+  }
+  function renderClauses(parent, side, offer, editable, prefix = "") {
     const clauses = offer.actions || [];
     if (clauses.length) parent.appendChild(node("div", "clause-heading", "承诺执行的行动"));
     clauses.forEach((clause, index) => {
@@ -137,7 +147,7 @@
       block.appendChild(heading);
       if (definition) {
         block.appendChild(node("p", "hint", definition.description));
-        renderParameterFields(block, definition, clause.parameters, editable, side + ".actions." + index + ".parameters.", side + "|" + definition.id);
+        renderParameterFields(block, definition, clause.parameters, editable, prefix + side + ".actions." + index + ".parameters.", side + "|" + definition.id);
       }
       parent.appendChild(block);
     });
@@ -184,15 +194,32 @@
     if (!action) {
       box.appendChild(node("div", "section-kicker", "当前交涉"));
       const empty = node("div", "empty-deal"); empty.appendChild(node("strong", "", "尚未提出约定"));
-      empty.appendChild(node("span", "", "选择交易或婚配，列出双方条件。对方也能在交谈中主动提出请求，你可以接受、拒绝或继续商量。")); box.appendChild(empty); return;
+      empty.appendChild(node("span", "", "选择一项事务，列出双方条件。对方也能在交谈中主动提出请求，你可以接受、拒绝或继续商量。")); box.appendChild(empty); return;
     }
     const top = node("div", "deal-top"); top.appendChild(node("h2", "", action.title));
     const badge = editing ? "拟定条件" : statuses[request.status] || "交涉中";
     top.appendChild(node("span", "badge" + (request?.status === 2 && !editing ? " success" : ""), badge)); box.appendChild(top);
     box.appendChild(node("div", "deal-intro", editing ? action.description : "第 " + request.version + " 版 · " + (request.proposedBy === 0 ? "由你提出" : "由对方提出")));
     renderFields(box, action, editing);
+    if (action.unavailable) box.appendChild(node("p", "hint", action.unavailable));
     if (editing && previewText) box.appendChild(node("div", "terms-summary", previewText));
-    renderOffer(box, "otherOffer", "我方提供", editing); renderOffer(box, "yourOffer", "对方提供", editing);
+    const terms = editing ? draft : request.terms;
+    if (action.outcomeSlots?.length) {
+      box.appendChild(node("p", "hint", "分别约定两种结果。只履行实际胜者对应的一组条件；不附条件也可以提出。"));
+      for (const slot of action.outcomeSlots) {
+        const index = (terms.outcomes || []).findIndex(o => o.id === slot.id);
+        const branch = terms.outcomes?.[index];
+        const card = node("section", "outcome-card");
+        card.appendChild(node("h3", "outcome-title", slot.title + "时"));
+        if (branch) {
+          renderOffer(card, "otherOffer", "我方履行", editing, branch, "outcomes." + index + ".");
+          renderOffer(card, "yourOffer", "对方履行", editing, branch, "outcomes." + index + ".");
+        } else card.appendChild(node("p", "hint", "此结果的条件尚未填写。"));
+        box.appendChild(card);
+      }
+    } else {
+      renderOffer(box, "otherOffer", "我方提供", editing); renderOffer(box, "yourOffer", "对方提供", editing);
+    }
     box.appendChild(node("p", "hint", data.inventoryHint));
     if (editing) {
       box.appendChild(button(note ? "附言：" + note : "＋ 附上一句话（可选）", () => dispatch("note", { editorToken: String(editorToken) }), "quiet note-button", data.busy));
@@ -203,19 +230,23 @@
       }), "primary", data.busy || !!action.unavailable));
       if (request) buttons.appendChild(button("返回", () => { editing = false; renderDeal(); }, "quiet"));
       box.appendChild(buttons);
-      box.appendChild(node("p", "deal-help", "提出即表示你认可这些条件。对方可以接受、拒绝或还价；双方认可同一版约定后执行。婚配可不附任何财物。"));
+      box.appendChild(node("p", "deal-help", action.outcomeSlots?.length
+        ? "提出即认可两种结果的全部条件。双方确认同一版后，由你准备开始；接受约定时不交付胜负条件。"
+        : "提出即表示你认可这些条件。对方可以接受、拒绝或还价；双方认可同一版约定后执行。婚配可不附任何财物。"));
     } else {
       if (data.description) box.appendChild(node("div", "terms-summary", data.description));
       if (request.reason) box.appendChild(node("p", "reason", request.reason));
       if (active()) {
         const buttons = node("div", "buttons");
+        if (request.status === 7) buttons.appendChild(button(action.startLabel || "开始", () => dispatch("startDeferred", { requestId: request.id, version: request.version }), "primary", data.busy || !!action.unavailable));
         if (!request.otherAccepted) buttons.appendChild(button("接受这份约定", () => respond("accept", request), "primary", data.busy));
         buttons.appendChild(button("修改条件", () => start(request.terms.typeId), "quiet", data.busy));
         buttons.appendChild(button(request.proposedBy === 0 ? "撤回" : "拒绝", () => respond(request.proposedBy === 0 ? "withdraw" : "reject", request), "danger", data.busy));
         box.appendChild(buttons);
-        box.appendChild(node("p", "deal-help", request.otherAccepted ? "你已认可这一版，等待对方回应。" : "这是对方的条件。接受后将按约定执行，也可以继续商量。"));
+        box.appendChild(node("p", "deal-help", request.status === 7 ? "双方已确认。核对最终条件后开始；开始前仍可修改或取消。"
+          : request.otherAccepted ? "你已认可这一版，等待对方回应。" : "这是对方的条件。你可以接受，也可以继续商量。"));
       }
-      if (request.result) box.appendChild(node("div", "result" + (request.status >= 5 ? " failed" : ""), request.result));
+      if (request.result) box.appendChild(node("div", "result" + (request.status === 5 || request.status === 6 ? " failed" : ""), request.result));
     }
   }
   function respond(decision, request) { dispatch("respond", { requestId: request.id, version: request.version, decision }); }
@@ -226,7 +257,7 @@
     for (const item of [...data.otherInventory || [], ...data.yourInventory || []]) names.set(item.id, item.name);
     for (const action of data.types || []) for (const field of action.fields || []) for (const choice of field.choices || [])
       fieldNames.set(action.id + "|" + field.key + "|" + choice.id, choice.label);
-    for (const side of ["otherOffer", "yourOffer"]) for (const action of clauseTypes(side)) for (const field of action.fields || []) for (const choice of field.choices || [])
+    for (const side of ["otherOffer", "yourOffer"]) for (const action of side === "otherOffer" ? data.otherClauseTypes || [] : data.yourClauseTypes || []) for (const field of action.fields || []) for (const choice of field.choices || [])
       fieldNames.set(side + "|" + action.id + "|" + field.key + "|" + choice.id, choice.label);
     const requestKey = data.request ? data.request.id + ":" + data.request.version + ":" + data.request.status : "";
     if (requestKey !== seenRequest) {
@@ -239,13 +270,20 @@
   }
   function setNumber(value) {
     if (!editing || String(editorToken) !== value.editorToken || !Number.isInteger(value.value)) return;
-    if (value.path === "otherOffer.gold" || value.path === "yourOffer.gold") draft[value.path.split(".")[0]].gold = value.value;
+    const resolved = offerPath(value.path);
+    if (resolved?.tail === "gold" && value.value >= 0) resolved.offer.gold = value.value;
     else if (value.path.startsWith("parameters.") || value.path.includes(".actions.")) setParameter(value.path, String(value.value));
-    else for (const side of ["otherOffer", "yourOffer"]) if (value.path.startsWith(side + ".item:")) {
-      const id = value.path.slice((side + ".item:").length), item = draft[side].items.find(i => i.id === id);
-      if (item && value.value >= 0) { item.count = value.value; if (!item.count) draft[side].items = draft[side].items.filter(i => i !== item); }
+    else if (resolved?.tail.startsWith("item:")) {
+      const id = resolved.tail.slice(5), item = resolved.offer.items.find(i => i.id === id);
+      if (item && value.value >= 0) { item.count = value.value; if (!item.count) resolved.offer.items = resolved.offer.items.filter(i => i !== item); }
     }
     requestPreview(); renderDeal();
+  }
+  function offerPath(path) {
+    const match = /^(?:outcomes\.(\d+)\.)?(otherOffer|yourOffer)\.(.+)$/.exec(path);
+    if (!match || !draft) return null;
+    const root = match[1] === undefined ? draft : draft.outcomes?.[Number(match[1])];
+    return root?.[match[2]] ? { offer: root[match[2]], side: match[2], tail: match[3] } : null;
   }
   function setParameter(path, value) {
     if (path.startsWith("parameters.")) {
@@ -253,10 +291,11 @@
       if ((data.types || []).find(a => a.id === draft.typeId)?.fields.some(f => f.key === key)) draft.parameters[key] = value;
       return;
     }
-    const match = /^(otherOffer|yourOffer)\.actions\.(\d+)\.parameters\.([a-zA-Z0-9_]+)$/.exec(path);
+    const resolved = offerPath(path);
+    const match = /^actions\.(\d+)\.parameters\.([a-zA-Z0-9_]+)$/.exec(resolved?.tail || "");
     if (!match) return;
-    const clause = draft[match[1]].actions?.[Number(match[2])];
-    if (clause && clauseTypes(match[1]).find(c => c.id === clause.typeId)?.fields.some(f => f.key === match[3])) clause.parameters[match[3]] = value;
+    const clause = resolved.offer.actions?.[Number(match[1])];
+    if (clause && clauseTypes(resolved.side).find(c => c.id === clause.typeId)?.fields.some(f => f.key === match[2])) clause.parameters[match[2]] = value;
   }
   function setField(value) {
     if (!editing || String(editorToken) !== value.editorToken) return;

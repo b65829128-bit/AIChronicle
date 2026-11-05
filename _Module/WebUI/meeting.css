@@ -409,6 +409,20 @@ nav {
   padding:13px;
 }
 
+.outcome-card {
+  margin:22px 0;
+  border-top:2px solid #a8874660;
+  padding-top:12px;
+}
+
+.outcome-title {
+  font-size:16px;
+  font-weight:500;
+  color:var(--forest);
+  margin:0 0 10px;
+  line-height:1.8;
+}
+
 .offer-title {
   font-size:13px;
   letter-spacing:1px;

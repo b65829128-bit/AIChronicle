@@ -30,8 +30,8 @@ namespace AIChronicle
             var shapeError = MeetingTerms.ValidateShape(terms);
             if (shapeError != null) return shapeError;
             var copy = terms.Copy();
-            var active = _request?.Status == MeetingStatus.Negotiating;
-            if (_request?.Status == MeetingStatus.Executing) return "当前约定正在执行。";
+            var active = _request?.Status == MeetingStatus.Negotiating || _request?.Status == MeetingStatus.Ready;
+            if (_request?.Status == MeetingStatus.Executing || _request?.Status == MeetingStatus.Running) return "当前约定正在执行。";
             if (active)
             {
                 var error = Check(requestId, version);
@@ -54,13 +54,13 @@ namespace AIChronicle
         }
 
         public string? Respond(MeetingSide side, string requestId, int version, string decision, string reason,
-            Func<MeetingTerms, string?> validate, Func<MeetingTerms, string> execute)
+            Func<MeetingTerms, string?> validate, Func<MeetingTerms, string> execute, bool deferred = false)
         {
             if (Closed) return "会晤已经结束。";
             var error = Check(requestId, version);
             if (error != null) return error;
             var request = _request!;
-            if (request.Status != MeetingStatus.Negotiating) return "这份请求已经结束，不能重复处理。";
+            if (request.Status != MeetingStatus.Negotiating && request.Status != MeetingStatus.Ready) return "这份请求已经结束，不能重复处理。";
             if (decision == "reject" || decision == "withdraw")
             {
                 if (decision == "withdraw" && request.ProposedBy != side) return "只有提议者能撤回；另一方可拒绝。";
@@ -69,6 +69,7 @@ namespace AIChronicle
                 return null;
             }
             if (decision != "accept") return "回应应为 accept、reject 或 withdraw。还价请提交新条款。";
+            if (request.Status == MeetingStatus.Ready) return "双方已经接受这版约定，等待开始。";
             // 一方的接受本身也不得重复触发执行。
             if (side == MeetingSide.Other ? request.OtherAccepted : request.YourAccepted)
                 return "你已经接受这一版条件，等待另一方回应。";
@@ -80,7 +81,7 @@ namespace AIChronicle
             try
             {
                 request.Result = execute(request.Terms.Copy());
-                request.Status = MeetingStatus.Applied;
+                request.Status = deferred ? MeetingStatus.Ready : MeetingStatus.Applied;
             }
             catch (MeetingPartialExecutionException ex)
             {
@@ -98,11 +99,34 @@ namespace AIChronicle
         public void Close()
         {
             Closed = true;
-            if (_request?.Status == MeetingStatus.Negotiating)
+            if (_request?.Status == MeetingStatus.Negotiating || _request?.Status == MeetingStatus.Ready)
             {
                 _request.Status = MeetingStatus.Cancelled;
                 _request.Result = "会晤结束，未成交。";
             }
+        }
+
+        public string? StartDeferred(string requestId, int version, Func<MeetingTerms, string?> validate, Action<MeetingRequest> start)
+        {
+            if (Closed) return "会晤已经结束。";
+            var error = Check(requestId, version);
+            if (error != null) return error;
+            var request = _request!;
+            if (request.Status != MeetingStatus.Ready || !request.OtherAccepted || !request.YourAccepted) return "双方尚未确认这版约定，或已经开始。";
+            error = validate(request.Terms.Copy());
+            if (error != null) return error;
+            request.Status = MeetingStatus.Running;
+            try { start(request.Copy()); request.Result = "已开始，等待实际结果。"; }
+            catch (Exception ex) { request.Status = MeetingStatus.Failed; request.Result = "未能开始：" + ex.Message; return request.Result; }
+            return null;
+        }
+
+        public bool CompleteDeferred(string requestId, string result, bool partial = false, bool failed = false)
+        {
+            if (_request?.Id != requestId || _request.Status != MeetingStatus.Running) return false;
+            _request.Result = result;
+            _request.Status = partial ? MeetingStatus.PartiallyApplied : failed ? MeetingStatus.Failed : MeetingStatus.Applied;
+            return true;
         }
 
         private string? Check(string requestId, int version)

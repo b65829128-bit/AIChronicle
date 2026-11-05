@@ -35,7 +35,7 @@ namespace AIChronicle
         public static void Close()
         {
             var session = Current;
-            var pending = session?.Negotiation.Request?.Status == MeetingStatus.Negotiating;
+            var pending = session?.Negotiation.Request?.Status == MeetingStatus.Negotiating || session?.Negotiation.Request?.Status == MeetingStatus.Ready;
             session?.Negotiation.Close();
             if (session != null && pending)
             {
@@ -60,8 +60,18 @@ namespace AIChronicle
             if (action == null) return "此事项尚未开放。";
             invalid = action.Unavailable(s);
             if (invalid != null) return invalid;
-            return MeetingFieldRules.Validate(action.Fields(s), terms.Parameters)
-                ?? MeetingAssets.Validate(s, terms) ?? action.Validate(s, terms) ?? MeetingClauses.Validate(s, terms);
+            var deferred = action as IMeetingDeferredAction;
+            invalid = MeetingFieldRules.Validate(action.Fields(s), terms.Parameters) ?? action.Validate(s, terms)
+                ?? MeetingTerms.ValidateOutcomes(terms, deferred?.OutcomeSlots(s) ?? Array.Empty<MeetingOutcomeSlot>());
+            if (invalid != null) return invalid;
+            if (deferred == null) return MeetingAssets.Validate(s, terms) ?? MeetingClauses.Validate(s, terms);
+            foreach (var outcome in terms.Outcomes)
+            {
+                var branch = outcome.AsTerms(terms.TypeId);
+                invalid = MeetingAssets.Validate(s, branch) ?? MeetingClauses.Validate(s, branch, includePrimary: false);
+                if (invalid != null) return deferred.OutcomeSlots(s).First(slot => slot.Id == outcome.Id).Title + "：" + invalid;
+            }
+            return null;
         }
 
         public static string Propose(string sessionId, MeetingSide side, MeetingTerms terms, string requestId, int version, string reason)
@@ -83,13 +93,14 @@ namespace AIChronicle
             var s = Current;
             if (s == null || !IsActive(sessionId)) return "[错误] 会晤已结束。";
             var before = s.Negotiation.Request;
+            var deferred = before == null ? null : MeetingRegistry.Find(before.Terms.TypeId) as IMeetingDeferredAction;
             var description = before == null ? "" : s.Summary;
             var error = s.Negotiation.Respond(side, requestId, version, decision, reason,
                 t => Validate(s, t), t =>
                 {
-                    try { return MeetingAssets.Commit(s, t, MeetingRegistry.Find(t.TypeId)!); }
+                    try { return deferred != null ? deferred.Confirm(s, t) : MeetingAssets.Commit(s, t, MeetingRegistry.Find(t.TypeId)!); }
                     catch (Exception ex) { UiTrace.Log("Meeting commit failed " + requestId + ": " + ex); throw; }
-                });
+                }, deferred != null);
             if (error != null) return "[错误] " + error;
             var request = s.Negotiation.Request!;
             var result = request.Status switch
@@ -99,6 +110,7 @@ namespace AIChronicle
                 MeetingStatus.PartiallyApplied => request.Result,
                 MeetingStatus.Rejected => "这份提议已被拒绝。" + request.Reason,
                 MeetingStatus.Cancelled => "提议者已撤回这份提议。" + request.Reason,
+                MeetingStatus.Ready => "双方已确认约定，等待开始。胜负条件尚未交付。 " + description,
                 _ => "回应已记录。"
             };
             Record(s, result);
@@ -116,9 +128,30 @@ namespace AIChronicle
         }
 
         public static string Describe(MeetingSession s, MeetingTerms terms)
-            => MeetingRegistry.Find(terms.TypeId)?.Describe(s, terms) + " "
-                + s.Player.Name + "提供：" + MeetingClauses.Describe(s, MeetingSide.Other, terms.OtherOffer)
-                + "；" + s.Npc.Name + "提供：" + MeetingClauses.Describe(s, MeetingSide.Self, terms.YourOffer);
+        {
+            var action = MeetingRegistry.Find(terms.TypeId)!;
+            var description = action.Describe(s, terms);
+            if (!(action is IMeetingDeferredAction deferred)) return description + " " + DescribeOffers(s, terms.OtherOffer, terms.YourOffer);
+            return description + " " + string.Join("；", terms.Outcomes.Select(o => deferred.OutcomeSlots(s).FirstOrDefault(slot => slot.Id == o.Id)?.Title
+                + "时：" + DescribeOffers(s, o.OtherOffer, o.YourOffer)));
+        }
+
+        private static string DescribeOffers(MeetingSession s, MeetingOffer other, MeetingOffer yours)
+            => s.Player.Name + "提供：" + MeetingClauses.Describe(s, MeetingSide.Other, other)
+                + "；" + s.Npc.Name + "提供：" + MeetingClauses.Describe(s, MeetingSide.Self, yours);
+
+        public static string StartDeferred(string sessionId, string requestId, int version)
+        {
+            var s = Current;
+            if (s == null || !IsActive(sessionId)) return "[错误] 会晤已结束。";
+            var action = s.Negotiation.Request == null ? null : MeetingRegistry.Find(s.Negotiation.Request.Terms.TypeId) as IMeetingDeferredAction;
+            if (action == null) return "[错误] 当前事项没有待开始的过程。";
+            var error = s.Negotiation.StartDeferred(requestId, version, t => Validate(s, t), r => action.Start(s, r));
+            if (error != null) { NotifyChanged(); return "[错误] " + error; }
+            Record(s, "约定已锁定，即将开始；只在实际结果确定后交付对应条件。 " + s.Summary);
+            NotifyChanged();
+            return "已准备开始。";
+        }
 
         private static string RequestIdentity(MeetingRequest request) => $" 请求编号={request.Id}，版本={request.Version}。";
 

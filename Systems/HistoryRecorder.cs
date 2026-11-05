@@ -237,6 +237,8 @@ namespace AIChronicle
 
         /// <summary>仅在结构化会晤实际成婚后记录；普通报价和私人交易不入公开史料。</summary>
         public static void RecordMeetingMarriage(string summary) => RecordExternalEvent("marriage", summary);
+        public static void RecordDuel(string summary) => RecordExternalEvent("duel_fought", summary.Replace("\r", " ").Replace("\n", " "));
+        public static void RecordDuelAftermath(string summary) => RecordExternalEvent("duel_aftermath", summary.Replace("\r", " ").Replace("\n", " "));
 
         private static void RecordExternalEvent(string eventType, string summary)
         {

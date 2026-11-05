@@ -29,7 +29,7 @@ namespace AIChronicle
                 MeetingService.Changed += Refresh;
                 MeetingService.Recorded += OnRecorded;
                 var screen = new CefWebScreen("meeting.html", "会晤 · " + hero.Name,
-                    "交谈 · 交易 · 家族婚配", PageData(), 30, 1360, 800, windowed: true, contentPadding: 0f, showStatus: false,
+                    "交谈 · 交易 · 家族婚配 · 决斗", PageData(), 30, 1360, 800, windowed: true, contentPadding: 0f, showStatus: false,
                     wheelPixelsPerNotch: 96);
                 // 捕获本次 session，旧页面已经入队的事件不能落进下一次会晤。
                 screen.PageAction += (id, payload) => OnPageAction(session.Id, id, payload);
@@ -166,6 +166,11 @@ namespace AIChronicle
                         args["decision"]?.ToString() ?? "", "");
                     if (response.StartsWith("[错误]")) ShowError(response);
                     Refresh();
+                    break;
+                case "startDeferred":
+                    var started = MeetingService.StartDeferred(sessionId, args["requestId"]?.ToString() ?? "", args["version"]?.ToObject<int>() ?? 0);
+                    if (started.StartsWith("[错误]")) { ShowError(started); Refresh(); }
+                    else Close();
                     break;
             }
         }

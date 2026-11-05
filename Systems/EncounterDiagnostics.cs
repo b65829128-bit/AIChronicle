@@ -28,6 +28,7 @@ namespace AIChronicle
         private static PlayerEncounter? _recoveryEncounter;
         private static bool _hadEncounter;
         private static string _lastSignature = "";
+        internal static Func<bool>? TransitionInProgress { get; set; }
 
         public static void OnSessionLaunched()
         {
@@ -204,6 +205,7 @@ namespace AIChronicle
         /// <summary>所有恢复入口共用的安全闸门；未知状态一律不调用 Finish。</summary>
         private static string? GetRecoveryBlockReason(bool allowEncounterMenu = false)
         {
+            if (TransitionInProgress?.Invoke() == true) return "正在准备或结算决斗，未修复。";
             if (Mission.Current != null || !(Game.Current?.GameStateManager?.ActiveState is MapState mapState))
                 return "当前不在大地图或正在场景中，未修复。请退出场景后再试。";
 

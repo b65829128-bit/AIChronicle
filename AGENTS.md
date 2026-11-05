@@ -106,11 +106,19 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 ### 会晤扩展入口
 
-领主【会晤】以 `MeetingRegistry.Register(IMeetingAction)` 注册事项、`MeetingClauses.Register(IMeetingClauseHandler)` 注册双方报价中可组合的行动条款，玩家表单和 AI 共用版本化交涉单；保留原版交易/婚配入口。会晤工具只在当前会话开放，主线程分发必须捕获/恢复会话上下文，关闭/切档取消旧请求，不引入新存档字段。详细契约见 `docs/plan-meeting.md`。
+领主【会晤】以 `MeetingRegistry.Register(IMeetingAction)` 注册事项、`MeetingClauses.Register(IMeetingClauseHandler)` 注册双方报价中可组合的行动条款，玩家表单和 AI 共用版本化交涉单；保留原版交易/婚配入口。会晤工具只在当前会话开放，主线程分发必须捕获/恢复会话上下文，关闭未开始的请求、切档取消旧动作；普通会晤不新增存档字段，决斗计数见下节。详细契约见 `docs/plan-meeting.md`。
 
 新增目录项：`Systems/MeetingModels.cs`、`MeetingNegotiation.cs`、`MeetingRegistry.cs`、`MeetingActions.cs`、`MeetingAssets.cs`、`MeetingService.cs`、`MeetingPageBuilder.cs`、`MeetingBatch.cs`、`MeetingClauses.cs`、`MeetingClauses.Prisoners.cs`、`MeetingClauses.Allegiance.cs`；`Tools/ToolExecutor.Meeting.cs`；`UI/Web/MeetingCefScreen.cs`；`_Module/WebUI/meeting.html/css/js`、`_Module/Prompts/meeting_rules.txt`；`tests/AIChronicle.Pure.Tests/MeetingTests.cs`、`tests/web/meeting-render.test.mjs`。完整树同步到 `docs/architecture.md`；菜单/参数/AI 工具/执行权限必须保持一致。
 
 会晤专属 AI 上下文只使用“你/对方”；`otherOffer/yourOffer` 分别为对方/当前 Agent 提供，不引入“玩家”身份。嵌套工具参数由 `ToolParamDef.Schema` 声明并深复制。新增动作的专属史料写入 `RecordApplied`，核心服务不按事项 ID 分支。行动 handler.Prepare 绑定实际执行对象、资源冲突键和生效/部分变化检查；批执行器先全量预检，任何不可撤销变化已发生后不假称完整回滚，标明部分履行且不自动重试。
+
+### 决斗与延后履约
+
+`IMeetingDeferredAction` 为等待外部结果的会晤事项提供扩展入口；双向胜负条件在接受后待开始，独立决斗服务接管已冻结的约定，跨场景结束后仅结算实际胜者分支。普通交易仍立即执行。战斗保留原版死亡判定，不使用竞技场强制击昏逻辑；不得把个人决斗结果写成整支部队胜负。算法版本、冻结输入、奖励与真实履约结果保留到 `World/duels/`，会晤关闭不能丢失已开始决斗的结算，切档后旧回调禁止执行。
+
+`Systems/DuelEncounter.cs` 在结束地图对话前设置本次会面的离开标记，避免原版 `encounter_meeting` 自动 `StartBattle`；跨场景收尾只清理捕获的原遭遇，保留定居点和新遭遇，不用 `PlayerEncounter.Update()` 恢复部队交战菜单。胜负履约与放行保护独立于会面退出。
+
+新增目录项：`Systems/MeetingDuelAction.cs`、`MeetingEscrow.cs`、`MeetingClauses.Passage.cs`、`DuelModels.cs`、`DuelRewardMath.cs`、`DuelRewardService.cs`、`DuelService.cs`、`DuelEncounter.cs`、`DuelMission.cs`、`DuelAgentOrigin.cs`、`DuelRecords.cs`、`DuelStore.cs`；`tests/AIChronicle.Pure.Tests/DuelTests.cs`、`DuelGameStubs.cs`；`docs/plan-duel.md`。`DuelStore` 为独立 `CampaignBehaviorBase`，仅新增可选键 `aichronicle_duel_rewards_v1`；旧存档缺键为空，计数与存档分支保持一致，外部审计文件不用于恢复奖励冷却。纯测试进程 `--duel-replay <记录.json>` 直接复算生产算法；详细规则和异常路径见 `docs/plan-duel.md`。
 
 ## 4. 构建与部署
 
@@ -172,6 +180,7 @@ stat -c '%s' "$BANNERLORD_GAME_DIR/Modules/AIChronicle/SubModule.xml"
 | `docs/ui-framework.md` | 原生 Kit UI 框架（主题/组件/屏幕基类/Gallery/迁移规则） |
 | `docs/ui-web.md` | CEF live 页面（CefSharp/CefBridge/输入/BGRA 转换/性能与限制） |
 | `docs/plan-history-cef.md` | 全 Web 史书 MVP 状态与收尾计划（HistoryArchive/边界/清晰度） |
+| `docs/plan-duel.md` | 决斗契约（胜负分支/原版战死/实战/财物保管/奖励复算/史料与日记） |
 | `docs/plan-meeting.md` | 会晤契约（可注册事项/同一交涉单/AI 议价/婚配/原版共存/扩展与测试） |
 | `docs/plan-curia.md` | 朝议（Curia）设计契约（议程/应召/权重/门槛/执行器/UI/提示词/测试） |
 | `docs/plan-treaty.md` | 条约（战前通牒/附条件议和）设计契约（条款/校验/休战/史料/日记/测试） |

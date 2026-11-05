@@ -14,8 +14,9 @@ namespace AIChronicle.Tests
         private static int _failed;
         private static readonly List<string> _failures = new();
 
-        private static int Main()
+        private static int Main(string[] args)
         {
+            if (args.Length > 0) return args[0] == "--duel-mission-smoke" ? SmokeDuelMission(args) : ReplayDuel(args);
             Console.WriteLine("=== AI Chronicle pure logic tests ===");
 
             Run("parse chronicle file names", TestParseChronicleNames);
@@ -35,6 +36,7 @@ namespace AIChronicle.Tests
             RunLlmTests();
             RunEncounterTests();
             RunMeetingTests();
+            RunDuelTests();
 
             Console.WriteLine();
             Console.WriteLine($"passed: {_passed}, failed: {_failed}");
@@ -47,6 +49,29 @@ namespace AIChronicle.Tests
             }
 
             return 0;
+        }
+
+        private static int ReplayDuel(string[] args)
+        {
+            if (args.Length != 2 || args[0] != "--duel-replay")
+            { Console.Error.WriteLine("Usage: --duel-replay <World/duels/ID.json>"); return 2; }
+            try
+            {
+                var audit = Newtonsoft.Json.JsonConvert.DeserializeObject<DuelAudit>(SafeFileIO.ReadAllText(args[1]));
+                var saved = audit?.AppliedReward ?? throw new ArgumentException("此记录尚未确定胜者或没有成长奖励结算。");
+                if (saved.AlgorithmVersion != DuelRewardMath.Version) throw new ArgumentException("未知算法版本：" + saved.AlgorithmVersion);
+                var replay = DuelRewardMath.Calculate(saved.Winner, saved.Loser, saved.PriorWins, audit!.RewardEligible);
+                var matches = replay.Renown == saved.Renown && replay.Influence == saved.Influence;
+                Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(new
+                {
+                    id = audit.Id, algorithmVersion = saved.AlgorithmVersion, matches,
+                    recorded = new { renown = saved.Renown, influence = saved.Influence },
+                    replayed = new { renown = replay.Renown, influence = replay.Influence },
+                    actuallyPaid = new { renown = audit.ActualRenown, influence = audit.ActualInfluence }
+                }, Newtonsoft.Json.Formatting.Indented));
+                return matches ? 0 : 1;
+            }
+            catch (Exception ex) { Console.Error.WriteLine("决斗复算失败：" + ex.Message); return 2; }
         }
 
         private static void Run(string name, Action test)

@@ -18,6 +18,14 @@
     <Compile Include="IdentityStubs.cs" />
     <Compile Include="EncounterTests.cs" />
     <Compile Include="MeetingTests.cs" />
+    <Compile Include="DuelTests.cs" />
+    <Compile Include="DuelGameStubs.cs" />
+    <Compile Include="../../Systems/MeetingEscrow.cs" Link="MeetingEscrow.cs" />
+    <Compile Include="../../Systems/MeetingAssets.cs" Link="MeetingAssets.cs" />
+    <Compile Include="../../Systems/DuelStore.cs" Link="DuelStore.cs" />
+    <Compile Include="../../Systems/DuelModels.cs" Link="DuelModels.cs" />
+    <Compile Include="../../Systems/DuelEncounter.cs" Link="DuelEncounter.cs" />
+    <Compile Include="../../Systems/DuelRewardMath.cs" Link="DuelRewardMath.cs" />
     <Compile Include="../../Systems/MeetingModels.cs" Link="MeetingModels.cs" />
     <Compile Include="../../Systems/MeetingNegotiation.cs" Link="MeetingNegotiation.cs" />
     <Compile Include="../../Systems/MeetingBatch.cs" Link="MeetingBatch.cs" />

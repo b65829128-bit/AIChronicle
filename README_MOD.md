@@ -75,12 +75,24 @@
 - 领主对话中的模组入口升级为【会晤】：事项列表、往来聊天、当前交涉卡；原版交易和婚配对话继续保留。
 - 玩家和 AI 可提出或还价同一份结构化请求，双向报价可组合金币、部队物资（保留品质，不含穿戴装备）和行动条款：释放指定贵族/指定数量士兵俘虏、整个家族加入/叛逃至指定王国；双方接受同一版本后才执行。
 - 家族婚配可指定双方成员（含玩家本人），附双向财物或无条件提出；族长 AI 判断，游戏校验资格并显示婚后家族归属。
-- 不可用事项显示原因；决斗显示尚未开放。关闭会晤结束未成交请求，不新增旧存档字段；CEF 不可用时回退原生聊天。
+- 不可用事项显示原因；关闭会晤结束未开始的请求。CEF 不可用时回退原生聊天。
 - 操作：左侧选事项 → 右侧填双方条件/婚配人选，可在“我方提供/对方提供”中添加行动并选择目标，可附一句话 → 提出条件；对方还价后可接受、修改或拒绝。婚配先显示婚后家族归属。金币/文字使用原生输入框。
 - 例如我方给对方 10,000 第纳尔，对方承诺让整个家族加入我方所在王国；也可附带释放指定俘虏，或单独无偿提出行动。家族换国须执行者是家族领袖、达到封臣等级且不是在位王室，不能代替第三方作出承诺。
 - 组合条件先完整校验、再按次序执行；未发生不可撤销行动时失败会恢复财物，若原版动作异常导致部分生效，会如实显示已完成/未完成事项，不重复执行。
 - 会晤滚动修正为每格固定距离、短时间平滑累加；聊天/条件/下拉分别滚动，刷新保留阅读位置。
 - 会晤期间的转钱/交物、释放俘虏、加入/叛逃通过交涉单统一处理；关闭未成交会晤会撤销当前请求。双方人物称呼与 AI 上下文只用“你/对方”。扩展方式与边界见 `docs/plan-meeting.md`。
+
+### 决斗与胜负条款
+
+- 在【会晤】选择【请求决斗】，同阵营、不同阵营及交战双方均可提出；双方本人参战，可分别约定各自获胜后双方应交付的金币、物资和行动。重伤或其他无法开战的物理条件会显示原因。
+- 双方接受同一版本后，先显示最终条件与奖励预估，再由玩家点击【开始决斗】。接受挑战不会提前交付胜负条件；进入实战后锁定约定，仅履行实际结果对应的条款。
+- 转入决斗前结束本次地图会面，战后返回地图或原城镇流程并显示结果；友方切磋与敌对决斗都不会自动续接整支部队交战菜单。放行条款另按约定提供放行保护。
+- 场景按会面地点选取：城镇使用当地竞技场，野外、村庄和城堡使用当前位置对应的原版地形战场；步战使用各自战斗装备，骑战须双方实际装备坐骑。当前只支持陆地决斗。
+- 战斗沿用原版英雄战死选项、存活判定和实际装备；不强制非致命，也不额外设置死斗概率。真实胜负确定后财物按约定交割，即使死亡等情况导致本人行动无法兑现，也列明未履行事项。认输按败处理且不发成长奖励，异常中断/无胜者退还保管财物。
+- 声望与影响力按版本化确定算法分别计算，使用开战前双方名望、身份、个人战力与重复获胜快照；正常胜者两方同规则，家族等级由声望按原版门槛提升。取消每日统一上限，同一家族七日内反复战胜同一对手家族依次获得 100%、25%、0%；独立家族的王国内影响力按原版资格处理。
+- 战后原始史料、NPC 本人日记和往来记录写入实际胜负、受伤/死亡、奖励与履约结果；详细结果保留算法版本和输入便于复算。不新增运行时依赖；新增独立可选存档键保存七日获胜计数，旧存档缺键时初始化为空，无需重开战役。
+- 决斗文件：`Systems/MeetingDuelAction.cs`、`MeetingEscrow.cs`、`MeetingClauses.Passage.cs`、`DuelModels.cs`、`DuelRewardMath.cs`、`DuelRewardService.cs`、`DuelService.cs`、`DuelEncounter.cs`、`DuelMission.cs`、`DuelAgentOrigin.cs`、`DuelRecords.cs`、`DuelStore.cs`；纯逻辑测试 `tests/AIChronicle.Pure.Tests/DuelTests.cs`、最小财物/保存桩 `DuelGameStubs.cs`；契约见 `docs/plan-duel.md`。
+- 奖励复算：`dotnet run --project tests/AIChronicle.Pure.Tests/AIChronicle.Pure.Tests.csproj -c Release -- --duel-replay <World/duels/编号.json>`，直接用生产算法核对记录中的冻结输入、预期奖励与实际到账。
 
 ### AI 语音朗读（TTS）
 
@@ -633,7 +645,7 @@ AIChronicle/
 │   ├── AgentScheduler.cs    # 事件调度器基类（优先级队列、Tick）
 │   ├── AgentScheduler.Events.cs / Advisory.cs / Historian.cs / Fate.cs  # 事件处理/封臣自省/史官/天意
 │   └── PartyBehaviorManager.cs # 部队行为状态机（PendingAction + Tick）
-├── tests/AIChronicle.Pure.Tests/ # 纯逻辑回归；LlmTests.cs 覆盖工具快照/Provider usage/后台预算/身份，IdentityStubs.cs 提供身份桩，EncounterTests.cs 覆盖遭遇恢复的场景保护/计时/放行，MeetingTests.cs 覆盖双向提议/版本/幂等/资产补偿/工具隔离；tests/web/meeting-render.test.mjs 覆盖动态事项与过期 UI 事件
+├── tests/AIChronicle.Pure.Tests/ # 纯逻辑回归；LlmTests.cs 覆盖工具快照/Provider usage/后台预算/身份，IdentityStubs.cs 提供身份桩，EncounterTests.cs 覆盖遭遇恢复的场景保护/计时/放行，MeetingTests.cs 覆盖双向提议/版本/幂等/资产补偿/工具隔离，DuelTests.cs + DuelGameStubs.cs 覆盖延后执行/伤亡结果归并/生产财物保管/存档分支/奖励复算；tests/web/meeting-render.test.mjs 覆盖动态事项、双胜负分支和过期 UI 事件
 ├── Entities/                # Entity 统一抽象
 │   ├── Entity.cs            # Entity 数据模型（统一玩家/NPC，附能力标签）
 │   ├── IdentityFacts.cs     # 公开身份事实快照与双方人称渲染（纯逻辑）
@@ -654,6 +666,10 @@ AIChronicle/
 │   ├── MeetingClauses.cs / MeetingClauses.Prisoners.cs / MeetingClauses.Allegiance.cs # 可组合行动注册、释放俘虏/家族换国
 │   ├── MeetingBatch.cs      # 多行动预检/排序/资源冲突/补偿/部分履行（纯逻辑）
 │   ├── MeetingAssets.cs / MeetingService.cs / MeetingPageBuilder.cs # 会晤资产提交/生命周期/网页与角色上下文
+│   ├── MeetingDuelAction.cs / MeetingEscrow.cs / MeetingClauses.Passage.cs # 决斗事项/互斥分支财物保管/本次遭遇放行
+│   ├── DuelModels.cs / DuelRewardMath.cs # 胜负归并、结果快照、奖励算法与履约（纯逻辑）
+│   ├── DuelService.cs / DuelEncounter.cs / DuelMission.cs / DuelAgentOrigin.cs # 跨场景实战、会面退出、原版伤亡与结果结算
+│   ├── DuelRewardService.cs / DuelRecords.cs / DuelStore.cs # 原版成长发放、史料日记、兼容旧存档的七日计数
 │   ├── CuriaService.cs / .Attendance.cs / .Effects.cs / .Treaty.cs / .Threshold.cs # 朝议核心（提议/应召/投票/结算/执行/条约校验/门槛）
 │   ├── CuriaPolicyEffects.cs # 政策→朝议修正（门槛/国王票权）
 │   ├── TreatyModels.cs / TreatyText.cs # 条约条款/三方视角文案（纯逻辑可单测）
@@ -679,7 +695,7 @@ AIChronicle/
 ├── AGENTS.md                # AI 开发工作流文档（常驻指令 + docs/ 索引）
 ├── README_MOD.md            # 本文件（功能说明）
 ├── LICENSES/                # 第三方许可（CefSharp/CEF；发布包会一并复制）
-├── docs/                    # AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发/UI 框架与 CEF/i18n/朝议/条约/静默见闻）
+├── docs/                    # AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux 开发/UI 框架与 CEF/i18n/朝议/会晤/决斗/条约/静默见闻）
 ├── scripts/
 │   ├── ci-health.mjs        # 仓库健康检查（JSON/switch 同步、CEF 条件编译、密钥/个人路径扫描）
 │   ├── package.py           # Linux/跨平台打包（编译+部署+zip，含 NAudio + CEF 原生文件）

@@ -150,7 +150,9 @@ CefBridge.ActionReceived
 - `dispatch` 每次带 sessionId；宿主捕获创建时的 sessionId，排队处理及原生输入回调再次校验。提交/回应携带 requestId/version，客户端按钮也捕获渲染时版本；旧点击不能接受新条件。
 - 原生数字/文字输入还带 editorToken，婚配/条件预览另带 revision，避免迟到回调覆盖新草稿。接受按钮固定在交涉区底部。
 - 会晤单独采用 `wheelPixelsPerNotch=96`（小 delta 按比例）；页面只做一次 38ms 时间常数插值，完整累加、及时反向，停止使用浏览器 smooth 重启动画。聊天/交涉/下拉独立滚动，重建 DOM 保留原阅读位置。其他页面映射保持原状。
-- 回归：`node tests/web/meeting-render.test.mjs`，覆盖双向报价、无条件婚配、动态新事项、安全文本、过期点击/输入、组合条款的执行方、条款移除后输入隔离、忙碌状态和滚动累加/反向/边界/阅读位置保持。
+- 延后事项的 `outcomeSlots` 生成多组双向报价，数值/行动路径携带结果索引；旧 editorToken 不能跨草稿、版本或确认状态回填。Ready 显示注册 handler 的 startLabel，仍可修改或取消；开始操作验证 session/id/version 后关闭会晤，独立服务接管实战。接受不会自动跳入战斗；普通事项无结果分支。
+- `actionTypes` 同时过滤网页行动选项和服务端校验，放行首版只在决斗中提供。战后原生结果提示显示胜负、实际成长、家族升级和履约，完整约定进入往来记录与 World/duels 审计。
+- 回归：`node tests/web/meeting-render.test.mjs`，覆盖双向报价、无条件婚配、动态新事项、安全文本、过期点击/输入、组合条款的执行方、条款移除后输入隔离、双胜负分支路径、显式开始、限定事项条款、忙碌状态和滚动累加/反向/边界/阅读位置保持。
 
 ## 8. 构建 / 打包
 

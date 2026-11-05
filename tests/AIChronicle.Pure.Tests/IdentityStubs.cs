@@ -29,7 +29,7 @@ namespace TaleWorlds.CampaignSystem
         public bool IsAtWarWith(IFaction other) => false;
     }
 
-    public sealed class Hero
+    public sealed partial class Hero
     {
         public string Name { get; set; } = "";
         public bool IsFemale { get; set; }

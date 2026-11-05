@@ -26,6 +26,11 @@ namespace AIChronicle
         MeetingEffect Prepare(MeetingClauseContext context, MeetingClause clause);
     }
 
+    public interface IMeetingScopedClause
+    {
+        IReadOnlyList<string> ActionTypes { get; }
+    }
+
     public static class MeetingClauses
     {
         private static readonly Dictionary<string, IMeetingClauseHandler> Handlers = new(StringComparer.Ordinal);
@@ -33,6 +38,7 @@ namespace AIChronicle
         {
             Register(new MeetingReleasePrisonerClause());
             Register(new MeetingAllegianceClause());
+            Register(new MeetingPassageClause());
         }
         public static void Register(IMeetingClauseHandler handler)
         {
@@ -43,7 +49,7 @@ namespace AIChronicle
         public static IReadOnlyList<IMeetingClauseHandler> All => Handlers.Values.ToList();
         public static IMeetingClauseHandler? Find(string id) => Handlers.TryGetValue(id, out var handler) ? handler : null;
 
-        public static string? Validate(MeetingSession session, MeetingTerms terms)
+        public static string? Validate(MeetingSession session, MeetingTerms terms, bool includePrimary = true)
         {
             foreach (var side in new[] { MeetingSide.Other, MeetingSide.Self })
             {
@@ -52,15 +58,16 @@ namespace AIChronicle
                 {
                     var handler = Find(clause.TypeId);
                     if (handler == null) return "这类行动尚未开放。";
+                    if (handler is IMeetingScopedClause scope && !scope.ActionTypes.Contains(terms.TypeId)) return "这项行动不能用于当前事项。";
                     var invalid = handler.Unavailable(context) ?? MeetingFieldRules.Validate(handler.Fields(context), clause.Parameters)
                         ?? handler.Validate(context, clause);
                     if (invalid != null) return context.Actor.Name + "：" + invalid;
                 }
             }
-            return MeetingBatch.Validate(Prepare(session, terms));
+            return MeetingBatch.Validate(Prepare(session, terms, includePrimary));
         }
 
-        public static List<MeetingEffect> Prepare(MeetingSession session, MeetingTerms terms)
+        public static List<MeetingEffect> Prepare(MeetingSession session, MeetingTerms terms, bool includePrimary = true)
         {
             var effects = new List<MeetingEffect>();
             foreach (var side in new[] { MeetingSide.Other, MeetingSide.Self })
@@ -68,7 +75,7 @@ namespace AIChronicle
                 var context = new MeetingClauseContext(session, side);
                 effects.AddRange(Offer(terms, side).Actions.Select(c => Find(c.TypeId)!.Prepare(context, c)));
             }
-            var primary = MeetingRegistry.Find(terms.TypeId)!.PrepareEffect(session, terms);
+            var primary = includePrimary ? MeetingRegistry.Find(terms.TypeId)!.PrepareEffect(session, terms) : null;
             if (primary != null) effects.Add(primary);
             return effects;
         }

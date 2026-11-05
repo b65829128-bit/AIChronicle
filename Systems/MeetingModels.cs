@@ -14,7 +14,7 @@ namespace AIChronicle
     }
 
     public enum MeetingSide { Other, Self }
-    public enum MeetingStatus { Negotiating, Executing, Applied, Rejected, Cancelled, Failed, PartiallyApplied }
+    public enum MeetingStatus { Negotiating, Executing, Applied, Rejected, Cancelled, Failed, PartiallyApplied, Ready, Running }
 
     public sealed class MeetingItem
     {
@@ -38,6 +38,21 @@ namespace AIChronicle
         public MeetingClause Copy() => new() { TypeId = TypeId, Parameters = (JObject)Parameters.DeepClone() };
     }
 
+    public sealed class MeetingOutcome
+    {
+        public string Id { get; set; } = "";
+        public MeetingOffer OtherOffer { get; set; } = new();
+        public MeetingOffer YourOffer { get; set; } = new();
+        public MeetingOutcome Copy() => new() { Id = Id, OtherOffer = OtherOffer.Copy(), YourOffer = YourOffer.Copy() };
+        public MeetingTerms AsTerms(string typeId) => new() { TypeId = typeId, OtherOffer = OtherOffer.Copy(), YourOffer = YourOffer.Copy() };
+    }
+
+    public sealed class MeetingOutcomeSlot
+    {
+        public string Id { get; set; } = "";
+        public string Title { get; set; } = "";
+    }
+
     /// <summary>双方财物是公共条款，动作专属参数留给注册的 handler。字段名也是 AI schema 与网页协议。</summary>
     public sealed class MeetingTerms
     {
@@ -45,19 +60,41 @@ namespace AIChronicle
         public MeetingOffer OtherOffer { get; set; } = new();
         public MeetingOffer YourOffer { get; set; } = new();
         public JObject Parameters { get; set; } = new();
+        public List<MeetingOutcome> Outcomes { get; set; } = new();
         public MeetingTerms Copy() => new()
         {
             TypeId = TypeId, OtherOffer = OtherOffer.Copy(), YourOffer = YourOffer.Copy(),
-            Parameters = (JObject)Parameters.DeepClone()
+            Parameters = (JObject)Parameters.DeepClone(), Outcomes = Outcomes.Select(o => o.Copy()).ToList()
         };
 
         /// <summary>拒绝缺失字段、浮点数量、未知条款；不让 JSON 转换悄悄把报价取整或忽略内容。</summary>
         public static MeetingTerms Parse(JObject json)
         {
-            RequireKeys(json, "typeId", "parameters", "otherOffer", "yourOffer");
+            RequireKeys(json, json["outcomes"] == null ? new[] { "typeId", "parameters", "otherOffer", "yourOffer" }
+                : new[] { "typeId", "parameters", "otherOffer", "yourOffer", "outcomes" });
             if (json["typeId"]?.Type != JTokenType.String || !(json["parameters"] is JObject parameters)
                 || parameters.Properties().Any(p => p.Value.Type != JTokenType.String))
                 throw new ArgumentException("事项编号和专属参数须为文本。");
+            ValidateOffersJson(json);
+            if (json["outcomes"] != null)
+            {
+                if (!(json["outcomes"] is JArray outcomes)) throw new ArgumentException("胜负条件须为列表。");
+                foreach (var token in outcomes)
+                {
+                    if (!(token is JObject outcome)) throw new ArgumentException("胜负条件格式不正确。");
+                    RequireKeys(outcome, "id", "otherOffer", "yourOffer");
+                    if (outcome["id"]?.Type != JTokenType.String) throw new ArgumentException("结果编号须为文本。");
+                    ValidateOffersJson(outcome);
+                }
+            }
+            var terms = json.ToObject<MeetingTerms>()!;
+            var error = ValidateShape(terms);
+            if (error != null) throw new ArgumentException(error);
+            return terms;
+        }
+
+        private static void ValidateOffersJson(JObject json)
+        {
             foreach (var name in new[] { "otherOffer", "yourOffer" })
             {
                 if (!(json[name] is JObject offer)) throw new ArgumentException("请填写双方完整报价。");
@@ -85,10 +122,6 @@ namespace AIChronicle
                     }
                 }
             }
-            var terms = json.ToObject<MeetingTerms>()!;
-            var error = ValidateShape(terms);
-            if (error != null) throw new ArgumentException(error);
-            return terms;
         }
 
         private static void RequireKeys(JObject value, params string[] keys)
@@ -101,7 +134,11 @@ namespace AIChronicle
         {
             if (terms == null || string.IsNullOrWhiteSpace(terms.TypeId) || terms.TypeId.Length > 80)
                 return "请选择有效事项。";
-            foreach (var offer in new[] { terms.OtherOffer, terms.YourOffer })
+            if (terms.Outcomes == null || terms.Outcomes.Count > 4 || terms.Outcomes.Any(o => o == null
+                || string.IsNullOrWhiteSpace(o.Id) || o.Id.Length > 80)
+                || terms.Outcomes.Select(o => o.Id).Distinct(StringComparer.Ordinal).Count() != terms.Outcomes.Count)
+                return "结果分支须有唯一编号，最多 4 项。";
+            foreach (var offer in new[] { terms.OtherOffer, terms.YourOffer }.Concat(terms.Outcomes.SelectMany(o => new[] { o.OtherOffer, o.YourOffer })))
             {
                 if (offer == null || offer.Gold < 0 || offer.Items == null || offer.Items.Count > 32 || offer.Actions == null || offer.Actions.Count > 8)
                     return "金币不能为负，单方最多提供 32 种物品和 8 项行动。";
@@ -113,9 +150,21 @@ namespace AIChronicle
                 if (offer.Items.Select(i => i.Id).Distinct(StringComparer.Ordinal).Count() != offer.Items.Count)
                     return "同一种物品请合并数量，不要重复列出。";
             }
-            if (terms.Parameters == null || terms.Parameters.Count > 20 || terms.Parameters.ToString().Length > 4000)
+            if (terms.Parameters == null || terms.Parameters.Count > 20 || terms.Parameters.ToString().Length > 4000
+                || terms.Parameters.Properties().Any(p => p.Value.Type != JTokenType.String))
                 return "事项参数过长。";
             return null;
+        }
+
+        public static bool IsEmpty(MeetingOffer offer) => offer.Gold == 0 && offer.Items.Count == 0 && offer.Actions.Count == 0;
+
+        public static string? ValidateOutcomes(MeetingTerms terms, IReadOnlyList<MeetingOutcomeSlot> slots)
+        {
+            if (slots.Count == 0) return terms.Outcomes.Count == 0 ? null : "这类事项没有延后结果，不能附带胜负条件。";
+            if (terms.Outcomes.Count != slots.Count || slots.Any(s => !terms.Outcomes.Any(o => o.Id == s.Id)))
+                return "请填写全部有效结果分支；不附条件的分支也须保留空报价。";
+            return !IsEmpty(terms.OtherOffer) || !IsEmpty(terms.YourOffer)
+                ? "此事项的财物与行动须写入对应结果分支，接受约定时不提前交付。" : null;
         }
     }
 
@@ -183,6 +232,17 @@ namespace AIChronicle
     /// <summary>不依赖游戏的报价约束，运行时预检与离线回归共用。</summary>
     public static class MeetingAssetRules
     {
+        public static MeetingOffer ReserveMaximum(IEnumerable<MeetingOffer> offers)
+        {
+            var list = offers.ToList();
+            return new MeetingOffer
+            {
+                Gold = list.Count == 0 ? 0 : list.Max(o => o.Gold),
+                Items = list.SelectMany(o => o.Items).GroupBy(i => i.Id, StringComparer.Ordinal)
+                    .Select(g => new MeetingItem { Id = g.Key, Count = g.Max(i => i.Count) }).ToList()
+            };
+        }
+
         public static string? Validate(MeetingTerms terms, int otherGold, int yourGold,
             IReadOnlyList<MeetingInventoryEntry> otherInventory, IReadOnlyList<MeetingInventoryEntry> yourInventory,
             string otherName = "对方", string yourName = "你")

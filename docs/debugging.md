@@ -34,6 +34,10 @@
 
 本机 prefix：`/mnt/data/SteamLibrary/steamapps/compatdata/261550/pfx`。
 
+**场景加载即退出且引擎日志没有堆栈**：Proton/Mono 的致命托管异常可能只写到启动 Steam 的标准错误，被系统 journal 收录。先按崩溃时间执行 `journalctl --since 'YYYY-MM-DD HH:MM:SS' --until 'YYYY-MM-DD HH:MM:SS' --no-pager`，搜索 `Unhandled Exception` / `FATAL UNHANDLED EXCEPTION`。2026-11-05 野外决斗的确切堆栈由此定位到 `MissionAgentHandler.EarlyStart`：该城镇组件无条件读取 `Settlement.CurrentSettlement.Position`，野外必须从任务组件清单中排除；详见 `plan-duel.md`。决斗 `[Duel]` 阶段日志可区分载入、双方生成与财物保管。
+
+构建后可用测试程序的 `--duel-mission-smoke <AIChronicle.dll> <游戏目录>` 检查真实 DLL 的野外/竞技场组件装配，无需原生引擎；默认纯逻辑测试不引用游戏程序集。该检查只覆盖组件依赖边界，完整加载、伤亡和返回仍须实机复测。
+
 ### 查看最新日志的命令
 
 ```bash

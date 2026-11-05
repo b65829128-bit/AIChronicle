@@ -174,6 +174,67 @@ game.render(partial);
 assert.match(elements.get("deal").textContent, /部分履行/);
 assert.equal(all(elements.get("deal")).some(e => e.tagName === "button" && e.textContent === "接受这份约定"), false);
 
+// 两个结果分支各自保留双向财物/行动，路径不能串到另一个结果或顶层。
+const duel = structuredClone(compound); duel.sessionId = "duel";
+Object.assign(duel.types.find(t => t.id === "duel"), {
+  unavailable: "", description: "双方本人参战，胜负条件分别履行。", startLabel: "开始决斗",
+  fields: [{ key: "mounts", label: "决斗方式", kind: "choice", choices: [{ id: "foot", label: "步战" }, { id: "mounted", label: "骑战" }] }],
+  outcomeSlots: [{ id: "otherVictory", title: "阿尔文获胜" }, { id: "yourVictory", title: "艾琳获胜" }]
+});
+const passage = { id: "safe_passage", title: "结束本次遭遇并放行", description: "只适用于决斗", unavailable: "", fields: [], actionTypes: ["duel"] };
+duel.yourClauseTypes.push(passage);
+const within = (parent, text) => {
+  const match = all(parent).find(e => e.tagName === "button" && e.textContent.startsWith(text));
+  assert.ok(match, `missing nested button: ${text}`); return match;
+};
+const outcomes = () => all(elements.get("deal")).filter(e => e.className === "outcome-card");
+game.render(duel); button("actionList", "请求决斗").click();
+assert.equal(outcomes().length, 2);
+assert.match(outcomes()[0].textContent, /阿尔文获胜时/); assert.match(outcomes()[1].textContent, /艾琳获胜时/);
+button("deal", "请选择").click(); button("deal", "步战").click();
+within(outcomes()[0], "0").click(); const winPayment = sent.at(-1);
+assert.equal(winPayment.path, "outcomes.0.otherOffer.gold");
+game.setNumber({ editorToken: winPayment.editorToken, path: winPayment.path, value: 1000 });
+within(outcomes()[1], "0").click(); const lossPayment = sent.at(-1);
+assert.equal(lossPayment.path, "outcomes.1.otherOffer.gold");
+game.setNumber({ editorToken: lossPayment.editorToken, path: lossPayment.path, value: 9000 });
+within(outcomes()[0], "＋ 添加对方行动").click(); within(outcomes()[0], "家族加入／叛逃").click();
+within(outcomes()[0], "请选择").click(); within(outcomes()[0], "白松王国").click();
+within(outcomes()[1], "＋ 添加我方行动").click(); within(outcomes()[1], "释放俘虏").click();
+within(outcomes()[1], "请选择").click(); within(outcomes()[1], "领主甲").click();
+within(outcomes()[1], "1").click(); const conditionalCount = sent.at(-1);
+assert.equal(conditionalCount.path, "outcomes.1.otherOffer.actions.0.parameters.count");
+game.setNumber({ editorToken: conditionalCount.editorToken, path: conditionalCount.path, value: 3 });
+button("deal", "提出这些条件").click();
+const duelTerms = sent.at(-1).terms;
+assert.equal(duelTerms.parameters.mounts, "foot");
+assert.equal(duelTerms.otherOffer.gold, 0); assert.equal(duelTerms.yourOffer.gold, 0);
+assert.equal(duelTerms.outcomes[0].otherOffer.gold, 1000); assert.equal(duelTerms.outcomes[1].otherOffer.gold, 9000);
+assert.equal(duelTerms.outcomes[0].yourOffer.actions[0].parameters.kingdomId, "kingdom-a");
+assert.equal(duelTerms.outcomes[1].otherOffer.actions[0].parameters.count, "3");
+const challenge = structuredClone(duel);
+challenge.request = { id: "duel-request", version: 3, status: 0, proposedBy: 1, otherAccepted: false, yourAccepted: true,
+  terms: duelTerms, reason: "双方各自获胜的条件", result: "" };
+game.render(challenge); button("deal", "接受这份约定").click();
+assert.equal(sent.at(-1).id, "respond", "accepting does not start a duel");
+assert.equal(all(elements.get("deal")).some(e => e.tagName === "button" && e.textContent === "开始决斗"), false);
+const ready = structuredClone(challenge); ready.request.status = 7; ready.request.otherAccepted = true; ready.request.result = "等待开始";
+game.render(ready); const staleStart = button("deal", "开始决斗");
+const readyUpdated = structuredClone(ready); readyUpdated.request.version = 4;
+game.render(readyUpdated); staleStart.click();
+assert.equal(sent.at(-1).version, 3, "old start carries its exact version");
+button("deal", "开始决斗").click(); assert.equal(sent.at(-1).id, "startDeferred"); assert.equal(sent.at(-1).version, 4);
+game.setNumber({ editorToken: lossPayment.editorToken, path: lossPayment.path, value: 1 });
+assert.match(elements.get("deal").textContent, /9,000/, "old draft callback cannot change confirmed stakes");
+const cannotStart = structuredClone(readyUpdated); cannotStart.types.find(t => t.id === "duel").unavailable = "伤势过重";
+game.render(cannotStart); assert.equal(button("deal", "开始决斗").disabled, true); assert.match(elements.get("deal").textContent, /伤势过重/);
+const running = structuredClone(readyUpdated); running.request.status = 8; game.render(running);
+assert.equal(all(elements.get("deal")).some(e => e.tagName === "button" && e.textContent === "开始决斗"), false);
+const scope = structuredClone(duel); scope.sessionId = "scoped-clause";
+game.render(scope); button("actionList", "交易与赠礼").click(); button("deal", "＋ 添加对方行动").click();
+assert.equal(all(elements.get("deal")).some(e => e.tagName === "button" && e.textContent.startsWith("结束本次遭遇并放行")), false,
+  "duel-only clause is not offered for immediate trade");
+
 const chat = elements.get("messages"); chat.scrollHeight = 2000; chat.clientHeight = 400; chat.style.overflowY = "auto"; chat.scrollTop = 0;
 hovered = chat;
 window.__scrollBySmooth(120, 0, 0); window.__scrollBySmooth(120, 0, 0);
@@ -190,4 +251,4 @@ assert.equal(chat.scrollTop, 600, "new wheel burst starts at actual reading posi
 chat.scrollTop = 125; dealScroller.scrollTop = 170;
 game.render(partial);
 assert.equal(chat.scrollTop, 125, "refresh preserves conversation reading position"); assert.equal(dealScroller.scrollTop, 170, "refresh preserves deal reading position");
-console.log("meeting renderer: compound clauses, versioned offers, dynamic fields, safe text and responsive independent scrolling passed");
+console.log("meeting renderer: conditional duel branches, explicit start, scoped clauses, stale callbacks, safe text and independent scrolling passed");

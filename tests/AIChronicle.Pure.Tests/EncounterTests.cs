@@ -59,6 +59,7 @@ namespace AIChronicle.Tests
             ("letters", () => LetterListScreen.IsOpen = true),
             ("history", () => HistoryScreen.IsOpen = true),
             ("kit UI", () => KitScreen.AnyOpen = true),
+            ("duel transition", () => EncounterDiagnostics.TransitionInProgress = () => true),
         };
 
         private static void RestoreEncounterMap(PlayerEncounter encounter)
@@ -73,12 +74,14 @@ namespace AIChronicle.Tests
             encounter.Settlement = null;
             encounter.MapEvent = null;
             AIChatScreen.IsOpen = LetterListScreen.IsOpen = HistoryScreen.IsOpen = KitScreen.AnyOpen = false;
+            EncounterDiagnostics.TransitionInProgress = null;
         }
 
         private static PlayerEncounter ResetEncounterTest()
         {
             MainThreadExecutor.BeginCampaign();
             PlayerEncounter.FinishCalls = 0;
+            PlayerEncounter.LastForcePlayerOutFromSettlement = null;
             var encounter = new PlayerEncounter();
             RestoreEncounterMap(encounter);
             EncounterDiagnostics.OnSessionLaunched();
@@ -216,7 +219,7 @@ namespace AIChronicle.Tests
 // 最小状态桩：只提供生产闸门读取的属性，并记录是否调用 Finish；不模拟游戏比赛流程。
 namespace TaleWorlds.CampaignSystem
 {
-    public sealed class Campaign
+    public sealed partial class Campaign
     {
         public static Campaign? Current { get; set; }
         public Encounters.PlayerEncounter? PlayerEncounter { get; set; }
@@ -242,7 +245,7 @@ namespace TaleWorlds.CampaignSystem.Settlements
 
 namespace TaleWorlds.CampaignSystem.Party
 {
-    public sealed class MobileParty
+    public sealed partial class MobileParty
     {
         public static MobileParty? MainParty { get; set; }
         public bool IsActive { get; set; } = true;
@@ -259,22 +262,26 @@ namespace TaleWorlds.CampaignSystem.Encounters
     {
         public static PlayerEncounter? Current => Campaign.Current!.PlayerEncounter;
         public static object? LocationEncounter => Campaign.Current!.LocationEncounter;
-        public static bool LeaveEncounter => Current!.Leave;
+        public static bool LeaveEncounter { get => Current!.Leave; set => Current!.Leave = value; }
         public static Party.MobileParty? EncounteredMobileParty => null;
         public static Settlements.Settlement? EncounterSettlement => Current?.Settlement;
         public static object? Battle => Current?.MapEvent;
         public static int FinishCalls { get; set; }
+        public static bool? LastForcePlayerOutFromSettlement { get; set; }
         public bool Leave { get; set; }
         public Settlements.Settlement? Settlement { get; set; }
         public object? MapEvent { get; set; }
         public string EncounterState => "Begin";
 
-        public static void Finish()
+        public static void Finish(bool forcePlayerOutFromSettlement = true)
         {
             FinishCalls++;
+            LastForcePlayerOutFromSettlement = forcePlayerOutFromSettlement;
             Campaign.Current!.PlayerEncounter = null;
             Campaign.Current.LocationEncounter = null;
-            Party.MobileParty.MainParty!.CurrentSettlement = null;
+            if (forcePlayerOutFromSettlement) Party.MobileParty.MainParty!.CurrentSettlement = null;
+            Party.MobileParty.MainParty!.MapEvent = null;
+            if (Game.Current?.GameStateManager?.ActiveState is TaleWorlds.CampaignSystem.GameState.MapState map) map.AtMenu = false;
         }
     }
 }

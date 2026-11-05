@@ -35,7 +35,7 @@ namespace AIChronicle
         /// </summary>
         internal static bool IsPlayerFreeOnMap()
         {
-            if (Campaign.Current == null) return false;
+            if (Campaign.Current == null || DuelService.IsBusy) return false;
             try
             {
                 var state = Game.Current?.GameStateManager?.ActiveState;
@@ -93,6 +93,8 @@ namespace AIChronicle
             // 新战役开始：递增主线程队列 epoch，丢弃上一局未消费的动作。
             // 放在 base 之前，确保 base/行为初始化期间投递的动作也属于新 epoch。
             MainThreadExecutor.BeginCampaign();
+            DuelService.ResetForNewCampaign();
+            EncounterDiagnostics.TransitionInProgress = () => DuelService.IsBusy;
             _pendingMeetingHero = null;
             MeetingService.Close();
 #if NET472
@@ -113,6 +115,7 @@ namespace AIChronicle
                 starter.AddBehavior(_chatBehavior);
 
                 starter.AddBehavior(new HistoryRecorder());
+                starter.AddBehavior(new DuelStore());
 
                 var kdpbType = Type.GetType("TaleWorlds.CampaignSystem.CampaignBehaviors.KingdomDecisionProposalBehavior, TaleWorlds.CampaignSystem");
                 InformationManager.DisplayMessage(new InformationMessage(
@@ -259,6 +262,7 @@ namespace AIChronicle
         {
             // 先让主线程队列失效，再清理 UI/实体；否则旧战役排队动作可能在新战役执行。
             MainThreadExecutor.EndCampaign();
+            DuelService.ResetForNewCampaign();
             _pendingMeetingHero = null;
 #if NET472
             MeetingCefScreen.Close();
@@ -284,6 +288,7 @@ namespace AIChronicle
             base.OnApplicationTick(dt);
 
             MainThreadExecutor.Tick();
+            DuelService.Tick();
 #if NET472
             MeetingCefScreen.Tick();
 #endif

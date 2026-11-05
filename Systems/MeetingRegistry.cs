@@ -34,6 +34,14 @@ namespace AIChronicle
         MeetingEffect? PrepareEffect(MeetingSession session, MeetingTerms terms);
     }
 
+    public interface IMeetingDeferredAction : IMeetingAction
+    {
+        string StartLabel { get; }
+        IReadOnlyList<MeetingOutcomeSlot> OutcomeSlots(MeetingSession session);
+        string Confirm(MeetingSession session, MeetingTerms terms);
+        void Start(MeetingSession session, MeetingRequest request);
+    }
+
     public static class MeetingRegistry
     {
         private static readonly Dictionary<string, IMeetingAction> Actions = new(StringComparer.Ordinal);
@@ -41,7 +49,7 @@ namespace AIChronicle
         {
             Register(new MeetingTradeAction());
             Register(new MeetingMarriageAction());
-            Register(new MeetingUnavailableAction("duel", "请求决斗", "与对方约定一场决斗。", "尚未开放"));
+            Register(new MeetingDuelAction());
         }
 
         public static void Register(IMeetingAction action)

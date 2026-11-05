@@ -920,7 +920,7 @@
   {
     "name": "propose_meeting",
     "category": "social",
-    "description": "Create or counter a shared structured offer containing gold, items and composable promised actions. otherOffer.actions are performed by the OTHER person; yourOffer.actions by YOU. Use current request_id/version to counter, empty id and version 0 for a new request. Supply COMPLETE terms. Both parties accept the same version before anything executes.",
+    "description": "Create or counter a shared structured offer. otherOffer.actions are performed by the OTHER person; yourOffer.actions by YOU. New request: empty request_id and version 0. Counter: current id/version and COMPLETE terms. A deferred action has outcomes from current outcomeSlots, each with full otherOffer/yourOffer; keep top-level offers empty. otherVictory means the OTHER person wins, yourVictory means YOU win. Both must accept; accepting a duel only confirms it, combat and conditional delivery happen later.",
     "parameters": [
       {
         "name": "request_id",
@@ -1075,13 +1075,160 @@
                 "actions"
               ],
               "additionalProperties": false
+            },
+            "outcomes": {
+              "type": "array",
+              "description": "Result branches declared by the available action outcomeSlots. Empty for immediate trade/marriage. For duel include otherVictory and yourVictory, even when their offers are empty. No conditional assets execute on acceptance.",
+              "maxItems": 4,
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "otherOffer",
+                  "yourOffer"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Exact outcomeSlots id: otherVictory = the other person wins; yourVictory = you win."
+                  },
+                  "otherOffer": {
+                    "type": "object",
+                    "properties": {
+                      "gold": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "description": "Exact inventory id including quality."
+                            },
+                            "count": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "count"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 32
+                      },
+                      "actions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "typeId": {
+                              "type": "string",
+                              "description": "An available registered clause id for this offer side."
+                            },
+                            "parameters": {
+                              "type": "object",
+                              "description": "Exact field keys from that side clause metadata. Values are strings, including count.",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "typeId",
+                            "parameters"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 8,
+                        "description": "Actions promised by the person providing this offer. Empty [] if none."
+                      }
+                    },
+                    "required": [
+                      "gold",
+                      "items",
+                      "actions"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "yourOffer": {
+                    "type": "object",
+                    "properties": {
+                      "gold": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "description": "Exact inventory id including quality."
+                            },
+                            "count": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "count"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 32
+                      },
+                      "actions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "typeId": {
+                              "type": "string",
+                              "description": "An available registered clause id for this offer side."
+                            },
+                            "parameters": {
+                              "type": "object",
+                              "description": "Exact field keys from that side clause metadata. Values are strings, including count.",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "typeId",
+                            "parameters"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 8,
+                        "description": "Actions promised by the person providing this offer. Empty [] if none."
+                      }
+                    },
+                    "required": [
+                      "gold",
+                      "items",
+                      "actions"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
             }
           },
           "required": [
             "typeId",
             "parameters",
             "otherOffer",
-            "yourOffer"
+            "yourOffer",
+            "outcomes"
           ],
           "additionalProperties": false
         }
@@ -1096,7 +1243,7 @@
   {
     "name": "respond_meeting",
     "category": "social",
-    "description": "Accept, reject or withdraw the CURRENT meeting proposal using its exact id/version. Accept executes only when the other person already accepted that version. To change terms use propose_meeting. Check returned result before claiming success.",
+    "description": "Accept, reject or withdraw the CURRENT exact id/version. Immediate offers execute after mutual acceptance. A duel becomes Ready after mutual acceptance; its conditional promises wait for actual combat and result. To change terms use propose_meeting. Check returned status before claiming anything happened.",
     "parameters": [
       {
         "name": "request_id",

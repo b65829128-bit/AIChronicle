@@ -40,7 +40,7 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 > **AI 聊天对话入口**：`LordChatBehavior` 在 `hero_main_options`（普通领主对话）与 `player_responds_to_surrender_demand`（被强敌擒获的投降/应战对话）两个节点注册【会晤】选项（CEF 不可用/非领主/net6 回退原生聊天）。后者让被擒玩家可谈判，agent 可用 `let_go` 放行；`AIChatScreenVM` 在回复完成后检测 `PlayerEncounter.LeaveEncounter` 为真时自动关闭聊天并 `EndConversation()` 结束对话（对话中遭遇不会自动 tick 结束），玩家获释。
 
-> **会晤的结构化行动**：`MeetingRegistry.Register(IMeetingAction)` 为事项注册入口；`MeetingNegotiation` 维护双方同版接受与幂等，`MeetingAssets` 在主线程预检/提交并对尚未生效的失败补偿资产。三工具 `query_meeting/propose_meeting/respond_meeting` 只在会晤会话开放，旧直接转钱/交物与释放俘虏在该会话禁用，旧换国工具的加入/叛逃模式要求通过条款执行。`MeetingClauses.Register(IMeetingClauseHandler)` 注册报价中的 actions，`MeetingBatch` 预检/排序/校验资源冲突，无法撤销的动作部分生效时如实记录而不假称回滚。AsyncLocal `MeetingContext.SessionId` 随主线程工具分发捕获/恢复，关闭/切档/换对象使旧行动失效。动作专有的成功记录交给 handler.RecordApplied。无新存档字段，详见 `plan-meeting.md`。
+> **会晤的结构化行动**：`MeetingRegistry.Register(IMeetingAction)` 为事项注册入口；`MeetingNegotiation` 维护双方同版接受与幂等，`MeetingAssets` 在主线程预检/提交并对尚未生效的失败补偿资产。三工具 `query_meeting/propose_meeting/respond_meeting` 只在会晤会话开放，旧直接转钱/交物与释放俘虏在该会话禁用，旧换国工具的加入/叛逃模式要求通过条款执行。`MeetingClauses.Register(IMeetingClauseHandler)` 注册报价中的 actions，`MeetingBatch` 预检/排序/校验资源冲突，无法撤销的动作部分生效时如实记录而不假称回滚。AsyncLocal `MeetingContext.SessionId` 随主线程工具分发捕获/恢复，关闭/切档/换对象使旧行动失效。即时动作的专属成功记录交给 handler.RecordApplied。延后事项实现 `IMeetingDeferredAction`，`terms.outcomes` 按结果槽列出各自双向报价，接受后进入 Ready，再由本地开始操作进入 Running；已开始过程独立于会晤销毁。`IMeetingScopedClause` 限定行动适用事项，菜单/AI 元数据与服务端校验一致。普通会晤不新增存档字段；决斗 `DuelStore` 独立可选键保存七日计数，旧存档缺键为空。详见 `plan-meeting.md`、`plan-duel.md`。
 
 > **提示词同步规则（newer-wins）**：基础目录 `_Module/Prompts/` 是模板源，战役创建时复制到 `Campaigns/{战役}/`。每次进档（`OnSessionLaunched` → `PromptManager.StartCampaign`）会做同步——**只要基础目录文件比战役副本新，就覆盖战役副本**。玩家在战役副本上的手动编辑（时间戳更新）会被保留。
 >
@@ -478,6 +478,10 @@ Usage:
 │   ├── MeetingClauses.cs / MeetingClauses.Prisoners.cs / MeetingClauses.Allegiance.cs ← 可组合行动注册、释放俘虏/家族换国
 │   ├── MeetingBatch.cs ← 多效果全量预检/资源冲突/执行次序/部分履行（纯逻辑）
 │   ├── MeetingAssets.cs / MeetingService.cs / MeetingPageBuilder.cs ← 精确物资/会话/网页与角色上下文
+│   ├── MeetingDuelAction.cs / MeetingEscrow.cs / MeetingClauses.Passage.cs ← 延后事项、分支财物保管、本次遭遇放行
+│   ├── DuelModels.cs / DuelRewardMath.cs ← 胜负归并、审计快照、v1 确定奖励、延后履约（纯逻辑）
+│   ├── DuelService.cs / DuelEncounter.cs / DuelMission.cs / DuelAgentOrigin.cs ← 跨场景实战、会面退出、原版伤亡、主线程与 epoch
+│   ├── DuelRewardService.cs / DuelRecords.cs / DuelStore.cs ← 成长发放/史料/日记/完整复算记录/独立可选存档键
 │   ├── CuriaService.cs / .Attendance.cs / .Effects.cs / .Treaty.cs / .Threshold.cs ← 朝议（提议/应召/投票/结算/执行/条约/门槛）
 │   ├── CuriaModels.cs          ← 朝议数据模型
 │   ├── CuriaStore.cs           ← 朝议持久化/公开档案/日记/史料/通知
@@ -500,7 +504,7 @@ Usage:
 │   ├── FiefAssignmentPatch.cs  ← 攻城/条约受地后的国王分封（共享 QueueKingFiefDecision）
 │   ├── ExecutionNoPenaltyPatch.cs ← 处决无惩罚
 │   └── ClanDiscontinuationPatch.cs ← 独立家族永续（禁用原版 28 天灭族，MCM 可开关）
-├── docs/                       ← AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux/UI/i18n/朝议/会晤/条约/静默见闻）
+├── docs/                       ← AI 参考文档（架构/子系统/工具清单/调试/Harmony/Linux/UI/i18n/朝议/会晤/决斗/条约/静默见闻）
 ├── AGENTS.md                  ← 常驻开发指令（本文件）
 ├── README.md                  ← 开源主入口（英文简介，指向 README_MOD.md / AGENTS.md）
 ├── CONTRIBUTING.md            ← 贡献指南（构建方法、文档维护规则、PR 流程）
@@ -509,7 +513,7 @@ Usage:
 │   ├── package.py             ← Linux/跨平台打包（编译+部署+zip；含 NAudio 运行时依赖）
 │   └── package.ps1            ← Windows 兼容打包（同上）
 ├── tests/                      ← 纯逻辑测试（不依赖游戏 DLL）
-│   ├── AIChronicle.Pure.Tests/ ← 史册/主线程/LLM/身份/遭遇/MeetingTests 会晤状态与补偿（dotnet run）
+│   ├── AIChronicle.Pure.Tests/ ← 史册/主线程/LLM/身份/遭遇/MeetingTests 会晤状态与补偿、DuelTests/DuelGameStubs 决斗/保管/存档/奖励复算（dotnet run）
 │   └── web/                    ← 史书 Markdown + meeting-render.test.mjs 会晤动态字段/版本/原生回调（Node DOM 桩）
 ├── .github/workflows/
 │   ├── health.yml             ← 轻量 CI（无需游戏 DLL，push/PR 自动跑 health + 纯逻辑测试）

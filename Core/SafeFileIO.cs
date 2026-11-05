@@ -45,6 +45,22 @@ namespace AIChronicle
             Retry(() => File.WriteAllText(path, content, Encoding.UTF8));
         }
 
+        public static void WriteAllTextAtomic(string path, string content)
+        {
+            EnsureDir(path);
+            var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                Retry(() => File.WriteAllText(temp, content, Encoding.UTF8));
+                Retry(() =>
+                {
+                    if (File.Exists(path)) File.Replace(temp, path, null);
+                    else File.Move(temp, path);
+                });
+            }
+            finally { if (File.Exists(temp)) File.Delete(temp); }
+        }
+
         public static string ReadAllText(string path)
         {
             string result = "";
