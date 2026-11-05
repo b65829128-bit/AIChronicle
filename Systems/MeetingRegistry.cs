@@ -50,6 +50,8 @@ namespace AIChronicle
             Register(new MeetingTradeAction());
             Register(new MeetingMarriageAction());
             Register(new MeetingDuelAction());
+            Register(new MeetingClanAction(false));
+            Register(new MeetingClanAction(true));
         }
 
         public static void Register(IMeetingAction action)

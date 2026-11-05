@@ -60,7 +60,7 @@
     outer.appendChild(toggle); return outer;
   }
   function renderActions() {
-    const list = $("actionList"); list.replaceChildren();
+    const list = $("actionList"), previousTop = list.scrollTop; list.replaceChildren();
     const talk = button("", () => { selected = ""; editing = false; renderActions(); renderDeal(); }, "action" + (!selected ? " active" : ""));
     talk.appendChild(node("span", "action-title", "随意交谈"));
     talk.appendChild(node("span", "action-detail", "叙旧、问候，谈一谈近来的事。")); list.appendChild(talk);
@@ -71,11 +71,14 @@
       el.appendChild(node("span", "action-detail", action.unavailable || (locked ? "请先结束当前交涉" : action.description)));
       list.appendChild(el);
     }
+    list.scrollTop = previousTop;
   }
   function renderMessages() {
     const box = $("messages");
     const previousTop = box.scrollTop;
-    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+    const scroll = scrollStates.get(box);
+    const scrollingUp = scroll?.raf && scroll.target < previousTop;
+    const nearBottom = !scrollingUp && box.scrollHeight - box.scrollTop - box.clientHeight < 80;
     const count = box.children.length;
     box.replaceChildren();
     if (!(data.messages || []).length) {
@@ -202,7 +205,10 @@
     box.appendChild(node("div", "deal-intro", editing ? action.description : "第 " + request.version + " 版 · " + (request.proposedBy === 0 ? "由你提出" : "由对方提出")));
     renderFields(box, action, editing);
     if (action.unavailable) box.appendChild(node("p", "hint", action.unavailable));
-    if (editing && previewText) box.appendChild(node("div", "terms-summary", previewText));
+    if (editing) {
+      const summary = node("div", "terms-summary draft-preview", previewText);
+      summary.hidden = !previewText; box.appendChild(summary);
+    }
     const terms = editing ? draft : request.terms;
     if (action.outcomeSlots?.length) {
       box.appendChild(node("p", "hint", "分别约定两种结果。只履行实际胜者对应的一组条件；不附条件也可以提出。"));
@@ -232,7 +238,7 @@
       box.appendChild(buttons);
       box.appendChild(node("p", "deal-help", action.outcomeSlots?.length
         ? "提出即认可两种结果的全部条件。双方确认同一版后，由你准备开始；接受约定时不交付胜负条件。"
-        : "提出即表示你认可这些条件。对方可以接受、拒绝或还价；双方认可同一版约定后执行。婚配可不附任何财物。"));
+        : "提出即表示你认可这些条件。对方可以接受、拒绝或还价；双方认可同一版约定后执行。婚配、投族和自立均可不附财物。"));
     } else {
       if (data.description) box.appendChild(node("div", "terms-summary", data.description));
       if (request.reason) box.appendChild(node("p", "reason", request.reason));
@@ -306,12 +312,19 @@
   }
   function preview(value) {
     if (!editing || String(editorToken) !== value.editorToken || value.revision !== previewRevision) return;
-    previewText = value.text || ""; renderDeal();
+    previewText = value.text || "";
+    // 预览回调只更新摘要，保留用户正在滚动的下拉菜单及其原 DOM/动画。
+    const summary = $("deal").querySelector(".draft-preview"), scroller = $("deal").parentElement;
+    const previousTop = scroller?.scrollTop || 0;
+    if (summary) { summary.textContent = previewText; summary.hidden = !previewText; }
+    if (scroller) scroller.scrollTop = previousTop;
   }
   window.__game = { render, setNumber, setField, preview, showError };
   const scrollStates = new WeakMap();
   window.__scrollBySmooth = (delta, x, y) => {
     let el = document.elementFromPoint(x, y);
+    // 左栏边缘/标题也把滚轮交给事项列表，避免侧栏留白成为滚动死区。
+    if (el?.closest?.(".actions-column")) el = $("actionList");
     while (el && el !== document.body) {
       const style = getComputedStyle(el);
       if (/(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight) break;

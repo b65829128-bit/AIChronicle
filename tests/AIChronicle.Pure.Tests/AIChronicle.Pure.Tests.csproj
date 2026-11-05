@@ -20,6 +20,10 @@
     <Compile Include="MeetingTests.cs" />
     <Compile Include="DuelTests.cs" />
     <Compile Include="DuelGameStubs.cs" />
+    <Compile Include="ClanDepartureStubs.cs" />
+    <Compile Include="ClanDepartureTests.cs" />
+    <Compile Include="../../Systems/ClanDeparture.cs" Link="ClanDeparture.cs" />
+    <Compile Include="../../Systems/MeetingClanActions.cs" Link="MeetingClanActions.cs" />
     <Compile Include="../../Systems/MeetingEscrow.cs" Link="MeetingEscrow.cs" />
     <Compile Include="../../Systems/MeetingAssets.cs" Link="MeetingAssets.cs" />
     <Compile Include="../../Systems/DuelStore.cs" Link="DuelStore.cs" />

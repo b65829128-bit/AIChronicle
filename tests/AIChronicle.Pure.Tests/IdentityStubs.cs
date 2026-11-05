@@ -9,7 +9,7 @@ namespace TaleWorlds.CampaignSystem
         bool IsAtWarWith(IFaction other);
     }
 
-    public sealed class Kingdom : IFaction
+    public sealed partial class Kingdom : IFaction
     {
         public string Name { get; set; } = "";
         public Clan? RulingClan { get; set; }
@@ -19,14 +19,15 @@ namespace TaleWorlds.CampaignSystem
         public bool IsAtWarWith(IFaction other) => false;
     }
 
-    public sealed class Clan : IFaction
+    public sealed partial class Clan : IFaction
     {
         public string Name { get; set; } = "";
         public Hero? Leader { get; set; }
         public bool IsUnderMercenaryService { get; set; }
         public bool IsKingdomFaction => false;
-        public bool IsMinorFaction => false;
-        public bool IsAtWarWith(IFaction other) => false;
+        public bool IsMinorFaction { get; set; }
+        public bool Hostile { get; set; }
+        public bool IsAtWarWith(IFaction other) => Hostile;
     }
 
     public sealed partial class Hero
@@ -35,7 +36,17 @@ namespace TaleWorlds.CampaignSystem
         public bool IsFemale { get; set; }
         public bool IsLord { get; set; }
         public bool IsPrisoner { get; set; }
-        public Clan? Clan { get; set; }
+        private Clan? _clan;
+        public Clan? Clan
+        {
+            get => _clan;
+            set
+            {
+                if (value == _clan) return;
+                _clan?.Heroes.Remove(this); _clan = value; value?.Heroes.Add(this);
+                AfterClanChange?.Invoke();
+            }
+        }
         public IFaction? MapFaction { get; set; }
         public Hero? Spouse { get; set; }
         public Hero? Mother { get; set; }

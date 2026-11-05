@@ -115,6 +115,8 @@
 
 **玩家发起的聊天（conversation）是全功能通道**——所有分类默认激活。理由：AI 几乎不主动聊天，绝大多数对话由玩家发起，若工具不全，对话里达成的承诺（议和/出兵/换国/写信/放人）就无法兑现。能力门控照旧：国王专属工具（朝议提议/结盟/问询）仍只有国王拿到，部队工具仍只有带兵者拿到，`change_kingdom` 仅氏族领袖可用——所以对话里每个 NPC 的可用工具由身份决定。
 
+家族成员去向复用三会晤工具，新增的是注册事项 `join_clan` / `found_clan`，工具总数不变。`familyId` 必须使用实时 fields 的完整家庭选项，分别附 `clanId` 或 `clanName` + `kingdomId`（`independent` 为独立）。男女同规则，无强制资助、忠诚/好感阈值或远程审批；只允许当前双方本人决定，夫妻及同族未成年子女随迁，家庭/部队改变后旧选项失效。入国沿用现有规则，原族公共资产不迁移。细节见 `plan-clan-departure.md`。
+
 对话/书信/签到可调 `browse_tools("military")` 解锁本次能力范围内的分类，下一轮即可使用；返回工具名/参数名，完整定义由下一轮 API tools 提供。重复浏览已解锁分类不重建 schema。
 
 会晤工具额外受当前会话约束：后台、书信、秘书处及 CEF 回退的原生聊天均不开放。`ToolExecutor` 同样检查会话、对象和 epoch，并拦截会晤中的旧直接转钱/交物/释放俘虏工具。旧 `change_kingdom` 的 join_kingdom/defect_to_kingdom 模式在会晤中须用 change_allegiance 条款，其他模式保持原规则。行动条款注册而非任意工具名执行；新增会受主线程、权限、资源冲突和批执行结果约束。`ToolParamDef.Schema` 可声明嵌套 object/array/enum，现有简单参数沿用 type/description；创建目录时深复制 schema，保持一次激活内稳定。延后事项与即时事项共用三工具；`duel` 的 otherVictory 表示对方获胜、yourVictory 表示当前 Agent 获胜，每个分支仍按 otherOffer/yourOffer 的固定方向履行。接受后不得声称战斗或交割已完成，开始操作只由本地 UI 触发。详见 `plan-meeting.md`、`plan-duel.md`。

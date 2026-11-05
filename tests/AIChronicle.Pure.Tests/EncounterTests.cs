@@ -236,7 +236,7 @@ namespace TaleWorlds.CampaignSystem
 
 namespace TaleWorlds.CampaignSystem.Settlements
 {
-    public sealed class Settlement
+    public sealed partial class Settlement
     {
         public string Name => "测试城镇";
         public string StringId => "test_town";

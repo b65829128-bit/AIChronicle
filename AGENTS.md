@@ -112,6 +112,18 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 会晤专属 AI 上下文只使用“你/对方”；`otherOffer/yourOffer` 分别为对方/当前 Agent 提供，不引入“玩家”身份。嵌套工具参数由 `ToolParamDef.Schema` 声明并深复制。新增动作的专属史料写入 `RecordApplied`，核心服务不按事项 ID 分支。行动 handler.Prepare 绑定实际执行对象、资源冲突键和生效/部分变化检查；批执行器先全量预检，任何不可撤销变化已发生后不假称完整回滚，标明部分履行且不自动重试。
 
+会晤 UI 新增本机布局回归文件 `tests/web/meeting-browser.test.mjs`，使用已安装 Chrome 在 1360×800 真实 DOM/CSS 与绘制帧上检查五事项、四个滚动区及刷新，不新增依赖；现有 DOM 桩回归继续供 CI 使用。
+
+### 家族成员投族与自立
+
+`Systems/MeetingClanActions.cs` 注册 `join_clan` / `found_clan` 即时事项，`Systems/ClanDeparture.cs` 统一校验家庭并迁移人物 Clan 与部队 ActualClan。只判断客观资格，不以忠诚/好感/敌我关系筛选；意愿由双方同版接受表达，无审批/回信等待。男女均可任新族长，配偶与同族未成年子女随迁，家庭快照失效须重选。保留本人金币、装备和部队，原族公共资产不迁移。成功记录通过 RecordApplied 向原族长等静默写入「情报」，不激活、不代写情绪，不泄露成交价。
+
+新增目录项：`Systems/MeetingClanActions.cs`、`Systems/ClanDeparture.cs`；`tests/AIChronicle.Pure.Tests/ClanDepartureTests.cs`、`ClanDepartureStubs.cs`；`docs/plan-clan-departure.md`。复用三会晤工具，不增加工具、配置、运行时依赖或模组存档键。详细家庭/部队/部分履行边界见契约，目录树同步 `docs/architecture.md`。
+
+被俘不阻止家族交涉或变更归属；转族本身不改拘押对象/俘虏名册，也不把被俘成员当作普通驻留贵族移出敌城。另行释放及原版入国释俘规则照常生效。
+
+新族使用原版随机旗帜，入国由原版统一国家配色。当前未初始化退国恢复用的原始配色备份，新族退国后可能保留此前国家颜色；此已知限制及字段边界登记在 `docs/plan-clan-departure.md`。
+
 ### 决斗与延后履约
 
 `IMeetingDeferredAction` 为等待外部结果的会晤事项提供扩展入口；双向胜负条件在接受后待开始，独立决斗服务接管已冻结的约定，跨场景结束后仅结算实际胜者分支。普通交易仍立即执行。战斗保留原版死亡判定，不使用竞技场强制击昏逻辑；不得把个人决斗结果写成整支部队胜负。算法版本、冻结输入、奖励与真实履约结果保留到 `World/duels/`，会晤关闭不能丢失已开始决斗的结算，切档后旧回调禁止执行。
@@ -140,6 +152,8 @@ python3 scripts/package.py
 dotnet run --project tests/AIChronicle.Pure.Tests/AIChronicle.Pure.Tests.csproj -c Release
 node tests/web/history-render.test.mjs
 node tests/web/meeting-render.test.mjs
+# 本机实际 CSS/滚动回归（需要已安装 Chrome，不新增依赖）
+node tests/web/meeting-browser.test.mjs
 node scripts/ci-health.mjs
 ```
 
@@ -182,6 +196,7 @@ stat -c '%s' "$BANNERLORD_GAME_DIR/Modules/AIChronicle/SubModule.xml"
 | `docs/plan-history-cef.md` | 全 Web 史书 MVP 状态与收尾计划（HistoryArchive/边界/清晰度） |
 | `docs/plan-duel.md` | 决斗契约（胜负分支/原版战死/实战/财物保管/奖励复算/史料与日记） |
 | `docs/plan-meeting.md` | 会晤契约（可注册事项/同一交涉单/AI 议价/婚配/原版共存/扩展与测试） |
+| `docs/plan-clan-departure.md` | 贵族投族/自立（客观资格/家庭快照/部队保留/无审批/静默日记） |
 | `docs/plan-curia.md` | 朝议（Curia）设计契约（议程/应召/权重/门槛/执行器/UI/提示词/测试） |
 | `docs/plan-treaty.md` | 条约（战前通牒/附条件议和）设计契约（条款/校验/休战/史料/日记/测试） |
 | `docs/plan-silent-memory.md` | 静默见闻设计契约（事件清单/三环分派/渲染/缓冲/幂等/read_diary/分卷/水位/测试） |

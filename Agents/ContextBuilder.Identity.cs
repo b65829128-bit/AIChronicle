@@ -109,9 +109,9 @@ namespace AIChronicle
                 && agentHero != targetHero)
             {
                 var relation = "";
-                if (agentHero.Mother == targetHero.Mother) relation = "（同母）";
-                else if (agentHero.Father == targetHero.Father) relation = "（同父）";
-                sb.AppendLine($"对方与你是同族亲属{relation}。");
+                if (agentHero.Mother != null && agentHero.Mother == targetHero.Mother) relation = "（同母）";
+                else if (agentHero.Father != null && agentHero.Father == targetHero.Father) relation = "（同父）";
+                sb.AppendLine($"对方与你是同一家族的成员{relation}。");
             }
 
             if (targetHero.IsPrisoner)

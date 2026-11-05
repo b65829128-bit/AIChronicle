@@ -89,7 +89,11 @@ const stalePreview = sent.at(-1);
 button("deal", "请选择").click(); button("deal", "蕾娅").click();
 const currentPreview = sent.at(-1);
 assert.equal(currentPreview.id, "preview");
+button("deal", "蕾娅").click();
+const previewMenu = elements.get("deal").querySelector(".dropdown-menu"); previewMenu.scrollTop = 77;
 game.preview({ editorToken: currentPreview.editorToken, revision: currentPreview.revision, text: "婚后归属：橡木家族" });
+assert.equal(elements.get("deal").querySelector(".dropdown-menu"), previewMenu, "preview retains the open dropdown DOM");
+assert.equal(previewMenu.scrollTop, 77, "preview retains dropdown reading position");
 game.preview({ editorToken: stalePreview.editorToken, revision: stalePreview.revision, text: "旧人选预览" });
 assert.match(elements.get("deal").textContent, /婚后归属：橡木家族/);
 assert.doesNotMatch(elements.get("deal").textContent, /旧人选预览/);
@@ -235,6 +239,39 @@ game.render(scope); button("actionList", "交易与赠礼").click(); button("dea
 assert.equal(all(elements.get("deal")).some(e => e.tagName === "button" && e.textContent.startsWith("结束本次遭遇并放行")), false,
   "duel-only clause is not offered for immediate trade");
 
+// 家族去向复用双向报价；随迁家庭是服务端给出的完整选项，不在网页扩展成员。
+const departure = structuredClone(base); departure.sessionId = "clan-departure";
+const household = { key: "familyId", label: "本人及随迁家庭", kind: "choice",
+  choices: [{ id: "hero-b|leader|hero-b:source:spouse:party;child:source::", label: "艾琳（随迁：配偶、幼女）" }] };
+departure.types.push({ id: "found_clan", title: "自立家族", description: "可无偿自立，保留本人部队。", unavailable: "", fields: [household,
+  { key: "clanName", label: "新家族名称", kind: "text" },
+  { key: "kingdomId", label: "新家族归属", kind: "choice", choices: [{ id: "independent", label: "保持独立" }, { id: "kingdom-a", label: "白松王国" }] }
+] });
+departure.types.push({ id: "join_clan", title: "加入家族", description: "本人同意后加入。", unavailable: "", fields: [household,
+  { key: "clanId", label: "加入的家族", kind: "choice", choices: [{ id: "clan-a", label: "橡木家族" }] }
+] });
+game.render(departure); button("actionList", "自立家族").click();
+button("deal", "请选择").click(); button("deal", "艾琳（随迁").click();
+button("deal", "填写").click(); const clanNameInput = sent.at(-1);
+assert.equal(clanNameInput.key, "parameters.clanName", "clan name uses native text inquiry");
+game.setField({ editorToken: clanNameInput.editorToken, key: clanNameInput.key, text: "新枝家族" });
+button("deal", "请选择").click(); button("deal", "保持独立").click();
+button("deal", "提出这些条件").click(); const founding = sent.at(-1).terms;
+assert.equal(founding.parameters.familyId, household.choices[0].id, "exact family snapshot round trip");
+assert.equal(founding.parameters.clanName, "新枝家族"); assert.equal(founding.parameters.kingdomId, "independent");
+assert.equal(founding.otherOffer.gold, 0); assert.equal(founding.yourOffer.gold, 0, "funding is optional");
+assert.equal(founding.outcomes.length, 0, "clan departure is immediate");
+button("actionList", "加入家族").click(); button("deal", "请选择").click(); button("deal", "艾琳（随迁").click();
+button("deal", "请选择").click(); button("deal", "橡木家族").click();
+button("deal", "提出这些条件").click();
+assert.equal(sent.at(-1).terms.parameters.clanId, "clan-a");
+const joined = structuredClone(departure); joined.request = { id: "joined", version: 1, status: 2, proposedBy: 0,
+  otherAccepted: true, yourAccepted: true, terms: sent.at(-1).terms, reason: "", result: "已加入" };
+joined.description = "艾琳与配偶、幼女加入橡木家族，保留本人部队。";
+joined.types.forEach(t => { if (t.id === "join_clan" || t.id === "found_clan") { t.fields = []; t.unavailable = "当前不能再次离族"; } });
+game.render(joined); assert.match(elements.get("deal").textContent, /幼女加入橡木家族/);
+assert.equal(all(elements.get("deal")).some(e => e.tagName === "button" && e.textContent === "接受这份约定"), false, "committed clan departure cannot replay");
+
 const chat = elements.get("messages"); chat.scrollHeight = 2000; chat.clientHeight = 400; chat.style.overflowY = "auto"; chat.scrollTop = 0;
 hovered = chat;
 window.__scrollBySmooth(120, 0, 0); window.__scrollBySmooth(120, 0, 0);
@@ -251,4 +288,11 @@ assert.equal(chat.scrollTop, 600, "new wheel burst starts at actual reading posi
 chat.scrollTop = 125; dealScroller.scrollTop = 170;
 game.render(partial);
 assert.equal(chat.scrollTop, 125, "refresh preserves conversation reading position"); assert.equal(dealScroller.scrollTop, 170, "refresh preserves deal reading position");
+elements.get("actionList").scrollTop = 180;
+game.render(partial); assert.equal(elements.get("actionList").scrollTop, 180, "refresh preserves the new actions scroller");
+chat.scrollTop = chat.scrollHeight - chat.clientHeight; hovered = chat;
+window.__scrollBySmooth(-96, 0, 0); const beforeStreamingRefresh = chat.scrollTop;
+game.render(partial);
+assert.equal(chat.scrollTop, beforeStreamingRefresh, "upward wheel intent disables streaming auto-follow before its first frame");
+frame(20); assert.ok(chat.scrollTop < beforeStreamingRefresh, "upward reading motion survives refresh");
 console.log("meeting renderer: conditional duel branches, explicit start, scoped clauses, stale callbacks, safe text and independent scrolling passed");

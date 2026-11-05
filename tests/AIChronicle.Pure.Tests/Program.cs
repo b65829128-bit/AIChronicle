@@ -37,6 +37,7 @@ namespace AIChronicle.Tests
             RunEncounterTests();
             RunMeetingTests();
             RunDuelTests();
+            RunClanDepartureTests();
 
             Console.WriteLine();
             Console.WriteLine($"passed: {_passed}, failed: {_failed}");

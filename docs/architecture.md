@@ -475,6 +475,7 @@ Usage:
 ├── Systems/                    ← 游戏系统与 Harmony 补丁
 │   ├── MeetingModels.cs / MeetingNegotiation.cs ← 会晤 DTO/资产约束/状态机/补偿（纯逻辑）
 │   ├── MeetingRegistry.cs / MeetingActions.cs ← 事项注册接口、交易/婚配处理器与专属记录
+│   ├── MeetingClanActions.cs / ClanDeparture.cs ← 贵族投族/自立、家庭快照、原部队保留、静默客观记录
 │   ├── MeetingClauses.cs / MeetingClauses.Prisoners.cs / MeetingClauses.Allegiance.cs ← 可组合行动注册、释放俘虏/家族换国
 │   ├── MeetingBatch.cs ← 多效果全量预检/资源冲突/执行次序/部分履行（纯逻辑）
 │   ├── MeetingAssets.cs / MeetingService.cs / MeetingPageBuilder.cs ← 精确物资/会话/网页与角色上下文
@@ -513,8 +514,8 @@ Usage:
 │   ├── package.py             ← Linux/跨平台打包（编译+部署+zip；含 NAudio 运行时依赖）
 │   └── package.ps1            ← Windows 兼容打包（同上）
 ├── tests/                      ← 纯逻辑测试（不依赖游戏 DLL）
-│   ├── AIChronicle.Pure.Tests/ ← 史册/主线程/LLM/身份/遭遇/MeetingTests 会晤状态与补偿、DuelTests/DuelGameStubs 决斗/保管/存档/奖励复算（dotnet run）
-│   └── web/                    ← 史书 Markdown + meeting-render.test.mjs 会晤动态字段/版本/原生回调（Node DOM 桩）
+│   ├── AIChronicle.Pure.Tests/ ← 史册/主线程/LLM/身份/遭遇/MeetingTests 会晤状态与补偿、DuelTests/DuelGameStubs 决斗/保管/存档/奖励复算、ClanDepartureTests/ClanDepartureStubs 家庭/部队迁移（dotnet run）
+│   └── web/                    ← 史书 Markdown + meeting-render.test.mjs（DOM 桩）；meeting-browser.test.mjs（本机 Chrome 实际布局/滚动）
 ├── .github/workflows/
 │   ├── health.yml             ← 轻量 CI（无需游戏 DLL，push/PR 自动跑 health + 纯逻辑测试）
 │   └── build.yml              ← 手动编译工作流（Ubuntu runner，需 BANNERLORD_GAME_DIR 或 GAME_DLLS_URL 密钥）

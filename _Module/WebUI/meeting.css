@@ -94,6 +94,7 @@ h1 {
   min-height:0;
   display:grid;
   grid-template-columns:214px minmax(0,1fr) 412px;
+  grid-template-rows:minmax(0,1fr);
 }
 
 .section-kicker {
@@ -103,6 +104,7 @@ h1 {
 }
 
 .actions-column {
+  min-height:0;
   padding:26px 18px;
   background:var(--dark);
   color:#dfd6bf;
@@ -111,12 +113,16 @@ h1 {
 }
 
 .actions-column .section-kicker {
+  flex-shrink:0;
   color:#b4a17d;
   padding-left:12px;
 }
 
 nav {
   margin-top:18px;
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
 }
 
 .actions-column .action {
@@ -160,6 +166,7 @@ nav {
 }
 
 .aside-note {
+  flex-shrink:0;
   margin-top:auto;
   font-size:12px;
   line-height:2;
@@ -282,6 +289,8 @@ nav {
 }
 
 .deal-column {
+  min-height:0;
+  min-width:0;
   padding:24px 22px;
   overflow-y:auto;
   background:#f7efdf65;
