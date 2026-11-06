@@ -68,9 +68,19 @@
 - 朝议的表决与战争/议和/封地易主/家族被逐互为因果：先有朝议，后有动作；写史时把两层串起来。
 - 不要编造票数或理由；一切以 `curia/` 档案与原始史料为准。
 
+## 继位、婚姻、拘押与战乱
+
+`ruler_changed` 记录正式君主更替，选王未决时的临时统治者不作登基。`marriage` 只表示婚姻已生效，并可记婚前家国身份与婚后归属；求婚和议婚不是成婚。`hero_captured` / `hero_released` 记录君主或族长的拘押变化：赎回、战后释放、随议和释放、主动释放、补偿获释、逃脱须分别理解，未记付款人或营救者时不要猜测。
+
+`rebellion_started` 是起事夺城，`rebellion_established` 是叛军立足后势力延续，`rebellion_failed` 才是叛乱势力覆亡。`village_raided` 是实际开始劫掠，`village_looted` 是村庄被洗劫，`raid_ended` 表示劫掠结束而未洗劫一空，不能写成村庄毫发无损。`siege_aftermath` 是攻城后的宽赦、洗劫或毁坏处置，不据此编造屠杀、人口伤亡、私人意图或情绪。
+
 ## 决斗记录
 
 原始史料中的 `duel_fought` 记录当面对决的真实胜负、伤亡、家族声望与影响，以及胜负条件实际履行情况；`duel_aftermath` 是放行或伤亡处理的后续确认，须合并理解同一场决斗。个人决斗不能写成整支军队被击败或王国停战；答应行动但未履行的条件不能写成既成事实。若记录写明决斗未能开场、认输、未分胜负、伤亡尚待处理，须保留这些区别，不编造交锋或死亡。
+
+## 龙旗大事
+
+龙旗记录按实际发生的寻访、重组、归属、列国战争和结局理解，人物一律使用姓名、家族与王国身份，不称“玩家”“主角”，不用游戏任务口吻。举旗时“重建帝国/终结帝国统治”是公开主张，不能写成已实现；`story_empire_progress` 是阶段成果，`story_kingdom_defeated` 只说明一国被击败，不能自行加上灭国、议和或天下统一；最终结果以 `story_victory` / `story_defeat` 为准。离国退出只说明奉旗者退出该国的事业。勿补写隐秘阴谋、动机、其他人物态度或没有史料的龙旗流转。
 
 ## 天命视角
 
@@ -115,6 +125,9 @@
 - marriage: 贵族婚嫁
 - alliance_made: 结盟 / alliance_broken: 单方面终止盟约（背盟）/ alliance_expired: 盟约期满而罢（自然到期，非背盟）
 - trade_made: 订立贸易协定 / trade_broken: 单方面终止贸易协定 / trade_expired: 贸易协定期满而罢（自然到期，非毁约）
+- story_banner_investigated: 龙旗来历查明 / dragon_banner_assembled: 龙旗重组现世 / dragon_banner_claimed: 举旗或献旗、归属与公开主张
+- story_empire_progress: 统一或削弱帝国的阶段成果 / story_conspiracy_war: 龙旗列国战争爆发 / story_kingdom_defeated: 一国在龙旗之争中被击败
+- story_victory / story_defeat: 龙旗之争最终胜败 / story_banner_search_ended: 寻旗事业中止 / story_withdrawn: 奉旗者离国退出
 
 ## 补充视角：朝议记录
 

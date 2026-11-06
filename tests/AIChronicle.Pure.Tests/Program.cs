@@ -34,10 +34,15 @@ namespace AIChronicle.Tests
             Run("diary: rotation files + dedupe", TestDiaryRotationFiles);
             Run("silent diary: hero naming", TestSilentDiaryText);
             RunLlmTests();
+            RunMemoryTests();
+            RunHistorianTests();
             RunEncounterTests();
             RunMeetingTests();
             RunDuelTests();
             RunClanDepartureTests();
+            RunStoryHistoryTests();
+            RunAllegianceHistoryTests();
+            RunWorldHistoryTests();
 
             Console.WriteLine();
             Console.WriteLine($"passed: {_passed}, failed: {_failed}");

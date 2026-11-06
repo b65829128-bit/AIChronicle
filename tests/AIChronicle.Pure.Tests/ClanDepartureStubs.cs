@@ -127,7 +127,7 @@ namespace TaleWorlds.CampaignSystem.Roster
 }
 namespace TaleWorlds.CampaignSystem.Party
 {
-    public sealed class PartyBase
+    public sealed partial class PartyBase
     {
         public Roster.TroopRoster PrisonRoster { get; } = new();
         public void SetVisualAsDirty() { }
@@ -166,7 +166,7 @@ namespace TaleWorlds.CampaignSystem.Actions
             hero.PartyBelongedTo = null; hero.CurrentSettlement = null; hero.IsPrisoner = false; hero.IsFugitive = true;
         }
     }
-    public static class ChangeKingdomAction
+    public static partial class ChangeKingdomAction
     {
         public static Action<Clan, Kingdom>? AfterJoin;
         public static void ApplyByJoinToKingdom(Clan clan, Kingdom kingdom) { clan.Kingdom = kingdom; AfterJoin?.Invoke(clan, kingdom); }
@@ -184,16 +184,16 @@ namespace Helpers
 namespace AIChronicle
 {
     public static class PartyBehaviorManager { public static void RemoveAction(Hero hero) { } }
-    public sealed class DepartureEntity { public string Id { get; set; } = ""; }
+    public sealed class DepartureEntity { public string Id { get; set; } = ""; public EntityController Controller { get; set; } }
     public static class EntityManager
     {
         public static void RefreshEntity(Hero hero) { }
-        public static DepartureEntity GetOrCreateEntity(Hero hero) => new() { Id = hero.StringId };
+        public static DepartureEntity GetOrCreateEntity(Hero hero) => new()
+        { Id = hero.StringId, Controller = hero == Hero.MainHero ? EntityController.Human : EntityController.Agent };
     }
-    public static class AgentManager
+    public static partial class AgentManager
     {
         public static readonly List<(string Hero, string Kind, string Text)> DepartureDiaries = new();
         public static void AppendSystemDiary(string id, string kind, string text) { DepartureDiaries.Add((id, kind, text)); }
     }
-    public static class HistoryRecorder { public static void RecordDiplomacyEvent(string kind, string text) { } }
 }

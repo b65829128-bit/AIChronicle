@@ -17,7 +17,7 @@ namespace TaleWorlds.CampaignSystem
     public sealed partial class Campaign
     {
         public readonly Dictionary<Type, CampaignBehaviorBase> Behaviors = new();
-        public T? GetCampaignBehavior<T>() where T : CampaignBehaviorBase => Behaviors.TryGetValue(typeof(T), out var value) ? (T)value : null;
+        public T? GetCampaignBehavior<T>() where T : class => Behaviors.TryGetValue(typeof(T), out var value) ? (T)(object)value : null;
     }
     public abstract class CampaignBehaviorBase
     {
@@ -61,6 +61,7 @@ namespace TaleWorlds.CampaignSystem.Roster
             AfterChange?.Invoke(element, change);
         }
         public IEnumerator<ItemRosterElement> GetEnumerator() => _items.GetEnumerator();
+        public int GetItemNumber(TaleWorlds.Core.ItemObject item) => _items.Where(i => i.EquipmentElement.Item == item).Sum(i => i.Amount);
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }

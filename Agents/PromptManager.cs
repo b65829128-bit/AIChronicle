@@ -591,7 +591,17 @@ namespace AIChronicle
             // 带重试：同一 chat_log 可能被该 agent 的两个并发事件同时追加（文件正被使用），重试而非报错
             // 信件消息加标记前缀，加载时剥掉用于 UI 区分（不污染给 LLM 的内容）
             var text = (isLetter ? ChatLog.LetterMarker : "") + content.Replace("\n", "\\n");
+            var ownVoice = role == "assistant" && agentId == AgentManager.ActiveAgentId
+                && EntityManager.ActiveAgent?.Controller == EntityController.Agent;
+            var root = Path.GetDirectoryName(Path.GetDirectoryName(path))!;
+            MemoryProgress.Snapshot? before = null;
+            if (ownVoice)
+                try { before = MemoryProgress.CaptureThread(root, Path.GetFileName(path)); }
+                catch (Exception ex) { DebugLogger.Log("本人往来进度读取失败：" + ex.Message); }
             SafeFileIO.AppendAllText(path, $"[{ts}] {role}: " + text + Environment.NewLine);
+            if (ownVoice)
+                try { MemoryProgress.AcknowledgeOwnAppend(root, "chat_logs/" + Path.GetFileName(path), before); }
+                catch (Exception ex) { DebugLogger.Log("本人往来进度写入失败：" + ex.Message); }
         }
 
         public static string? ExtractLearnedTag(string response, out string cleanedResponse)

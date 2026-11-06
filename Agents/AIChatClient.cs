@@ -23,8 +23,12 @@ namespace AIChronicle
         /// <summary>最终轮的思维链（reasoning_content）摘录，供调试日志复盘。</summary>
         public string? LastReasoning { get; set; }
 
-        /// <summary>最终轮 finish_reason（"stop"=自然结束，"length"=被 max_tokens 截断）——用于区分主动沉默与被截断。</summary>
+        /// <summary>结束原因：stop=自然结束，length=输出截断，round_budget=工具轮次耗尽。</summary>
         public string? FinishReason { get; set; }
+
+        // 仅史官失败续写使用，保留本次已读证据；不持久化，也不进入人物记忆。
+        internal List<JToken>? HistorianMessages { get; set; }
+        internal long HistorianEpoch { get; set; }
     }
 
     public static class AIChatClient
@@ -239,11 +243,15 @@ namespace AIChronicle
             catch { }
         }
 
-        public static async Task<ChatResponse> SendMessage(CharacterPrompt charPrompt, Hero? hero = null, bool includeTools = true, string intent = "conversation")
+        public static async Task<ChatResponse> SendMessage(CharacterPrompt charPrompt, Hero? hero = null, bool includeTools = true,
+            string intent = "conversation", MemoryRecallSession? recallSession = null, ChatResponse? historianRetry = null)
         {
             // 战役生命周期令牌：若请求/工具循环跨越切档，立即丢弃本次行动，避免旧战役的
             // LLM 回调在新区里执行工具（仅靠主线程队列的 epoch 只能拦住“已入队”的动作）。
             long campaignEpoch = MainThreadExecutor.CampaignEpoch;
+            var resumeHistorian = intent == "historian" && historianRetry?.HistorianMessages != null;
+            if (resumeHistorian && historianRetry!.HistorianEpoch != campaignEpoch)
+                return new ChatResponse { FinishReason = "campaign_ended", Content = "（战役已切换，本次编纂已取消。）" };
 
             CurrentHero = hero;
             CurrentIntent = intent;
@@ -330,6 +338,35 @@ namespace AIChronicle
 
             const string volatileRole = "system";
 
+            string? memoryRoot = null;
+            MemoryProgress.Snapshot? presentedThread = null;
+            try
+            {
+                if (hero != null && EntityManager.ActiveAgent?.Controller == EntityController.Agent)
+                {
+                    memoryRoot = AgentManager.GetAgentDir();
+                    if (!string.IsNullOrEmpty(memoryRoot) && includeTools && intent != "consolidation")
+                    {
+                        var hasThreadHistory = intent is "conversation" or "letter" or "chat";
+                        var thread = hasThreadHistory ? Path.GetFileName(AgentManager.GetChatLogPathFor(AgentManager.ActiveAgentId, vTargetId ?? "")) : null;
+                        if (hasThreadHistory && !historyWasTrimmed) presentedThread = MemoryProgress.CaptureThread(memoryRoot!, thread);
+                        if (toolCatalog.GetCategoryTools("file").Any(t => t.Name == "read_diary"))
+                        {
+                            var reminder = MemoryProgress.BuildReminder(memoryRoot!, thread, recallSession ?? new MemoryRecallSession());
+                            if (reminder.Length > 0) volatileBlock += "\n\n" + reminder;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) { DebugLogger.Log("查阅提醒读取失败：" + ex.Message); }
+
+            void AcknowledgePresented()
+            {
+                if (MainThreadExecutor.CampaignEpoch != campaignEpoch) return;
+                try { MemoryProgress.AcknowledgePresented(presentedThread); }
+                catch (Exception ex) { DebugLogger.Log("查阅进度写入失败：" + ex.Message); }
+            }
+
             if (MeetingContext.SessionId != null)
             {
                 var meetingId = MeetingContext.SessionId;
@@ -407,14 +444,15 @@ namespace AIChronicle
                 return list;
             }
 
-            var messageList = BuildMessageList();
+            var messageList = resumeHistorian
+                ? HistorianWorkflow.ResumeMessages(historianRetry!.HistorianMessages!, charPrompt.ChatHistory.Last().Content)
+                : BuildMessageList();
 
             string? learnedKnowledge = null;
             var allToolCalls = new List<ToolCallData>();
             var toolResults = new Dictionary<string, string>();
             var lastMeaningfulText = "";
             var lastReasoning = "";
-            var lastFinishReason = "";
             // 每次 HTTP 尝试各记一次 usage（含已返回 usage 的失败尝试），不逐 SSE 帧累加累计值。
             var totalUsage = new LLMUsage();
             var activationId = Guid.NewGuid().ToString("N");
@@ -423,10 +461,12 @@ namespace AIChronicle
             var cacheRecords = 0;
 
             // 按场景限制轮次与查询次数：后台可以慢，但不能无休止地查。
-            var roundBudget = RoundBudget(intent);
+            var roundBudget = resumeHistorian ? HistorianWorkflow.FinalRounds : RoundBudget(intent);
             var queryBudget = QueryBudget(intent);
             var queryCalls = 0;
             var budgetNoticeSent = false;
+            var historianNoticeSent = false;
+            var writingTools = intent == "historian" ? HistorianWorkflow.WritingTools(toolCatalog.ApiTools) : null;
 
             // reasoning_effort：史官固定 high（文笔核心；high 正是 API 默认值 → 不发送该参数，最大兼容性）。
             // 其余 intent 用 MCM 设置（默认 low）——这是成本大头，见设置面板说明。
@@ -461,8 +501,18 @@ namespace AIChronicle
                 }
 
                 var isLastRound = round == roundBudget - 1;
+                var finalizing = HistorianWorkflow.IsFinalizing(intent, round, roundBudget, resumeHistorian);
                 var queriesDisabled = isLastRound || queryCalls >= queryBudget;
-                if (queriesDisabled && !budgetNoticeSent)
+                if (finalizing && !historianNoticeSent)
+                {
+                    historianNoticeSent = true;
+                    messageList.Add(new JObject
+                    {
+                        ["role"] = "system",
+                        ["content"] = "（史官成文阶段：现在只开放 write_chronicle。依据原任务和已读史料立即成文落盘，先完成本次任务要求的正篇，再考虑额外篇目。未读到的时段须注明阙载，不得猜补。剩余两轮供写入及纠错，不再查阅。）"
+                    });
+                }
+                if (queriesDisabled && !budgetNoticeSent && !finalizing)
                 {
                     budgetNoticeSent = true;
                     messageList.Add(new JObject
@@ -483,7 +533,7 @@ namespace AIChronicle
                     Temperature = settings.Temperature,
                     Stream = true,
                     IncludeTools = includeTools,
-                    Tools = includeTools ? toolCatalog.ApiTools : null,
+                    Tools = includeTools ? (finalizing ? writingTools : toolCatalog.ApiTools) : null,
                     ReasoningEffort = reasoningEffort
                 });
 
@@ -499,7 +549,7 @@ namespace AIChronicle
                 var requestId = Guid.NewGuid().ToString("N");
                 requestAttempts++;
                 var watch = Stopwatch.StartNew();
-                DebugLogger.Log($"LLM 请求 intent={intent} agent={hero?.Name?.ToString() ?? "?"} activation={activationId} request={requestId} round={round} provider={conn.ProviderKind} model={conn.Model} background={TokenBudget.IsBackgroundIntent(intent)} tools={toolCatalog.SchemaHash}");
+                DebugLogger.Log($"LLM 请求 intent={intent} agent={hero?.Name?.ToString() ?? "?"} activation={activationId} request={requestId} round={round} provider={conn.ProviderKind} model={conn.Model} background={TokenBudget.IsBackgroundIntent(intent)} tools={toolCatalog.SchemaHash} phase={(finalizing ? "chronicle_write" : "normal")}");
                 try
                 {
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
@@ -623,7 +673,6 @@ namespace AIChronicle
                 roundText = LLMText.StripThinkTags(roundText);
 
                 lastReasoning = roundReasoning;
-                lastFinishReason = roundFinishReason;
 
                 // 修复陈旧文本：带"游戏工具"的轮次文本多为过渡说明（如"让我进一步了解…"），
                 // 不该作为最终回复的回退值。仅无工具、或仅有维护工具(update_knowledge)的轮次文本
@@ -652,6 +701,7 @@ namespace AIChronicle
                     if (string.IsNullOrEmpty(roundText) && !string.IsNullOrEmpty(roundReasoning))
                         DebugLogger.Log($"LLM 静默结束 intent={intent} agent={hero?.Name?.ToString() ?? "?"} toolsCalled={allToolCalls.Count} reasoning={DebugLogger.Truncate(roundReasoning, 600)}");
                     DebugLogger.Log($"LLM 完成 intent={intent} agent={hero?.Name?.ToString() ?? "?"} activation={activationId} 轮次={round + 1} 请求={requestAttempts} usage={usageRecords}/{requestAttempts} 缓存统计={cacheRecords}/{requestAttempts} {totalUsage.Describe()}");
+                    AcknowledgePresented();
                     return new ChatResponse
                     {
                         Content = finalContent,
@@ -659,7 +709,9 @@ namespace AIChronicle
                         ToolCalls = allToolCalls,
                         ToolResults = toolResults,
                         LastReasoning = roundReasoning,
-                        FinishReason = roundFinishReason
+                        FinishReason = roundFinishReason,
+                        HistorianMessages = intent == "historian" ? messageList : null,
+                        HistorianEpoch = campaignEpoch
                     };
                 }
 
@@ -691,6 +743,14 @@ namespace AIChronicle
 
                     allToolCalls.Add(new ToolCallData { Id = callId, Name = funcName, Arguments = argsStr });
 
+                    if (!HistorianWorkflow.CanExecute(finalizing, funcName))
+                    {
+                        const string result = "[预算] 已进入史官成文阶段，请依据已读史料调用 write_chronicle。";
+                        toolResults[callId] = result;
+                        messageList.Add(new JObject { ["role"] = "tool", ["tool_call_id"] = callId, ["content"] = result });
+                        continue;
+                    }
+
                     if (funcName == "update_knowledge")
                     {
                         try { var args = JObject.Parse(argsStr); learnedKnowledge = args["knowledge"]?.ToString(); }
@@ -700,6 +760,10 @@ namespace AIChronicle
                     }
                     else
                     {
+                        MemoryProgress.ToolProbe? memoryProbe = null;
+                        if (!string.IsNullOrEmpty(memoryRoot))
+                            try { memoryProbe = MemoryProgress.BeforeTool(memoryRoot!, funcName, argsStr); }
+                            catch (Exception ex) { DebugLogger.Log("记忆工具进度捕获失败：" + ex.Message); }
                         string toolResult;
                         if (ToolCatalog.IsQueryTool(funcName))
                         {
@@ -717,13 +781,16 @@ namespace AIChronicle
                         {
                             toolResult = ToolExecutor.ExecuteToolCall(funcName, argsStr);
                         }
-                        var toolCap = MySettings.Instance?.MaxToolResultChars ?? 4000;
+                        var toolCap = HistorianWorkflow.ToolResultCap(intent, funcName, argsStr, MySettings.Instance?.MaxToolResultChars ?? 4000);
                         if (toolCap > 0 && toolResult.Length > toolCap)
                         {
                             var originalLength = toolResult.Length;
                             toolResult = toolResult.Substring(0, toolCap)
                                          + $"\n…（工具结果过长：共 {originalLength} 字符，已显示前 {toolCap} 字符；请用更精确的查询、缩小范围，或用 line_start 分段读取）";
                         }
+                        if (MainThreadExecutor.CampaignEpoch == campaignEpoch)
+                            try { MemoryProgress.AfterTool(memoryProbe, toolResult); }
+                            catch (Exception ex) { DebugLogger.Log("记忆工具进度更新失败：" + ex.Message); }
                         toolResults[callId] = toolResult;
                         messageList.Add(new JObject { ["role"] = "tool", ["tool_call_id"] = callId, ["content"] = toolResult });
                     }
@@ -731,6 +798,7 @@ namespace AIChronicle
             }
 
             DebugLogger.Log($"LLM 完成(轮次预算) intent={intent} agent={hero?.Name?.ToString() ?? "?"} activation={activationId} 请求={requestAttempts} usage={usageRecords}/{requestAttempts} 缓存统计={cacheRecords}/{requestAttempts} {totalUsage.Describe()}");
+            AcknowledgePresented();
             return new ChatResponse
             {
                 Content = !string.IsNullOrEmpty(lastMeaningfulText) ? lastMeaningfulText
@@ -739,7 +807,9 @@ namespace AIChronicle
                 ToolCalls = allToolCalls,
                 ToolResults = toolResults,
                 LastReasoning = lastReasoning,
-                FinishReason = lastFinishReason
+                FinishReason = "round_budget",
+                HistorianMessages = intent == "historian" ? messageList : null,
+                HistorianEpoch = campaignEpoch
             };
         }
 

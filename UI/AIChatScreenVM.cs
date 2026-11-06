@@ -135,6 +135,7 @@ namespace AIChronicle
         private readonly string _agentId = "";
         private readonly string _targetId = "";
         private List<ChatHistoryEntry> _sessionMessages = new();
+        private readonly MemoryRecallSession _recallSession = new();
         private int _chatFontSize = 24;
         private int _chatSenderFontSize = 22;
         private int _chatTimeFontSize = 22;
@@ -403,7 +404,7 @@ namespace AIChronicle
                 try
                 {
                     _charPrompt.ChatHistory = new List<ChatHistoryEntry>(_sessionMessages);
-                    var chatResponse = await AIChatClient.SendMessage(_charPrompt, _hero, true, _intent);
+                    var chatResponse = await AIChatClient.SendMessage(_charPrompt, _hero, true, _intent, _recallSession);
                     if (_closed || chatResponse.FinishReason == "meeting_ended" || chatResponse.FinishReason == "campaign_ended") return;
                     var displayText = chatResponse.Content;
 

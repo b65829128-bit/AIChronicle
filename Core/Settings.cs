@@ -360,7 +360,7 @@ namespace AIChronicle
         private int _maxToolResultChars = 4000;
 
         [SettingPropertyInteger("工具结果截断（字符）", 1000, 12000, Order = 7, RequireRestart = false,
-            HintText = "单次工具结果超过此长度时截断并提示 AI 用更精确的查询/读取；防止一次工具输出把后续每轮上下文撑大。默认 4000。")]
+            HintText = "单次工具结果超过此长度时截断并提示 AI 用更精确的查询/读取；默认 4000。史官读取年度原始史料时至少允许 64000 字符，便于及时成文。")]
         [SettingPropertyGroup("游戏设置")]
         public int MaxToolResultChars
         {
@@ -756,7 +756,7 @@ namespace AIChronicle
         private bool _memoryConsolidationEnabled = true;
 
         [SettingPropertyBool("启用记忆巩固", Order = 20, RequireRestart = false,
-            HintText = "开启：自我审视（国王政务/封地审视/外交问询）激活前，若日记落后于聊天记录，先跑一次巩固——把最近往来中值得记住的决定/承诺/计策/战略补记进 decisions/diary.txt，避免照着陈旧日记行事。只在日记落后时触发。")]
+            HintText = "开启：自我审视激活前，有尚未整理的新增往来时先进行巩固，将值得记住的决定/承诺/计策/战略补记日记。按每个文件的消息位置推进，同一天新增消息也能识别；轻量查阅提醒不额外请求模型，独立于此后台巩固开关。")]
         [SettingPropertyGroup("游戏设置")]
         public bool MemoryConsolidationEnabled
         {

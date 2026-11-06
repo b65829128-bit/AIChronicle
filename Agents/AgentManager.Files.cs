@@ -286,6 +286,7 @@ namespace AIChronicle
         /// </summary>
         private static bool SearchFile(string filePath, string baseDir, string prefix, string pattern, StringComparison comparison, int contextLines, int maxResults, ref int matchCount, StringBuilder results)
         {
+            if (MemoryProgress.IsMetadataPath(filePath)) return false;
             var relPath = filePath.Substring(baseDir.Length).TrimStart('/', '\\').Replace('\\', '/').TrimStart('/');
             if (!string.IsNullOrEmpty(prefix))
                 relPath = prefix + "/" + relPath;
@@ -315,7 +316,7 @@ namespace AIChronicle
 
         private static readonly HashSet<string> _immutableFiles = new()
         {
-            "persona.txt", "character.json"
+            "persona.txt", "character.json", MemoryProgress.MetadataFileName
         };
 
         public static string ExecuteEditFile(string path, string oldString, string newString)
@@ -451,14 +452,7 @@ namespace AIChronicle
                 return "[错误] 正文不能为空";
 
             // 名称清洗：去 .txt 后缀、若名称已误含体例字样则剥除（防 "拉盖娅本纪" + 本纪 → "拉盖娅本纪本纪"）
-            var cleanName = name.Trim();
-            foreach (var g in ChronicleGenres)
-            {
-                if (cleanName.EndsWith(g) && cleanName.Length > g.Length)
-                    cleanName = cleanName.Substring(0, cleanName.Length - g.Length);
-            }
-            if (cleanName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
-                cleanName = cleanName.Substring(0, cleanName.Length - 4);
+            var cleanName = HistorianWorkflow.CleanName(genre, name, ChronicleGenres);
             cleanName = SanitizeFile(cleanName.Trim());
             if (cleanName.Length == 0)
                 return "[错误] 名称无效";

@@ -27,7 +27,7 @@ namespace AIChronicle
     /// 纯逻辑 + SafeFileIO，不依赖 TaleWorlds，可直接进 tests/AIChronicle.Pure.Tests。
     ///
     /// 日记格式（不可破坏）：[年季节日] 类型：内容，例如 [1089春16] 决定：与南帝国议和。
-    /// 日期解析与 MemoryConsolidator 的键编码保持一致（year*400 + season*32 + day），否则"日记是否落后"会误判。
+    /// 日期键沿用旧水位的编码（year*400 + season*32 + day），用于条目排序/分卷；新巩固进度按消息位置计算。
     /// </summary>
     public static class DiaryStore
     {

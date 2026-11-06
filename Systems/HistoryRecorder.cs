@@ -13,7 +13,7 @@ using TaleWorlds.Library;
 
 namespace AIChronicle
 {
-    public class HistoryRecorder : CampaignBehaviorBase
+    public partial class HistoryRecorder : CampaignBehaviorBase
     {
         /// <summary>册封宣言：由 ExecuteTransferFief 在转让前设置（「{国王}以「{reason}」册封」），OnSettlementOwnerChanged 读取后清空。</summary>
         public static string? PendingFiefGrantText;
@@ -60,8 +60,7 @@ namespace AIChronicle
             // 关闭「所有贵族立传」时导致国王/族长不立传。BeforeHeroKilled 在改选之前触发，在此捕获死亡时原始身份。
             CampaignEvents.BeforeHeroKilledEvent.AddNonSerializedListener(this,
                 new Action<Hero, Hero, KillCharacterAction.KillCharacterActionDetail, bool>(OnBeforeHeroKilled));
-            CampaignEvents.OnClanChangedKingdomEvent.AddNonSerializedListener(this,
-                new Action<Clan, Kingdom, Kingdom, ChangeKingdomAction.ChangeKingdomActionDetail, bool>(OnClanChangedKingdom));
+            RegisterClanAllegianceEvents();
 
             CampaignEvents.SiegeCompletedEvent.AddNonSerializedListener(this,
                 new Action<Settlement, MobileParty, bool, MapEvent.BattleTypes>(OnSiegeCompleted));
@@ -79,9 +78,9 @@ namespace AIChronicle
                 new Action<SiegeEvent>(OnSiegeEnded));
             CampaignEvents.OnClanLeaderChangedEvent.AddNonSerializedListener(this,
                 new Action<Hero, Hero>(OnClanLeaderChanged));
-            CampaignEvents.OnMarriageOfferedToPlayerEvent.AddNonSerializedListener(this,
-                new Action<Hero, Hero>(OnMarriage));
-            // kingdom_created 游戏无独立事件：在 OnClanChangedKingdom 中按 CreateKingdom 详情补记
+            RegisterWorldHistoryEvents();
+            // kingdom_created 沿换国的 CreateKingdom 详情记录，避免重复订阅建国事件。
+            RegisterStoryEvents();
         }
 
         public override void SyncData(IDataStore dataStore)
@@ -190,17 +189,16 @@ namespace AIChronicle
             }
         }
 
-        private void RecordEvent(string eventType, string summary)
+        private void RecordEvent(string eventType, string summary, CampaignTime? eventTime = null)
         {
             if (Campaign.Current == null) return;
 
-            var now = CampaignTime.Now;
+            var now = eventTime ?? CampaignTime.Now;
             var year = now.GetYear;
             var season = GetSeasonName(now.GetSeasonOfYear);
             var day = now.GetDayOfSeason + 1;
 
-            var escapedSummary = summary.Replace("\"", "'").Replace("\\", "/");
-            var line = $"{{\"year\":{year},\"season\":\"{season}\",\"day\":{day},\"type\":\"{eventType}\",\"summary\":\"{escapedSummary}\"}}";
+            var line = HistoryEventText.Serialize(year, season, day, eventType, summary);
 
             var dir = GetHistoryDir();
             if (string.IsNullOrEmpty(dir)) return;
@@ -235,8 +233,6 @@ namespace AIChronicle
             RecordExternalEvent(eventType, summary);
         }
 
-        /// <summary>仅在结构化会晤实际成婚后记录；普通报价和私人交易不入公开史料。</summary>
-        public static void RecordMeetingMarriage(string summary) => RecordExternalEvent("marriage", summary);
         public static void RecordDuel(string summary) => RecordExternalEvent("duel_fought", summary.Replace("\r", " ").Replace("\n", " "));
         public static void RecordDuelAftermath(string summary) => RecordExternalEvent("duel_aftermath", summary.Replace("\r", " ").Replace("\n", " "));
 
@@ -607,22 +603,6 @@ namespace AIChronicle
                 _pendingHeroDeathTitle = clan.Name?.ToString() + "成员";
         }
 
-        private void OnClanChangedKingdom(Clan clan, Kingdom oldKingdom, Kingdom newKingdom, ChangeKingdomAction.ChangeKingdomActionDetail detail, bool showNotifications = true)
-        {
-            var clanName = clan.Name?.ToString() ?? "未知氏族";
-            var oldName = oldKingdom?.Name?.ToString() ?? "无";
-            var newName = newKingdom?.Name?.ToString() ?? "独立";
-
-            var summary = $"{clanName}脱离{oldName}，加入{newName}";
-            RecordEvent("clan_changed_kingdom", summary);
-
-            // 修复：游戏无 kingdom_created 独立事件——王国创建走 ChangeKingdomAction.CreateKingdom 详情，在此补记"新王国建立"
-            if (detail == ChangeKingdomAction.ChangeKingdomActionDetail.CreateKingdom && newKingdom != null)
-            {
-                RecordEvent("kingdom_created", $"{clanName}建立了新王国 {newKingdom.Name}");
-            }
-        }
-
         private void OnClanLeaderChanged(Hero oldLeader, Hero newLeader)
         {
             if (oldLeader == null || newLeader == null) return;
@@ -633,18 +613,5 @@ namespace AIChronicle
             RecordEvent("clan_leader_changed", $"{clanName}领袖由{oldName}变更为{newName}");
         }
 
-        private void OnMarriage(Hero hero1, Hero hero2)
-        {
-            if (hero1 == null || hero2 == null) return;
-            if (hero1.Clan == null && hero2.Clan == null) return;
-
-            var name1 = hero1.Name?.ToString() ?? "?";
-            var name2 = hero2.Name?.ToString() ?? "?";
-            var clan1 = hero1.Clan?.Name?.ToString() ?? "";
-            var clan2 = hero2.Clan?.Name?.ToString() ?? "";
-
-            var summary = $"{name1}({clan1})与{name2}({clan2})成婚";
-            RecordEvent("marriage", summary);
-        }
     }
 }

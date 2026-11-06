@@ -1,5 +1,6 @@
 using System.Text;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
 
 namespace AIChronicle
 {
@@ -85,6 +86,16 @@ namespace AIChronicle
                 {
                     if (agentFaction.IsAtWarWith(targetFaction))
                         sb.AppendLine($"对方属于{targetFaction.Name}，与你的势力{agentFaction.Name}【处于交战状态】。你们是敌对关系。");
+                    else if (agentFaction is Kingdom agentKingdom && targetFaction is Kingdom targetKingdom)
+                    {
+                        var alliances = Campaign.Current?.GetCampaignBehavior<IAllianceCampaignBehavior>();
+                        if (alliances?.IsAllyWithKingdom(agentKingdom, targetKingdom) == true)
+                            sb.AppendLine($"对方属于{targetFaction.Name}，与你的势力{agentFaction.Name}【已缔结军事同盟】。你们是盟友关系。");
+                        else if (alliances == null)
+                            sb.AppendLine($"对方属于{targetFaction.Name}，与你的势力{agentFaction.Name}【当前未交战】。盟约状态尚未核实。");
+                        else
+                            sb.AppendLine($"对方属于{targetFaction.Name}，与你的势力{agentFaction.Name}【当前和平】。你们是中立关系。");
+                    }
                     else
                         sb.AppendLine($"对方属于{targetFaction.Name}，与你的势力{agentFaction.Name}【当前和平】。你们是中立关系。");
                 }

@@ -199,10 +199,19 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 **为什么是日记而不是注入**：日记是拉取式（agent 自觉读写，见克制原则），不占上下文；注入任何记忆内容都会膨胀上下文、稀释提示。检索工具（grep 的 context_lines/max_results）为此设计。
 
-**静默见闻（silent tidings）**：战争、封地易主、围城、死亡、会战、赠礼/索取等与某个 Agent 有关、但不值得叫醒它的事件，由代码以 `情报：…` 静默写进它的日记（零 LLM、零 UI）。设计契约见 `docs/plan-silent-memory.md`，四条硬规则：
+轻量提醒保留此边界：`MemoryProgress` 只检测本人新文件版本，向易变块追加一句查阅指引，不带正文、摘要、态度或事务结论；同一会面同一文件版本不反复催促，成功查阅后跨会面保持已读。当前往来由聊天上下文/截断提示负责；其他往来已巩固且日记已读后无需再读全文。独立元数据 `decisions/.memory_progress_v1.json` 不向 NPC 工具开放，分别保存查阅与巩固游标，游标只含行数与前缀校验，不构成第二套记忆。
+
+`AIChatClient` 在工具结果实际截断后登记可见范围，普通查阅不推进巩固。UI 每次会面持有独立 `MemoryRecallSession`；后台各次激活各自持有提醒会话。上下文中完整呈现的当前线程、本人新写的记录可记为已知，但不承认未呈现的截断内容或并发新增记录。身份易变块以原版 `IAllianceCampaignBehavior` 区分军事盟友，战争优先，接口缺失只确认未交战，不用旧记忆猜盟约。
+
+进度文件在统一权限入口拒绝读写，同时目录 `grep` 跳过、文件编辑/删除/移动的不可变清单也登记；保护包含大小写/分隔符及 Windows 尾部点空格的等效路径，不允许经目录检索或普通写文件伪造完成进度。
+
+**静默见闻（silent tidings）**：战争、封地易主、围城、死亡、会战、赠礼/索取等与某个 Agent 有关、但不值得叫醒它的事件，由代码以 `情报：…` 静默写进它的日记（零 LLM、零 UI）。设计契约见 `docs/plan-silent-memory.md`，规则如下：
 - **只写「情报」**，永不代写决定/评价/结果——Agent 下次激活读到后自己决定是否升格；`结果` 仍只表示"我的计划有结局"。
 - **受众由事件钩子处的游戏对象计算**（亲历 / 直接利害 / 体制三环），环越外文本越短；不在消费端解析摘要字符串，也不落盘"谁该知道"。
 - **按 (Agent, 事件日) 缓冲**，激活前 / 跨日 / 退出时 flush；同日多条合并成一行「今日见闻」，受 MCM「每日见闻上限」约束。
+- 龙旗现世/归属/列国战争/最终胜败属于重大公共消息：`HistoryRecorder.Story.cs` 沿用静默开关、以当时君主和日期为快照，复用 `AppendSystemDiary` 单独立即追加「情报」，不占普通见闻额度。主线 type、时序与去重边界见 `docs/subsystems.md` §5。
+- 家族换国/佣兵身份变化由 `HistoryRecorder.Allegiance.cs` 统一分派给族长和当时双方君主，立即追加、不占普通额度；原版换国与佣兵事件按实际状态合并，佣兵结束的中间状态在同轮动作结束后验证。读档只建基线，不回填、不新增存档键。
+- `HistoryRecorder.World.cs` / `Warfare.cs` 对继位、婚姻、拘押、叛乱和攻城处置捕获事件日期与收件人，重大事实直接追加；实际村庄劫掠沿普通缓冲/额度。选王结束或取消后验证实际君主，婚姻等待最终配偶与 Clan 生效，叛军覆亡等待灭族生效；会晤不重复记婚姻。会话启动重采基线使旧观察失效，异步队列另沿 epoch，均不补历史、不改存档字段。
 - **读取走 `read_diary`**：默认最近 40 条，从尾部读；`read_file` 读整本会被工具结果上限头截断，反而看不到最新条目。
 
 **日记按年分卷**：跨年时 `decisions/diary.txt` 中往年条目移入 `decisions/diary_{year}.txt`（追加、去重），本年条目留在原文件；`read_diary` 头部列出往年卷名，旧卷仍可用 `read_file` / `grep` 访问。
@@ -224,10 +233,10 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 **日记可被比它更新的聊天记录修正**：chat_logs 是系统自动写入的客观往来记录（Agent 只读、不会漏），日记是 LLM 自写的索引（可能漏记/滞后）。若 chat_logs/ 中有比日记新的往来，**以聊天记录为准**，并补记日记（旧决定被推翻则补记 `[日期] 结果：…`，只追加不改写旧条目）。
 
 **记忆巩固机制（`MemoryConsolidator.cs`，保底而非依赖自觉）**：
-- 自我审视类激活前（**国王政务 KingDiplomacy / 封地审视 FiefReview / 外交问询回应 KingConsult / 封臣自省 SelfReview / 密使回应 EnvoyReceived**），先比较日记最新条目日期与 chat_logs 各文件最新消息日期
-- 若日记落后（存在"比日记更新的往来"），跑一次**巩固 pass**：agent 自读日记 + 较新往来 → 把值得记住的决定/承诺/计策/结果/战略 `append_file` 补记进 diary。静默执行，不写 chat_logs、不弹玩家消息
-- 只在落后时触发，多数时候零成本；受 MCM「启用记忆巩固」开关控制（默认开）
-- **自写水位（`decisions/.diary_authored`）**：判断"日记是否落后"优先看 Agent 自己最后一次写日记/巩固的日期，而不是日记文件里最大的日期。否则系统代笔的「情报」会把日记日期推进到今天，巩固 pass 永远不再触发（且它的读取同样会被头截断）。
+- 自我审视类激活前（**国王政务 KingDiplomacy / 封地审视 FiefReview / 外交问询回应 KingConsult / 封臣自省 SelfReview / 密使回应 EnvoyReceived**），比较各 chat_logs 文件实际消息位置与独立巩固游标，支持同一天多批消息；不再以日记日期推断完成。
+- 有未处理范围才跑一次**巩固 pass**：只给文件名/新增行号，agent 自行 `read_diary` / `read_file` 阅读并补记，静默执行。成功正常结束且没有日记工具写入错误，才按实际完整读取的连续行推进；漏读、工具截断、预算耗尽或切档均不承认未处理内容。每个人物巩固串行，游标写入复用原子 SafeFileIO。
+- 后台巩固受 MCM「启用记忆巩固」开关控制（默认开）；轻量查阅提醒不额外发请求，也不改变此开关对后台 pass 的含义。
+- **兼容旧记录**：旧日记/聊天与 `decisions/.diary_authored` 自写日期原样保留，新进度缺失时按现有往来逐段核对；写日记不推进任何聊天巩固游标，不新增模组存档字段。
 - 日期解析兼容两种写法：日记 `[1090春3]`/`[1090年冬第9日]`、聊天 `[第1090年，春季第15日]`——日记格式务必保持统一，否则程序无法可靠判断"谁更新"
 - 巩固提示词文件化、可热重载：`consolidation_rules.txt`（intent 规则）+ `memory_consolidation.txt`（激活指令）
 
@@ -442,7 +451,9 @@ Usage:
 │   ├── ToolCatalog.cs          ← 每次激活的工具快照（API schema/提示词目录/浏览结果共用筛选）
 │   ├── AIChatClient.cs         ← LLM API 客户端（HTTP 流式请求、SSE 解析、多轮循环），工具调用委托给 ToolExecutor
 │   ├── PromptManager.cs        ← 提示词管理器（文件热重载、战役目录、角色 JSON）
-│   ├── MemoryConsolidator.cs   ← 记忆巩固（diary 权威化保底：自写水位 + 跨年卷扫描）
+│   ├── MemoryConsolidator.cs   ← 记忆巩固（逐文件范围、工具可见确认、成功提交与人物串行）
+│   ├── MemoryProgress.cs       ← 轻量查阅提示、逐文件查阅/巩固进度、工具可见范围校验（纯文件逻辑）
+│   ├── HistorianWorkflow.cs    ← 史官最后两轮成文、保留证据续写、对应年度落盘核对与命名
 │   ├── DiaryStore.cs           ← 日记结构化操作（日期解析/最近条目/按年分卷，纯逻辑可单测）
 │   ├── SilentDiary.cs          ← 静默见闻（事件分派/文本渲染/缓冲/幂等）
 │   ├── AgentScheduler.cs       ← 事件调度器基类（优先级队列、Tick、国王激活、盟约到期检测）
@@ -499,6 +510,11 @@ Usage:
 │   ├── EncounterDiagnostics.cs ← 遭遇状态诊断/残留自动恢复（PlayerEncounter）
 │   ├── DiplomacyService.cs     ← 外交服务（宣战/议和/战前条约/结盟/贸易协定/回复提案 + FindKingdom + 盟约/贸易到期记录与清除）
 │   ├── HistoryRecorder.cs      ← 历史记录器（监听游戏事件写入原始史料；同时投递静默见闻）
+│   ├── HistoryEventText.cs     ← 严格单行 JSON 史料序列化（多行宣言正确转义）
+│   ├── HistoryRecorder.Story.cs ← 战役主线里程碑/龙旗归属/终局、当时君主的静默情报（同一行为 partial；StoryHistoryTests/Stubs 直接链接回归）
+│   ├── HistoryRecorder.Allegiance.cs ← 家族换国/佣兵身份、族长与当时双方君主的静默情报（同一行为 partial）
+│   ├── HistoryRecorder.World.cs ← 正式继位/族长继任、真实婚姻、拘押变化与事件快照（同一行为 partial）
+│   ├── HistoryRecorder.Warfare.cs ← 叛乱起事/立足/覆亡、实际劫掠与攻城处置（同一行为 partial）
 │   ├── SilentDiaryText.cs      ← 静默见闻人名/地名渲染（{国}·{族}家族的{名}，纯逻辑可单测）
 │   ├── LordChatBehavior.cs     ← 对话中插入聊天选项，战役 ID 管理
 │   ├── DiplomacyBanPatch.cs    ← 拦截原版外交（禁止原版外交开关）
@@ -514,7 +530,7 @@ Usage:
 │   ├── package.py             ← Linux/跨平台打包（编译+部署+zip；含 NAudio 运行时依赖）
 │   └── package.ps1            ← Windows 兼容打包（同上）
 ├── tests/                      ← 纯逻辑测试（不依赖游戏 DLL）
-│   ├── AIChronicle.Pure.Tests/ ← 史册/主线程/LLM/身份/遭遇/MeetingTests 会晤状态与补偿、DuelTests/DuelGameStubs 决斗/保管/存档/奖励复算、ClanDepartureTests/ClanDepartureStubs 家庭/部队迁移（dotnet run）
+│   ├── AIChronicle.Pure.Tests/ ← 史册/主线程/LLM/身份/MemoryTests 查阅与巩固/HistorianTests 史官成文与 JSONL/遭遇/MeetingTests 会晤、DuelTests/DuelGameStubs 决斗、ClanDepartureTests/ClanDepartureStubs 家庭迁移、StoryHistoryTests/StoryHistoryStubs 主线、AllegianceHistoryTests/Stubs 换国、WorldHistoryTests/Stubs 世事记录（dotnet run）
 │   └── web/                    ← 史书 Markdown + meeting-render.test.mjs（DOM 桩）；meeting-browser.test.mjs（本机 Chrome 实际布局/滚动）
 ├── .github/workflows/
 │   ├── health.yml             ← 轻量 CI（无需游戏 DLL，push/PR 自动跑 health + 纯逻辑测试）

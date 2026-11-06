@@ -1,12 +1,7 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
-using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
 
 namespace AIChronicle
@@ -22,6 +17,7 @@ namespace AIChronicle
 
             try
             {
+                var campaignEpoch = MainThreadExecutor.CampaignEpoch;
                 var eventLabel = evt.Type == ActivationEventType.YearlyChronicle ? "编年史" : "专题史";
                 MainThreadExecutor.DisplayMessage(new InformationMessage(
                     $"史官正在编纂{eventLabel}...",
@@ -50,49 +46,35 @@ namespace AIChronicle
                     }
                 };
 
-                // 记录 chronicles 目录现有文件，结束后对比是否有新文件/被修改（用于判定史官是否真写出编年史）
+                // 年度任务只核对对应年份；并行专题史不能冒充本年编纂成功。
                 var chronicleDir = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "history", "chronicles");
-                var beforeFiles = new HashSet<string>();
-                var beforeTimes = new Dictionary<string, DateTime>();
-                try
-                {
-                    Directory.CreateDirectory(chronicleDir);
-                    foreach (var f in Directory.GetFiles(chronicleDir))
-                    {
-                        beforeFiles.Add(f);
-                        beforeTimes[f] = File.GetLastWriteTimeUtc(f);
-                    }
-                }
-                catch { }
+                var year = evt.Type == ActivationEventType.YearlyChronicle ? HistorianWorkflow.ExtractYear(evtContent) : -1;
+                if (evt.Type == ActivationEventType.YearlyChronicle && year <= 0)
+                    throw new InvalidOperationException("年度编纂任务缺少有效年份。");
+                Directory.CreateDirectory(chronicleDir);
+                var before = HistorianWorkflow.Capture(chronicleDir, year);
 
                 var response = await AIChatClient.SendMessage(
                     charPrompt, hero: null, includeTools: true, intent: "historian");
 
-                // 修复：成功判定改为"出现新文件或文件被修改"——传记/世家/纪事是自命名体例文件，
-                // 原检查只找 chronicle_*.txt 会把已成功写入的内容误报为"未生成"。
-                var wroteFile = HasChronicleChanged(chronicleDir, beforeFiles, beforeTimes);
+                if (MainThreadExecutor.CampaignEpoch != campaignEpoch) return;
+                var wroteFile = HistorianWorkflow.HasChanged(chronicleDir, year, before);
 
-                // 修复：finish_reason="length"（被 max_tokens 截断）且未落盘 → 重试一次。
-                // 史官长编年史常在思考阶段耗尽 token 被截断（Content 为空、未调 write_file），谏言已有同类重试。
-                if (!wroteFile && response.FinishReason == "length")
+                // 有界续写：保留原任务与实际返回的史料，仅开放写史册，再给两轮成文/纠错。
+                if (!wroteFile && (response.FinishReason == "length" || response.FinishReason == "round_budget" || response.FinishReason == "stop"))
                 {
-                    var year = ExtractYearFromContent(evtContent);
                     var retryHint = year > 0
-                        ? $"你上一轮思考到一半被截断，未能写成编年史。现在请调用 write_chronicle 落盘：体例=编年史，名称={year}，正文=编年史全文（Markdown：## 分节、** 强调、> 史官曰；系统自动存档为 {year}编年史.txt），尽快成文落盘。"
-                        : "你上一轮思考到一半被截断，未能写成内容。现在请调用 write_chronicle 将内容落盘到 history/chronicles/（体例=本纪/世家/列传/纪事，名称=人物/国族/事件名；正文用 Markdown），尽快成文落盘。";
-                    DebugLogger.Log($"史官因 token 截断重试 eventLabel={eventLabel} year={year}");
-                    var retryPrompt = new CharacterPrompt
-                    {
-                        HeroId = "__historian__",
-                        HeroName = "史官",
-                        ChatHistory = new List<ChatHistoryEntry>
-                        {
-                            new() { Role = "user", Content = retryHint }
-                        }
-                    };
-                    response = await AIChatClient.SendMessage(retryPrompt, hero: null, includeTools: true, intent: "historian");
-                    wroteFile = HasChronicleChanged(chronicleDir, beforeFiles, beforeTimes);
+                        ? $"本次尚未生成 {year}编年史.txt。依据原任务与上文已读史料，立即调用 write_chronicle：体例=编年史，名称={year}，正文按春夏秋冬分节并附史官曰。未读到的时段注明阙载。"
+                        : "本次尚未落盘。依据原任务与上文已读史料，立即调用 write_chronicle，选择相应体例，将正文写入史册。";
+                    DebugLogger.Log($"史官成文续写 eventLabel={eventLabel} year={year} finish={response.FinishReason}");
+                    charPrompt.ChatHistory.Add(new ChatHistoryEntry { Role = "user", Content = retryHint });
+                    response = await AIChatClient.SendMessage(charPrompt, hero: null, includeTools: true, intent: "historian", historianRetry: response);
+                    if (MainThreadExecutor.CampaignEpoch != campaignEpoch) return;
+                    wroteFile = HistorianWorkflow.HasChanged(chronicleDir, year, before);
                 }
+
+                if (!wroteFile)
+                    DebugLogger.Log($"史官未落盘 eventLabel={eventLabel} year={year} finish={response.FinishReason}");
 
                 if (wroteFile)
                 {
@@ -103,7 +85,7 @@ namespace AIChronicle
                 else if (!string.IsNullOrEmpty(response.Content))
                 {
                     MainThreadExecutor.DisplayMessage(new InformationMessage(
-                        $"史官{eventLabel}编纂已结束，但编年史文件未生成（可能读取史料失败）。",
+                        $"史官{eventLabel}编纂未完成：未检测到对应的非空史文，详见调试日志。",
                         Colors.Yellow));
                 }
                 else
@@ -119,36 +101,6 @@ namespace AIChronicle
                     $"[AI编年史] 史官处理异常：{ex.Message}",
                     Colors.Red));
             }
-        }
-
-        private static int ExtractYearFromContent(string content)
-        {
-            if (string.IsNullOrEmpty(content)) return -1;
-            var prefix = "第";
-            var suffix = "年";
-            var start = content.IndexOf(prefix, StringComparison.Ordinal);
-            if (start < 0) return -1;
-            start += prefix.Length;
-            var end = content.IndexOf(suffix, start, StringComparison.Ordinal);
-            if (end < 0) return -1;
-            if (int.TryParse(content.Substring(start, end - start), out var year))
-                return year;
-            return -1;
-        }
-
-        private static bool HasChronicleChanged(string chronicleDir, HashSet<string> beforeFiles, Dictionary<string, DateTime> beforeTimes)
-        {
-            try
-            {
-                foreach (var f in Directory.GetFiles(chronicleDir))
-                {
-                    if (!beforeFiles.Contains(f)
-                        || (beforeTimes.TryGetValue(f, out var t) && File.GetLastWriteTimeUtc(f) > t))
-                        return true;
-                }
-            }
-            catch { }
-            return false;
         }
 
         // ============ 封臣谏言系统 ============

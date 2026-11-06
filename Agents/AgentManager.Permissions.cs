@@ -30,6 +30,8 @@ namespace AIChronicle
         {
             relPath = NormalizeRelPath(relPath) ?? "";
             if (relPath.Length == 0) return false;
+            // 系统进度不是人物知识，工具不得读取或改写游标来伪造已读/巩固。
+            if (MemoryProgress.IsMetadataPath(relPath)) return false;
 
             var dirPart = Path.GetDirectoryName(relPath)?.Replace('\\', '/') ?? "";
 

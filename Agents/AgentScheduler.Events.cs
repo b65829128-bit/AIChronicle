@@ -163,9 +163,9 @@ namespace AIChronicle
 
                 EntityManager.ActivateInteraction(agentEntity.HeroRef, targetEntity.HeroRef);
 
-                // 记忆巩固（diary 权威化的保底）：自我审视类激活前，若日记落后于聊天记录，先补记 diary。
+                // 记忆巩固：自我审视类激活前，按各往来文件的未处理消息范围补记 diary。
                 // 否则国王照陈旧日记/战略行事（如"上次还要请和库赛特"，实则在最新聊天里已改为专攻库赛特）。
-                // 静默执行，仅日记落后时触发一次便宜的巩固 pass，多数时候零成本。
+                // 静默执行；只有确实未处理的范围才触发，普通写日记不等于全部往来已整理。
                 if (evt.Type is ActivationEventType.KingDiplomacy
                     or ActivationEventType.FiefReview
                     or ActivationEventType.KingConsult

@@ -618,7 +618,7 @@ namespace AIChronicle
                 if (!File.Exists(yearFile)) continue;
 
                 var chronicleFile = Path.Combine(PromptManager.CampaignDir, "NPCs", "World", "history", "chronicles", $"{y}编年史.txt");
-                if (File.Exists(chronicleFile)) continue;
+                if (HistorianWorkflow.HasText(chronicleFile)) continue;
 
                 QueueEvent(new ActivationEvent
                 {

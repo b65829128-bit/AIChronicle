@@ -28,6 +28,7 @@ namespace AIChronicle.Tests
             Run("identity: ruler/mercenary/companion/independent roles", TestIdentityRoles);
             Run("identity: unknown ruler + self-interaction", TestIdentityUnknownAndSelf);
             Run("identity: current facts remain after volatile marker", TestIdentityVolatilePlacement);
+            Run("identity: live alliances distinguish allies, neutrality and war", TestIdentityAlliances);
         }
 
         private static void TestDeepSeekUsage()
@@ -330,6 +331,47 @@ namespace AIChronicle.Tests
             AssertEqual(before.Substring(0, marker), after.Substring(0, marker), "ruler change preserves stable prefix");
             AssertTrue(before.Substring(marker).Contains("对方所属王国的统治者：卢孔（男）"), "old current fact in suffix");
             AssertTrue(after.Substring(marker).Contains("对方所属王国的统治者：继任女王（女）"), "new current fact in suffix");
+        }
+
+        private sealed class IdentityAllianceBehavior : TaleWorlds.CampaignSystem.CampaignBehaviorBase,
+            TaleWorlds.CampaignSystem.CampaignBehaviors.IAllianceCampaignBehavior
+        {
+            public bool Active;
+            public bool IsAllyWithKingdom(TaleWorlds.CampaignSystem.Kingdom first, TaleWorlds.CampaignSystem.Kingdom second)
+                => Active && !first.IsEliminated && !second.IsEliminated;
+            public override void RegisterEvents() { }
+            public override void SyncData(TaleWorlds.CampaignSystem.IDataStore store) { }
+        }
+
+        private static void TestIdentityAlliances()
+        {
+            var original = Campaign.Current;
+            try
+            {
+                Campaign.Current = new Campaign();
+                var (agent, target, north) = IdentityScene();
+                var south = (Kingdom)agent.MapFaction!;
+                var alliance = new IdentityAllianceBehavior { Active = true };
+                Campaign.Current.Behaviors[typeof(TaleWorlds.CampaignSystem.CampaignBehaviors.IAllianceCampaignBehavior)] = alliance;
+                var allied = ContextBuilder.BuildObjectiveRelationship(agent, target);
+                AssertTrue(allied.Contains("已缔结军事同盟") && allied.Contains("盟友关系"), "existing alliance is a live fact");
+                AssertFalse(allied.Contains("中立关系"), "allies must not be neutral");
+                target.Clan!.IsUnderMercenaryService = true;
+                AssertTrue(ContextBuilder.BuildObjectiveRelationship(agent, target).Contains("盟友关系"), "mercenary realm affiliation also uses live alliance");
+                alliance.Active = false;
+                AssertTrue(ContextBuilder.BuildObjectiveRelationship(agent, target).Contains("中立关系"), "ended alliance immediately stops being allied");
+                alliance.Active = true; south.Hostile = true;
+                var war = ContextBuilder.BuildObjectiveRelationship(agent, target);
+                AssertTrue(war.Contains("交战状态"), "war takes priority over alliance residue");
+                AssertFalse(war.Contains("盟友关系"), "contradictory alliance cannot override war");
+                south.Hostile = false; Campaign.Current.Behaviors.Clear();
+                var unknown = ContextBuilder.BuildObjectiveRelationship(agent, target);
+                AssertTrue(unknown.Contains("当前未交战") && unknown.Contains("盟约状态尚未核实"), "missing behavior does not fabricate neutrality or alliance");
+                AssertFalse(unknown.Contains("中立关系"), "unknown is not asserted neutral");
+                target.MapFaction = south;
+                AssertTrue(ContextBuilder.BuildObjectiveRelationship(agent, target).Contains("同属"), "same realm remains a domestic relationship");
+            }
+            finally { Campaign.Current = original; }
         }
     }
 }

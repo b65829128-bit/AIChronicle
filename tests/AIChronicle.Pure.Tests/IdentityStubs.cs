@@ -16,7 +16,8 @@ namespace TaleWorlds.CampaignSystem
         public Hero? Leader => RulingClan?.Leader;
         public bool IsKingdomFaction => true;
         public bool IsMinorFaction => false;
-        public bool IsAtWarWith(IFaction other) => false;
+        public bool Hostile { get; set; }
+        public bool IsAtWarWith(IFaction other) => Hostile;
     }
 
     public sealed partial class Clan : IFaction
@@ -51,5 +52,13 @@ namespace TaleWorlds.CampaignSystem
         public Hero? Spouse { get; set; }
         public Hero? Mother { get; set; }
         public Hero? Father { get; set; }
+    }
+}
+
+namespace TaleWorlds.CampaignSystem.CampaignBehaviors
+{
+    public interface IAllianceCampaignBehavior
+    {
+        bool IsAllyWithKingdom(Kingdom first, Kingdom second);
     }
 }

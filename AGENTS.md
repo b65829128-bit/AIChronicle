@@ -104,6 +104,36 @@ Agent 不区分玩家和 NPC——玩家只是一个 Controller 类型为 Human 
 
 完整目录结构见 `docs/architecture.md` 第 17 节。工具快照在 `Agents/ToolCatalog.cs`；实时身份采集与关系渲染在 `Agents/ContextBuilder.Identity.cs`，纯事实文案在 `Entities/IdentityFacts.cs`。`tests/AIChronicle.Pure.Tests/LlmTests.cs` 覆盖 schema 稳定、目录一致、Provider usage、前后台预算与双方身份，`IdentityStubs.cs` 为身份采集提供最小只读桩；`EncounterTests.cs` 直接链接遭遇诊断源码，用最小状态桩覆盖竞技场/定居点保护、计时重置、手动修复与延迟放行。
 
+### 记忆查阅与巩固
+
+记忆进度入口：`Agents/MemoryProgress.cs` 是纯文件逻辑，提醒只说明需查阅，不注入记忆内容。`decisions/.memory_progress_v1.json` 为本人系统元数据，仅存文件行数/校验和查阅/巩固位置，NPC 工具不得读写；旧 `.diary_authored` 不变且不代表巩固完成。普通读/grep 只影响查阅，巩固须按本次工具实际返回的完整编号行确认连续范围，成功结束后才提交，不能越过截断/漏读/并发新增消息。会面提醒会话只记已提示的文件版本，不代替实际查阅；所有记录限本人目录，不新增运行时库或模组存档键。
+
+史官成文入口：`Agents/HistorianWorkflow.cs` 集中最后两轮的写入工具筛选/执行拦截、年度史料读取额度、保留消息证据的两轮续写、命名与对应年份非空正文核对。续写消息仅留本次内存并带 campaign epoch，不进入人物记忆或存档；其他场景工具快照沿用原规则。`Systems/HistoryEventText.cs` 统一 JSONL 序列化，正确转义多行宣言，不重写既有史料。回归入口 `tests/AIChronicle.Pure.Tests/HistorianTests.cs`；机制见 `docs/subsystems.md`。
+
+回归目录项：`tests/AIChronicle.Pure.Tests/MemoryTests.cs` 直接链接生产进度逻辑，覆盖同日新增、逐文件处理、工具真实可见范围、失败/重写/并发/权限边界，以及无正文提示和跨会面已读；`LlmTests.cs` 的实时同盟回归沿原版接口签名，不模拟外交行为。
+
+### 战役主线史料
+
+`Systems/HistoryRecorder.Story.cs` 是历史记录器的 partial，沿原版 `OnQuestCompletedEvent` 与 StoryMode 的碎片集齐/路线选定/阴谋战争事件记录里程碑；沙盒无 StoryMode 时跳过。龙旗重组和列国战争须等同轮原版监听结束后验证，队列沿用 campaign epoch。终局按原版敌国名单全部清空判定，不以可能提前置位的 `ThirdPhase.IsCompleted` 代替。取消备选路线不算失败，拒绝敌国求和不写成议和。
+
+奉旗王国覆亡另由 `KingdomDestroyedEvent` 兜底，覆盖原版先毁族退国、目标先取消而未发失败事件的顺序；与目标失败共享终局去重键。已经离国退出者（含读档基线）不追记原王国后来的败亡。
+
+龙旗现世/归属/战争/最终胜败向事件当时存续王国的在世 AI 统治者立即写「情报」，复用 `AppendSystemDiary`、人物名称渲染与静默见闻开关，不占普通见闻额度、不激活、不代写态度；延迟验证保留事件日期和收件人快照。只记新发生事件，不补历史、不新增存档键；史料类型与边界同步 `docs/subsystems.md`、`docs/plan-silent-memory.md`。
+
+回归目录项：`tests/AIChronicle.Pure.Tests/StoryHistoryTests.cs`、`StoryHistoryStubs.cs`，直接链接生产 partial，覆盖事件时序/四路线/当时君主与日期/多国终局/失败与退出/沙盒和切档隔离。
+
+### 家族换国日记
+
+家族换国入口在 `Systems/HistoryRecorder.Allegiance.cs`（同一行为 partial）：统一监听换国、佣兵开始/结束，向族长本人和事件当时双方存续王国的在世 AI 君主直接写「情报」。复用静默开关、`AppendSystemDiary` 和人物渲染，不占普通额度、不激活；按实际归属去重，不吞同日往返。佣兵结束的中间状态延至原版动作完成验证，保留日期和收件人，队列沿用 campaign epoch。读档仅建内存基线，不补历史、不新增存档键；灭族离国不误记为主动退国。契约同步 `docs/plan-silent-memory.md`。
+
+回归目录项：`tests/AIChronicle.Pure.Tests/AllegianceHistoryTests.cs`、`AllegianceHistoryStubs.cs`，直接链接生产 partial，覆盖三方收件、原版连续事件、同国转封臣、日期/君主快照、同日往返、开关与切档；不模拟换国执行算法。
+
+### 继位、婚姻、拘押与战乱史料
+
+史事扩展入口：`Systems/HistoryRecorder.World.cs` / `HistoryRecorder.Warfare.cs`（同一行为 partial），统一注册继位、实际婚姻、拘押、叛乱、劫掠与攻城处置。原版 `BeforeHeroesMarried` 捕获婚前身份/受众，`RomanticStateChanged(Marriage)` 验证双方配偶和最终 Clan；会晤不额外记史。继位须等同轮死亡/退位结束且无未决选王，`KingdomDecisionConcluded` 兜底。`RebellionFinished` 是起事；`RebelliousClanDisbandedAtSettlement` 是叛军立足转正，不能写成镇压；灭族钩子须延迟确认已覆亡。沿用 `AppendSystemDiary`/`SilentDiary`/epoch，不新增存档键、不补历史；实际劫掠沿普通每日额度。详细 type/受众/时序见 `docs/subsystems.md` 与 `docs/plan-silent-memory.md`。
+
+回归目录项：`tests/AIChronicle.Pure.Tests/WorldHistoryTests.cs` / `WorldHistoryStubs.cs`，直接链接生产两份 partial，核对原版事件签名、正式选王、婚前快照/实际成婚、拘押原因、叛军转正与覆亡时序、劫掠双钩去重和普通缓冲、攻城处置、开关/日期/切档。
+
 ### 会晤扩展入口
 
 领主【会晤】以 `MeetingRegistry.Register(IMeetingAction)` 注册事项、`MeetingClauses.Register(IMeetingClauseHandler)` 注册双方报价中可组合的行动条款，玩家表单和 AI 共用版本化交涉单；保留原版交易/婚配入口。会晤工具只在当前会话开放，主线程分发必须捕获/恢复会话上下文，关闭未开始的请求、切档取消旧动作；普通会晤不新增存档字段，决斗计数见下节。详细契约见 `docs/plan-meeting.md`。

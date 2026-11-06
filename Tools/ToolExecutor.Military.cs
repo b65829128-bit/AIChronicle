@@ -732,7 +732,7 @@ namespace AIChronicle
             return n.Contains(name) || name.Contains(n);
         }
 
-        /// <summary>释放自己部队中的俘虏（贵族英雄或普通士兵）。释放英雄 → EndCaptivityAction（对方成为逃亡者，事件入史）；
+        /// <summary>释放自己部队中的俘虏（贵族英雄或普通士兵）。释放英雄 → EndCaptivityAction（统一拘押事件分派日记，君主/族长同时入史）；
         /// 释放普通士兵 → 直接从俘虏名册移除。</summary>
         private static string ExecuteReleasePrisoner(string prisonerName, int count, bool all)
         {

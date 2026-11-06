@@ -112,27 +112,61 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 | 城镇/城堡易主 | `OnSettlementOwnerChangedEvent`（过滤 IsTown/IsCastle） | `settlement_captured` |
 | 国王册封/转让封地 | `OnSettlementOwnerChangedEvent`（detail=ByKingDecision/ByGift，含册封宣言 PendingFiefGrantText）。**去重顺序**：国王册封分支先于攻城去重标记判断（`_recentSiegeCaptures`）——否则攻城后国王用 `gift_fief` 重新册封时，去重标记残留会把 `fief_granted` 吞掉，史官误以为封地直接归统治者 | `fief_granted` |
 | 王国灭亡 | `KingdomDestroyedEvent` | `kingdom_destroyed` |
-| 新王国建立 | 无独立事件，从 `OnClanChangedKingdomEvent` 的 `CreateKingdom` 详情补记 | `kingdom_created` |
+| 新王国建立 | 从 `OnClanChangedKingdomEvent` 的 `CreateKingdom` 详情记录，不重复订阅原版 `KingdomCreatedEvent` | `kingdom_created` |
 | 贵族死亡 | `HeroKilledEvent`（过滤有 clan 的）；身份用 `BeforeHeroKilledEvent` 在继任改选**之前**捕获（`_pendingHeroDeathTitle`，死亡时原始身份：统治者/族长/成员/冒险者——KillCharacterAction 触发 HeroKilled 前已完成族长/国王改选，实时判断会误判身份，导致关闭「所有贵族立传」时国王/族长不立传） | `hero_killed` |
-| 氏族叛变 | `OnClanChangedKingdomEvent` | `clan_changed_kingdom` |
+| 氏族换国（入国/叛逃/退国等） | `OnClanChangedKingdomEvent` | `clan_changed_kingdom` |
 | 氏族领袖更替 | `OnClanLeaderChangedEvent` | `clan_leader_changed` |
-| 贵族婚嫁 | `OnMarriageOfferedToPlayerEvent`（直接注册） | `marriage` |
+| 贵族婚嫁 | `BeforeHeroesMarried` 快照 + `RomanticStateChanged(Marriage)` 生效验证；原版/会晤统一，求婚不入史 | `marriage` |
+| 正式君主更替 | `RulingClanChanged` / 王室 `OnClanLeaderChangedEvent` / 选王 `KingdomDecisionConcluded` 与 `KingdomDecisionCancelled`；延迟验证无未决选王，排除临时统治者，新国首任沿建国史料 | `ruler_changed` |
+| 君主/族长被俘、获释 | `HeroPrisonerTaken` / `HeroPrisonerReleased`；普通贵族仅日记，死亡不写成释放，不猜付款人/营救者 | `hero_captured` / `hero_released` |
+| 城镇叛乱/立足/覆亡 | `RebellionFinished` 实为起事；`RebelliousClanDisbandedAtSettlement` 实为存续转正；叛军 `OnClanDestroyedEvent` 延迟确认覆亡 | `rebellion_started` / `rebellion_established` / `rebellion_failed` |
+| 实际村庄劫掠 | `VillageBeingRaided` / `VillageLooted` / `RaidCompletedEvent`，区分开始、洗劫与未洗劫一空的结束 | `village_raided` / `village_looted` / `raid_ended` |
+| 攻城后处置 | `OnSiegeAftermathAppliedEvent`；只记已应用的宽赦/洗劫/毁坏，不编造屠杀或伤亡 | `siege_aftermath` |
 | 天意建族 | 静态入口 `HistoryRecorder.RecordClanCreated`（create_clan 调用） | `clan_created` |
 | 结盟/背盟/盟约期满 | `DiplomacyService` 接受 alliance 提案 / `ExecuteEndAlliance` / 每日到期检测 | `alliance_made` / `alliance_broken` / `alliance_expired` |
 | 贸易协定/终止/期满 | `DiplomacyService` 接受 trade 提案 / `ExecuteEndTradeAgreement` / 每日到期检测 | `trade_made` / `trade_broken` / `trade_expired` |
 | 条约提出/签署/被拒/撕毁/割地/失败 | `DiplomacyService.ExecuteProposeTreaty` / `TreatyService` / `HistoryRecorder.OnWarDeclared` | `treaty_proposed` / `treaty_signed` / `treaty_rejected` / `treaty_broken` / `treaty_cession` / `treaty_failed` |
 
+`WorldHistoryTests.cs` / `WorldHistoryStubs.cs` 直接链接 `HistoryRecorder.World.cs` / `HistoryRecorder.Warfare.cs`，用最小只读状态和原版签名事件检查正式选王/婚姻生效/拘押原因/叛军时序/劫掠双钩与普通缓冲/三类攻城处置，以及日期、当时收件人、开关、加载和 epoch；不模拟游戏执行算法。
+
 每条事件以 JSONL 格式追加到 `World/history/events_{year}.txt`：
+
 ```json
 {"year":1084,"season":"春","day":12,"type":"war_declared","summary":"瓦兰迪亚向库赛特宣战"}
 ```
 
+### 战役主线（HistoryRecorder.Story.cs）
+
+仅在 `StoryModeManager.Current` 存在时注册，复用同一历史记录器与 JSONL 格式，不更改存档结构。只响应新发生的事件，不扫描旧进度补写；读档用原版进度建立去重基线。
+
+| 史料 type | 原版来源与边界 | 君主日记 |
+|-----------|----------------|----------|
+| `story_banner_investigated` | `BannerInvestigationQuest` 成功：查明涅雷采斯之愚及龙旗来历 | 否 |
+| `dragon_banner_assembled` | `OnBannerPieceCollectedEvent` 集齐三片后，延迟到同轮监听结束，确认完整龙旗实物已重组；不等 `AssembleTheBannerQuest` 最终完成 | 是 |
+| `dragon_banner_claimed` | `OnMainStoryLineSideChosenEvent`：自立/支持现国、复兴/终结帝国四路线，记录奉旗人、王国、当时统治者与公开主张 | 是 |
+| `story_empire_progress` | `AssembleEmpireQuest` / `WeakenEmpireQuest` 成功：约三分之二帝国文化城镇/帝国三国城镇合计不足四座；这是阶段成果，不是最终胜利 | 否 |
+| `story_conspiracy_war` | `OnConspiracyActivatedEvent`，同轮监听结束后读取已初始化的原版敌国名单；不公开幕后私人阴谋或计量数值 | 是 |
+| `story_kingdom_defeated` | `DefeatTheConspiracyQuest` 成功；只读 `_oppositionKingdom` 确定敌国，不解析本地化标题。拒绝求和也只记被击败，不假称议和/灭国 | 否 |
+| `story_victory` / `story_defeat` | 最终敌国名单清空且奉旗王国存续/奉旗王国灭亡导致失败；`KingdomDestroyedEvent` 兜底覆盖灭国先毁族退国、全部目标先取消而不再发出失败事件的顺序。此前已经退出的人不追记后来的败亡，多国结算共享终局去重键。`ThirdPhase.IsCompleted` 可在首国败服时提前置位，不用于终局判定 | 是 |
+| `story_banner_search_ended` | 调查、组旗、自立/支持目标失败/超时且尚未选定路线；同一轮失败合并。取消备选路线不记失败 | 否 |
+| `story_withdrawn` | 统一/削弱/敌国目标因奉旗者离国取消，记录本人退出，不宣称整个王国败亡 | 否 |
+
+重大事件只向**事件当时**所有未灭亡王国的在世 AI 统治者写「情报」，去重收件人并排除 Human。使用 `AppendSystemDiary` 立即追加，不唤醒、不弹窗、不写聊天、不代写态度；沿用静默见闻开关、不占普通每日额度。延迟验证沿 `MainThreadExecutor` 的 epoch，并保留事件日期/收件人/人物称呼快照。全部正文采用人物、家族、王国名称，不称“玩家”“主角”，不直接转录原版第二人称任务日志。零散碎片、导师会面、教程、普通支线与循环阴谋差事不单独收录。
+
+主线回归 `StoryHistoryTests.cs` / `StoryHistoryStubs.cs` 直接链接生产 `HistoryRecorder.Story.cs`，事件沿原版后注册先调用的顺序，用最小对象桩检查事件时序、四路线、收件人快照、多国终局与灭国去重、离国后再读档，以及沙盒/切档边界；不模拟原版剧情或外交推进。
+
+`historian_rules.txt` 与 `ContextBuilder.BuildHistorianRules` 的兜底说明同步主线 type：区分公开主张、阶段成果、单国败服与最终结局，不替史料补写议和、灭国、天下统一或他人态度。
+
 ### 史官 Agent
+
+- **成文预算**：`HistorianWorkflow` 对史官 `read_file history/events_*.txt` 使用 `max(配置上限, 64000)` 字符额度（配置为 0 仍不限）；年度提示先不传 `line_count`，有截断才继续翻页，末行不完整须重读。普通人物不受此例外影响。12 轮中的最后两轮只发送 `write_chronicle` schema，执行端也拒绝继续读文件/查询，先完成本次任务所需篇目，年度任务优先完成本年正篇；不增加查询轮数。
+- **失败续写与核对**：`length` / `round_budget` / `stop` 结束仍未落盘时，最多续写两轮，只开放写史册，保留原 system/任务/已返回的工具结果及调用配对，不套用聊天条数裁剪，不以无证据的空白提示重新开始。续写校验原 campaign epoch，切档即弃。年度只核对 `{year}编年史.txt` 非空正文实际新增/改变，专题核对非空 `.txt` 的新增/改变；其他文件、空白正文、仅时间戳变化均不算成功。轮次耗尽明确返回 `round_budget` 并记录失败原因。此机制不恢复切档/退出时丢失的排队任务，也不自动补写旧年。
+- **史料格式**：`HistoryEventText.Serialize` 使用既有 Newtonsoft.Json 输出单行 JSON；正文的 CR/LF、引号与反斜杠均转义，读取后保留原义。既有原始文件不迁移、不重写。缺载季节只记阙载，不能推断太平。命名先去 `.txt` 再去体例，年度数字、`第1084年` 等规范成 `1084编年史.txt`。纯逻辑回归见 `HistorianTests.cs`。
 
 - **触发时机**：每年年终（年份推进时），`AgentScheduler.CheckYearAdvance()` 检测年份变化并队列 `YearlyChronicle` 事件
 - **专题触发**：灭国/新王国建立时，`HistoryRecorder` 调用 `AgentScheduler.QueueSpecialChronicle()` 即时队列 `SpecialChronicle` 事件
 - **专题合并（防杀人潮）**：`QueueSpecialChronicle` 会先写入合并缓冲——若已有一个待处理专题史事件，后续事件只追加不新开；处理时一次史官激活合并全部（如玩家连杀十几人 → 只生成一次传记专题，而非连环激活）
-- **传记质量**：`query_character` 现可查已故人物（枚举所有氏族成员含已故 + 在世英雄）并返回出生/卒年；传记提示词要求开头点明身份（统治者/族长/成员）与生卒年。**立传身份在死亡前一刻捕获**（`BeforeHeroKilledEvent` 存 `_pendingHeroDeathTitle`，先于原版继任改选），关闭「所有贵族立传」后国王/族长仍立传。成功判定改为"chronicles 目录出现新文件"（传记/世家/纪事是自命名体例文件，原只查 `chronicle_*.txt` 会误报"未生成"）
+- **传记质量**：`query_character` 现可查已故人物（枚举所有氏族成员含已故 + 在世英雄）并返回出生/卒年；传记提示词要求开头点明身份（统治者/族长/成员）与生卒年。**立传身份在死亡前一刻捕获**（`BeforeHeroKilledEvent` 存 `_pendingHeroDeathTitle`，先于原版继任改选），关闭「所有贵族立传」后国王/族长仍立传。专题史按目录中的非空 `.txt` 正文核对新增/改变，兼容传记/世家/纪事的自命名体例。
 - **Entity**：史官是虚拟 Entity（ID: `__historian__`，`HeroRef = null`），不映射任何游戏 NPC
 - **工具**：`ToolCatalog` 默认 `universal` + `query` + `file`，含专属落盘工具 `write_chronicle`（`Chronicler` 能力门控，仅史官可用）
 - **正文格式**：史文正文用 Markdown 落盘——`##` 分节、`**` 强调、`>` 写「史官曰」，不重复篇名，不用 HTML/表格/图片/链接/代码块。阅读页按 Markdown 渲染；CEF 不可用时原生 fallback 由 `HistoryMarkdown` 去标记显示
@@ -152,10 +186,11 @@ QueueSelfReview（入队 P4，由有限并行槽位调度处理，最低优先�
 
 ### 静默见闻（Silent Diary）
 
+- `HistoryRecorder.Allegiance.cs` 统一监听换国与佣兵效力开始/结束：族长本人及当时原国、新国的在世 AI 君主立即收到客观「情报」，覆盖入国/叛逃/退国/佣兵换主/同国转封臣；沿用静默开关、不占普通额度，不激活、不代写态度。按实际归属去重，同日往返分别记；佣兵结束的中间状态延至原版调用完成验证，保留当时收件人与日期，沿用 epoch。加载只采基线、不回填、不新增存档键；灭族离国跳过，灭国退国标明原因。
 - `HistoryRecorder` / `ToolExecutor` / `ToolExecutor.Social` / `ToolExecutor.Military` 在事件钩子处投递 `SilentDiary`：战争/议和、封地易主（册封/攻取）、围城开始/解围/攻城失败、贵族死亡、大会战、赠礼、索取、下令劫掠
 - 分派按**亲历 / 直接利害（氏族领袖）/ 体制（王国统治者）**三环；环越外文本越短；玩家按普通 Entity 处理，玩家自己的日记不写
 - 以 `情报：…` 写入相关 Agent 的 `decisions/diary.txt`（零 LLM、不弹窗、不注入上下文）；按 (Agent, 事件日) 缓冲，激活前 / 跨日 / 退出时 flush；同日多条合并「今日见闻」
-- 读取走 `read_diary`（默认最近 40 条，按类型过滤）；跨年自动分卷 `decisions/diary_{year}.txt`；`decisions/.diary_authored` 记录 Agent 自写水位，防止系统代笔把日记日期推新、骗过记忆巩固
+- 读取走 `read_diary`（默认最近 40 条，按类型过滤）；跨年自动分卷 `decisions/diary_{year}.txt`；`decisions/.diary_authored` 仅保留自写日期，巩固现以独立 `decisions/.memory_progress_v1.json` 的逐文件消息进度为准，系统代笔与普通写日记都不代表往来已巩固。
 - MCM「启用静默见闻」「每日见闻上限」（默认开 / 3 条）；契约见 `docs/plan-silent-memory.md`
 
 ### 年份检测

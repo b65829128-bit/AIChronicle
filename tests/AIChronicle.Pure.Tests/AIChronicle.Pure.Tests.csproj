@@ -15,6 +15,11 @@
     <Compile Include="Program.cs" />
     <Compile Include="MainThreadStubs.cs" />
     <Compile Include="LlmTests.cs" />
+    <Compile Include="MemoryTests.cs" />
+    <Compile Include="HistorianTests.cs" />
+    <Compile Include="../../Agents/HistorianWorkflow.cs" Link="HistorianWorkflow.cs" />
+    <Compile Include="../../Systems/HistoryEventText.cs" Link="HistoryEventText.cs" />
+    <Compile Include="../../Agents/MemoryProgress.cs" Link="MemoryProgress.cs" />
     <Compile Include="IdentityStubs.cs" />
     <Compile Include="EncounterTests.cs" />
     <Compile Include="MeetingTests.cs" />
@@ -22,6 +27,16 @@
     <Compile Include="DuelGameStubs.cs" />
     <Compile Include="ClanDepartureStubs.cs" />
     <Compile Include="ClanDepartureTests.cs" />
+    <Compile Include="StoryHistoryStubs.cs" />
+    <Compile Include="StoryHistoryTests.cs" />
+    <Compile Include="AllegianceHistoryStubs.cs" />
+    <Compile Include="AllegianceHistoryTests.cs" />
+    <Compile Include="WorldHistoryStubs.cs" />
+    <Compile Include="WorldHistoryTests.cs" />
+    <Compile Include="../../Systems/HistoryRecorder.World.cs" Link="HistoryRecorder.World.cs" />
+    <Compile Include="../../Systems/HistoryRecorder.Warfare.cs" Link="HistoryRecorder.Warfare.cs" />
+    <Compile Include="../../Systems/HistoryRecorder.Allegiance.cs" Link="HistoryRecorder.Allegiance.cs" />
+    <Compile Include="../../Systems/HistoryRecorder.Story.cs" Link="HistoryRecorder.Story.cs" />
     <Compile Include="../../Systems/ClanDeparture.cs" Link="ClanDeparture.cs" />
     <Compile Include="../../Systems/MeetingClanActions.cs" Link="MeetingClanActions.cs" />
     <Compile Include="../../Systems/MeetingEscrow.cs" Link="MeetingEscrow.cs" />

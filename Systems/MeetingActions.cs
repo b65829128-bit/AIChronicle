@@ -114,8 +114,8 @@ namespace AIChronicle
             return $"{p.Name}与{n.Name}成婚；婚后归属：{clan?.Name}家族。";
         }
 
-        public void RecordApplied(MeetingSession session, MeetingTerms terms, string result)
-            => HistoryRecorder.RecordMeetingMarriage(result);
+        // 成婚史料和夫妻/家族日记统一由原版婚姻生效事件记录，避免会晤额外写一份。
+        public void RecordApplied(MeetingSession session, MeetingTerms terms, string result) { }
 
         public MeetingEffect PrepareEffect(MeetingSession session, MeetingTerms terms)
         {
